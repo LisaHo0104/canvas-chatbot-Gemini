@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Canvas Chatbot - Login</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', 'Inter', 'Roboto', sans-serif;
+            background: linear-gradient(135deg, #e8e5df 0%, #d4cfc7 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 40px 20px;
+            position: relative;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: 
+                radial-gradient(circle at 20% 50%, rgba(44, 62, 80, 0.04) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(139, 134, 129, 0.04) 0%, transparent 50%);
+            pointer-events: none;
+        }
+
+        .login-container {
+            background: rgba(250, 250, 248, 0.98);
+            backdrop-filter: blur(10px);
+            border-radius: 4px;
+            border: 1px solid rgba(212, 207, 199, 0.5);
+            max-width: 520px;
+            width: 100%;
+            padding: 3.5rem;
+            animation: fadeIn 0.6s ease;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.06);
+            position: relative;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .logo {
+            text-align: center;
+            margin-bottom: 3rem;
+            padding-bottom: 2.5rem;
+            border-bottom: 1px solid rgba(232, 229, 223, 0.8);
+        }
+
+        .logo-icon {
+            width: 72px;
+            height: 72px;
+            background: linear-gradient(135deg, #2c3e50 0%, #3d5266 100%);
+            margin: 0 auto 1.5rem;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            color: #fafaf8;
+            box-shadow: 0 8px 24px rgba(44, 62, 80, 0.15);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .logo-icon:hover {
+            transform: translateY(-4px) scale(1.02);
+            box-shadow: 0 12px 32px rgba(44, 62, 80, 0.2);
+        }
+
+        .logo h1 {
+            color: #2c3e50;
+            font-size: 2rem;
+            font-weight: 500;
+            margin-bottom: 0.625rem;
+            letter-spacing: 0.02em;
+        }
+
+        .logo p {
+            color: #8b8681;
+            font-size: 1.063rem;
+            font-weight: 400;
+            letter-spacing: 0.01em;
+        }
+
+        .form-group {
+            margin-bottom: 2rem;
+        }
+
+        label {
+            display: block;
+            color: #2c3e50;
+            font-weight: 500;
+            margin-bottom: 0.875rem;
+            font-size: 1rem;
+            letter-spacing: 0.01em;
+        }
+
+        input[type="password"],
+        input[type="text"],
+        select {
+            width: 100%;
+            padding: 1.125rem 1.375rem;
+            border: 1px solid rgba(212, 207, 199, 0.6);
+            border-radius: 3px;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            background: rgba(245, 243, 240, 0.5);
+            color: #2c3e50;
+            letter-spacing: 0.01em;
+            font-family: inherit;
+        }
+
+        input[type="password"] {
+            font-family: 'SF Mono', 'Monaco', 'Courier New', monospace;
+        }
+
+        input[type="password"]:focus,
+        input[type="text"]:focus,
+        select:focus {
+            outline: none;
+            border-color: #8b8681;
+            background: rgba(250, 250, 248, 0.9);
+            box-shadow: 0 0 0 3px rgba(139, 134, 129, 0.1);
+        }
+
+        select {
+            cursor: pointer;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%232c3e50' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 1.25rem center;
+            padding-right: 3.25rem;
+        }
+
+        .custom-url-input {
+            display: none;
+            margin-top: 0.75rem;
+            animation: slideDown 0.3s ease;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .custom-url-input.show {
+            display: block;
+        }
+
+        .info-box {
+            background: rgba(245, 243, 240, 0.7);
+            border-left: 3px solid rgba(139, 134, 129, 0.4);
+            padding: 1.25rem 1.5rem;
+            border-radius: 3px;
+            margin-bottom: 2rem;
+            font-size: 0.938rem;
+            color: #5a5046;
+            line-height: 1.7;
+        }
+
+        .info-box strong {
+            color: #2c3e50;
+            font-weight: 500;
+        }
+
+        .info-box a {
+            color: #2c3e50;
+            text-decoration: none;
+            border-bottom: 1px solid rgba(212, 207, 199, 0.6);
+            transition: all 0.3s ease;
+        }
+
+        .info-box a:hover {
+            border-bottom-color: #2c3e50;
+        }
+
+        .btn-login {
+            width: 100%;
+            padding: 1.25rem;
+            background: linear-gradient(135deg, #2c3e50 0%, #3d5266 100%);
+            color: #fafaf8;
+            border: none;
+            border-radius: 3px;
+            font-size: 1.063rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            letter-spacing: 0.02em;
+            font-family: inherit;
+            box-shadow: 0 4px 12px rgba(44, 62, 80, 0.15);
+        }
+
+        .btn-login:hover {
+            background: linear-gradient(135deg, #3d5266 0%, #4a6178 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(44, 62, 80, 0.2);
+        }
+
+        .btn-login:active {
+            transform: translateY(0);
+        }
+
+        .btn-login:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .error-message {
+            background: rgba(250, 245, 245, 0.95);
+            backdrop-filter: blur(10px);
+            border-left: 3px solid rgba(212, 165, 165, 0.6);
+            color: #8b4444;
+            padding: 1rem 1.375rem;
+            border-radius: 3px;
+            margin-bottom: 1.75rem;
+            font-size: 0.938rem;
+            display: none;
+            line-height: 1.7;
+            animation: slideDown 0.3s ease;
+        }
+
+        .success-message {
+            background: rgba(245, 250, 245, 0.95);
+            backdrop-filter: blur(10px);
+            border-left: 3px solid rgba(165, 212, 165, 0.6);
+            color: #446844;
+            padding: 1rem 1.375rem;
+            border-radius: 3px;
+            margin-bottom: 1.75rem;
+            font-size: 0.938rem;
+            display: none;
+            line-height: 1.7;
+            animation: slideDown 0.3s ease;
+        }
+
+        .loading {
+            text-align: center;
+            color: #8b8681;
+            font-size: 0.938rem;
+            margin-top: 1.25rem;
+            display: none;
+            letter-spacing: 0.01em;
+        }
+
+        .steps {
+            margin-top: 3rem;
+            padding-top: 2.5rem;
+            border-top: 1px solid rgba(232, 229, 223, 0.8);
+        }
+
+        .steps h3 {
+            color: #2c3e50;
+            font-size: 1.125rem;
+            font-weight: 500;
+            margin-bottom: 1.5rem;
+            letter-spacing: 0.01em;
+        }
+
+        .steps ol {
+            padding-left: 1.75rem;
+            color: #5a5046;
+            font-size: 0.938rem;
+            line-height: 1.9;
+        }
+
+        .steps li {
+            margin-bottom: 0.875rem;
+        }
+
+        .steps code {
+            background: rgba(240, 235, 229, 0.8);
+            padding: 0.25rem 0.625rem;
+            border-radius: 3px;
+            font-size: 0.875rem;
+            color: #2c3e50;
+            font-family: 'SF Mono', 'Monaco', 'Courier New', monospace;
+        }
+
+        .steps a {
+            color: #2c3e50;
+            text-decoration: none;
+            border-bottom: 1px solid rgba(212, 207, 199, 0.6);
+            transition: all 0.3s ease;
+        }
+
+        .steps a:hover {
+            border-bottom-color: #2c3e50;
+        }
+
+        .help-text {
+            font-size: 0.875rem;
+            color: #8b8681;
+            margin-top: 0.625rem;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="logo">
+            <div class="logo-icon">学</div>
+            <h1>Canvas Chatbot</h1>
+            <p>Your Personal Learning Assistant</p>
+        </div>
+
+        <div id="errorMessage" class="error-message"></div>
+        <div id="successMessage" class="success-message"></div>
+
+        <form id="loginForm">
+            <div class="form-group">
+                <label for="canvasInstitution">Canvas Institution</label>
+                <select id="canvasInstitution" onchange="toggleCustomUrl()">
+                    <option value="https://swinburne.instructure.com">Swinburne University</option>
+                    <option value="https://canvas.mit.edu">MIT</option>
+                    <option value="https://canvas.harvard.edu">Harvard University</option>
+                    <option value="https://bcourses.berkeley.edu">UC Berkeley</option>
+                    <option value="https://canvas.stanford.edu">Stanford University</option>
+                    <option value="https://canvas.uw.edu">University of Washington</option>
+                    <option value="https://canvas.yale.edu">Yale University</option>
+                    <option value="https://canvas.cornell.edu">Cornell University</option>
+                    <option value="custom">Custom Institution URL</option>
+                </select>
+                <div class="custom-url-input" id="customUrlInput">
+                    <input 
+                        type="text" 
+                        id="customCanvasUrl" 
+                        placeholder="https://yourschool.instructure.com"
+                    >
+                    <div class="help-text">Enter your Canvas URL (e.g., yourschool.instructure.com)</div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="canvasToken">Canvas API Token</label>
+                <input 
+                    type="password" 
+                    id="canvasToken" 
+                    placeholder="Paste your Canvas API token here"
+                    required
+                >
+            </div>
+
+            <div class="info-box">
+                <strong>🔒 Your data is secure:</strong> Your token is only stored in your browser session and never saved permanently. This chatbot works with any Canvas institution.
+            </div>
+
+            <button type="submit" class="btn-login" id="loginBtn">
+                Login to Canvas
+            </button>
+
+            <div class="loading" id="loading">
+                Verifying your credentials...
+            </div>
+        </form>
+
+        <div class="steps">
+            <h3>🔑 How to get your Canvas API Token:</h3>
+            <ol>
+                <li>Go to your Canvas Account Settings: <strong>Profile → Settings</strong></li>
+                <li>Scroll down to <code>Approved Integrations</code></li>
+                <li>Click <code>+ New Access Token</code></li>
+                <li>Set a purpose (e.g., "Canvas Chatbot")</li>
+                <li>Set expiry date (optional)</li>
+                <li>Click <code>Generate Token</code></li>
+                <li>Copy the token and paste it above</li>
+            </ol>
+        </div>
+    </div>
+
+    <script>
+        const loginForm = document.getElementById('loginForm');
+        const loginBtn = document.getElementById('loginBtn');
+        const loading = document.getElementById('loading');
+        const errorMessage = document.getElementById('errorMessage');
+        const successMessage = document.getElementById('successMessage');
+
+        function toggleCustomUrl() {
+            const select = document.getElementById('canvasInstitution');
+            const customInput = document.getElementById('customUrlInput');
+            
+            if (select.value === 'custom') {
+                customInput.classList.add('show');
+            } else {
+                customInput.classList.remove('show');
+            }
+        }
+
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const canvasToken = document.getElementById('canvasToken').value.trim();
+            const institutionSelect = document.getElementById('canvasInstitution');
+            let canvasUrl = institutionSelect.value;
+
+            // If custom URL is selected, use the custom input
+            if (canvasUrl === 'custom') {
+                canvasUrl = document.getElementById('customCanvasUrl').value.trim();
+                
+                if (!canvasUrl) {
+                    showError('Please enter your Canvas institution URL');
+                    return;
+                }
+
+                // Ensure URL has protocol
+                if (!canvasUrl.startsWith('http://') && !canvasUrl.startsWith('https://')) {
+                    canvasUrl = 'https://' + canvasUrl;
+                }
+            }
+
+            if (!canvasToken) {
+                showError('Please enter your Canvas API token');
+                return;
+            }
+
+            // Disable form
+            loginBtn.disabled = true;
+            loading.style.display = 'block';
+            errorMessage.style.display = 'none';
+            successMessage.style.display = 'none';
+
+            try {
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        canvas_token: canvasToken,
+                        canvas_url: canvasUrl
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showSuccess(data.message);
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 1000);
+                } else {
+                    showError(data.message);
+                    loginBtn.disabled = false;
+                    loading.style.display = 'none';
+                }
+            } catch (error) {
+                showError('Connection error. Please check your Canvas URL and try again.');
+                loginBtn.disabled = false;
+                loading.style.display = 'none';
+            }
+        });
+
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.style.display = 'block';
+            successMessage.style.display = 'none';
+        }
+
+        function showSuccess(message) {
+            successMessage.textContent = message;
+            successMessage.style.display = 'block';
+            errorMessage.style.display = 'none';
+        }
+    </script>
+</body>
+</html>
