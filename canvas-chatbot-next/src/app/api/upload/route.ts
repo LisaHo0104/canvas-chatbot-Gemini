@@ -1,103 +1,105 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@supabase/ssr'
+import { NextRequest, NextResponse } from 'next/server';
+import { createServerClient } from '@supabase/ssr';
 
 export async function POST(request: NextRequest) {
-  try {
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return request.cookies.getAll()
-          },
-          setAll(cookiesToSet) {
-            cookiesToSet.forEach(({ name, value, options }) => {
-              request.cookies.set(name, value)
-            })
-          },
-        },
-      }
-    )
+	try {
+		const supabase = createServerClient(
+			process.env.NEXT_PUBLIC_SUPABASE_URL!,
+			process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+			{
+				cookies: {
+					getAll() {
+						return request.cookies.getAll();
+					},
+					setAll(cookiesToSet) {
+						cookiesToSet.forEach(({ name, value, options }) => {
+							request.cookies.set(name, value);
+						});
+					},
+				},
+			},
+		);
 
-    // Get current user
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: 'Please log in first' },
-        { status: 401 }
-      )
-    }
+		// Get current user
+		const {
+			data: { user },
+			error: authError,
+		} = await supabase.auth.getUser();
 
-    const formData = await request.formData()
-    const file = formData.get('file') as File
+		if (authError || !user) {
+			return NextResponse.json(
+				{ error: 'Please log in first' },
+				{ status: 401 },
+			);
+		}
 
-    if (!file) {
-      return NextResponse.json(
-        { error: 'No file provided' },
-        { status: 400 }
-      )
-    }
+		const formData = await request.formData();
+		const file = formData.get('file') as File;
 
-    const filename = file.name
-    const fileBuffer = Buffer.from(await file.arrayBuffer())
-    let content = ''
+		if (!file) {
+			return NextResponse.json({ error: 'No file provided' }, { status: 400 });
+		}
 
-    // Process different file types
-    if (filename.toLowerCase().endsWith('.txt')) {
-      content = fileBuffer.toString('utf-8')
-    } else if (filename.toLowerCase().endsWith('.pdf')) {
-      // For now, we'll skip PDF processing to avoid DOMMatrix issues
-      // TODO: Implement PDF processing with a different library
-      return NextResponse.json(
-        { error: 'PDF processing is temporarily disabled. Please upload TXT files only.' },
-        { status: 400 }
-      )
-    } else {
-      return NextResponse.json(
-        { error: 'Unsupported file type. Please upload TXT files only.' },
-        { status: 400 }
-      )
-    }
+		const filename = file.name;
+		const fileBuffer = Buffer.from(await file.arrayBuffer());
+		let content = '';
 
-    // Limit content length
-    if (content.length > 50000) {
-      content = content.substring(0, 50000) + '\n\n[Content truncated due to length]'
-    }
+		// Process different file types
+		if (filename.toLowerCase().endsWith('.txt')) {
+			content = fileBuffer.toString('utf-8');
+		} else if (filename.toLowerCase().endsWith('.pdf')) {
+			// For now, we'll skip PDF processing to avoid DOMMatrix issues
+			// TODO: Implement PDF processing with a different library
+			return NextResponse.json(
+				{
+					error:
+						'PDF processing is temporarily disabled. Please upload TXT files only.',
+				},
+				{ status: 400 },
+			);
+		} else {
+			return NextResponse.json(
+				{ error: 'Unsupported file type. Please upload TXT files only.' },
+				{ status: 400 },
+			);
+		}
 
-    // Save file upload record to database (optional)
-    try {
-      const { error: fileError } = await supabase
-        .from('file_uploads')
-        .insert([
-          {
-            user_id: user.id,
-            filename: filename,
-            file_size: file.size,
-            content_preview: content.substring(0, 500),
-            created_at: new Date().toISOString(),
-          },
-        ])
+		// Limit content length
+		if (content.length > 50000) {
+			content =
+				content.substring(0, 50000) + '\n\n[Content truncated due to length]';
+		}
 
-      if (fileError) {
-        console.error('Error saving file upload record:', fileError)
-      }
-    } catch (error) {
-      console.error('Error saving file upload to database:', error)
-      // Don't fail the request if database save fails
-    }
+		// Save file upload record to database (optional)
+		try {
+			const { error: fileError } = await supabase.from('file_uploads').insert([
+				{
+					user_id: user.id,
+					filename: filename,
+					file_size: file.size,
+					content_preview: content.substring(0, 500),
+					created_at: new Date().toISOString(),
+				},
+			]);
 
-    return NextResponse.json({
-      success: true,
-      filename: filename,
-      content: content,
-    })
-  } catch (error) {
-    console.error('File upload error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
-  }
+			if (fileError) {
+				console.error('Error saving file upload record:', fileError);
+			}
+		} catch (error) {
+			console.error('Error saving file upload to database:', error);
+			// Don't fail the request if database save fails
+		}
+
+		return NextResponse.json({
+			success: true,
+			filename: filename,
+			content: content,
+		});
+	} catch (error) {
+		console.error('File upload error:', error);
+		return NextResponse.json(
+			{ error: 'Internal server error' },
+			{ status: 500 },
+		);
+	}
 }

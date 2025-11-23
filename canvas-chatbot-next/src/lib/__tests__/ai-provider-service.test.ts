@@ -202,6 +202,38 @@ describe('AIProviderService', () => {
 
       expect(supabase.from).toHaveBeenCalledWith('ai_provider_usage')
     })
+
+    it('should honor overrideModel for OpenRouter providers', async () => {
+      const mockSelect = {
+        eq: jest.fn().mockReturnThis(),
+        single: jest.fn().mockResolvedValue({
+          data: { ...mockProvider, provider_name: 'openrouter', model_name: 'anthropic/claude-3.5-sonnet' },
+          error: null,
+        }),
+      }
+      ;(supabase.from as jest.Mock).mockReturnValue(mockSelect)
+
+      ;(OpenRouterService.prototype.generateResponse as jest.Mock).mockResolvedValue({
+        success: true,
+        response: 'ok',
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      })
+
+      const overrideModel = 'openai/gpt-4'
+      await service.generateResponse(
+        mockUserId,
+        mockQuery,
+        mockCanvasContext,
+        mockHistory,
+        mockSessionId,
+        overrideModel
+      )
+
+      const ctorCalls = (OpenRouterService as unknown as jest.Mock).mock.calls
+      expect(ctorCalls.length).toBeGreaterThan(0)
+      const modelArg = ctorCalls[0][1]
+      expect(modelArg).toBe(overrideModel)
+    })
   })
 
   describe('testProviderConnection', () => {

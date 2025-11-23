@@ -32,7 +32,16 @@ async function providersHandler(request: NextRequest) {
       )
     }
 
-    const providerService = new AIProviderService()
+    const providerService = new AIProviderService({
+      getAll() {
+        return request.cookies.getAll()
+      },
+      setAll(cookiesToSet) {
+        cookiesToSet.forEach(({ name, value, options }: any) => {
+          request.cookies.set(name, value)
+        })
+      }
+    })
 
     switch (request.method) {
       case 'GET':
@@ -82,15 +91,15 @@ async function createProvider(providerService: AIProviderService, userId: string
       )
     }
 
-    if (!['gemini', 'openrouter'].includes(provider)) {
+    if (!['openrouter'].includes(provider)) {
       return NextResponse.json(
-        { error: 'Invalid provider. Must be gemini or openrouter' },
+        { error: 'Invalid provider. Must be openrouter' },
         { status: 400 }
       )
     }
 
     const providerConfig: ProviderConfig = {
-      provider: provider as 'gemini' | 'openrouter',
+      provider: provider as 'openrouter',
       apiKey,
       model,
       config: config || {}

@@ -93,9 +93,9 @@ export default function EnhancedSidebar({
     } else {
       const filtered = sessions.filter(session =>
         session.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        session.messages.some(msg =>
+        (Array.isArray(session.messages) && session.messages.some(msg =>
           msg.content.toLowerCase().includes(searchTerm.toLowerCase())
-        )
+        ))
       )
       setFilteredSessions(filtered)
     }
@@ -122,7 +122,8 @@ export default function EnhancedSidebar({
   }
 
   const getLastMessagePreview = (session: ChatSession) => {
-    const lastMessage = session.messages[session.messages.length - 1]
+    const msgs = Array.isArray(session.messages) ? session.messages : []
+    const lastMessage = msgs[msgs.length - 1]
     if (!lastMessage) return 'No messages yet'
 
     const preview = lastMessage.content.substring(0, 80)

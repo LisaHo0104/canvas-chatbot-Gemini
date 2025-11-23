@@ -1,186 +1,255 @@
-import { ConversationMessage, AIResponse } from './ai-assistant'
+export interface ConversationMessage {
+  role: 'user' | 'assistant' | 'system'
+  content: string
+}
+
+export interface AIResponse {
+  content: string
+  usage?: {
+    promptTokens: number
+    completionTokens: number
+    totalTokens: number
+  }
+}
+import { OpenRouter } from '@openrouter/sdk';
 
 export interface OpenRouterModel {
-  id: string
-  name: string
-  context_length: number
-  pricing: {
-    prompt: number
-    completion: number
-  }
-  top_provider?: {
-    context_length: number
-    max_completion_tokens: number
-    is_moderated: boolean
-  }
+	id: string;
+	name: string;
+	context_length: number;
+	pricing: {
+		prompt: number;
+		completion: number;
+	};
+	top_provider?: {
+		context_length: number;
+		max_completion_tokens: number;
+		is_moderated: boolean;
+	};
 }
 
 export interface OpenRouterUsage {
-  prompt_tokens: number
-  completion_tokens: number
-  total_tokens: number
-  total_cost?: number
+	prompt_tokens: number;
+	completion_tokens: number;
+	total_tokens: number;
+	total_cost?: number;
 }
 
 export interface OpenRouterError {
-  error: {
-    code: string
-    message: string
-    metadata?: Record<string, any>
-  }
+	error: {
+		code: string;
+		message: string;
+		metadata?: Record<string, any>;
+	};
 }
 
 export class OpenRouterService {
-  private apiKey: string
-  private baseURL = 'https://openrouter.ai/api/v1'
-  private model: string
+	private apiKey: string;
+	private baseURL = 'https://openrouter.ai/api/v1';
+	private model: string;
 
-  constructor(apiKey: string, model: string = 'anthropic/claude-3.5-sonnet') {
-    this.apiKey = apiKey
-    this.model = model
-  }
+	constructor(apiKey: string, model: string = 'anthropic/claude-3.5-sonnet') {
+		this.apiKey = apiKey;
+		this.model = model;
+	}
 
-  async generateResponse(
-    userQuery: string,
-    canvasContext: string,
-    conversationHistory: ConversationMessage[] = []
-  ): Promise<AIResponse> {
-    const startTime = Date.now()
-    
-    try {
-      const messages = [
-        {
-          role: 'system' as const,
-          content: this.getSystemPrompt(canvasContext)
-        },
-        ...this.convertToOpenRouterMessages(conversationHistory),
-        {
-          role: 'user' as const,
-          content: userQuery
-        }
-      ]
+	async generateResponse(
+		userQuery: string,
+		canvasContext: string,
+		conversationHistory: ConversationMessage[] = [],
+	): Promise<AIResponse> {
+		const startTime = Date.now();
+		try {
+			const messages = [
+				{
+					role: 'system' as const,
+					content: this.getSystemPrompt(canvasContext),
+				},
+				...this.convertToOpenRouterMessages(conversationHistory),
+				{ role: 'user' as const, content: userQuery },
+			];
+			const client = new OpenRouter({
+				apiKey: this.apiKey,
+				baseURL: this.baseURL,
+				headers: {
+					'HTTP-Referer':
+						process.env.OPENROUTER_SITE_URL ||
+						process.env.NEXT_PUBLIC_APP_URL ||
+						'http://localhost:3000',
+					'X-Title': process.env.OPENROUTER_APP_TITLE || 'Canvas Chatbot',
+				},
+			});
+			const data: any = await client.chat.completions.create({
+				model: this.model,
+				messages,
+				temperature: 0.4,
+				max_tokens: 15000,
+			});
+			if (data?.error) {
+				throw new Error(String(data.error?.message || 'OpenRouter error'));
+			}
+			const usage = data?.usage || {};
+			const responseTime = Date.now() - startTime;
+			return {
+				content: data?.choices?.[0]?.message?.content || '',
+				usage: {
+					promptTokens: usage.prompt_tokens || usage.input_tokens || 0,
+					completionTokens: usage.completion_tokens || usage.output_tokens || 0,
+					totalTokens: usage.total_tokens || 0,
+				},
+			};
+		} catch (error) {
+			try {
+				const messages = [
+					{
+						role: 'system' as const,
+						content: this.getSystemPrompt(canvasContext),
+					},
+					...this.convertToOpenRouterMessages(conversationHistory),
+					{ role: 'user' as const, content: userQuery },
+				];
+				const res = await fetch(`${this.baseURL}/chat/completions`, {
+					method: 'POST',
+					headers: {
+						Authorization: `Bearer ${this.apiKey}`,
+						'HTTP-Referer':
+							process.env.OPENROUTER_SITE_URL ||
+							process.env.NEXT_PUBLIC_APP_URL ||
+							'http://localhost:3000',
+						'X-Title': process.env.OPENROUTER_APP_TITLE || 'Canvas Chatbot',
+						'Content-Type': 'application/json',
+					},
+					body: JSON.stringify({
+						model: this.model,
+						messages,
+						temperature: 0.4,
+						max_tokens: 1024,
+						stream: false,
+					}),
+				});
+				if (!res.ok) {
+					const errJson = await res.json().catch(() => null);
+					const msg = errJson?.error?.message || `HTTP ${res.status}`;
+					if (String(msg).includes('insufficient_quota')) {
+						throw new Error(
+							'OpenRouter quota exceeded. Please check your account balance.',
+						);
+					}
+					if (String(msg).includes('invalid_api_key')) {
+						throw new Error(
+							'Invalid OpenRouter API key. Please check your configuration.',
+						);
+					}
+					if (String(msg).includes('model')) {
+						throw new Error(`Model '${this.model}' not available: ${msg}`);
+					}
+					throw new Error(`OpenRouter error: ${msg}`);
+				}
+				const data = await res.json();
+				const usage = data?.usage || {};
+				return {
+					content: data?.choices?.[0]?.message?.content || '',
+					usage: {
+						promptTokens: usage.prompt_tokens || 0,
+						completionTokens: usage.completion_tokens || 0,
+						totalTokens: usage.total_tokens || 0,
+					},
+				};
+			} catch (err) {
+				if (err instanceof Error) {
+					const m = err.message.toLowerCase();
+					if (m.includes('insufficient_quota')) {
+						throw new Error(
+							'OpenRouter quota exceeded. Please check your account balance.',
+						);
+					} else if (m.includes('invalid_api_key')) {
+						throw new Error(
+							'Invalid OpenRouter API key. Please check your configuration.',
+						);
+					} else if (m.includes('model')) {
+						throw new Error(`Model '${this.model}' not available`);
+					}
+				}
+				throw new Error('Failed to generate response from OpenRouter');
+			}
+		}
+	}
 
-      const response = await fetch(`${this.baseURL}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${this.apiKey}`,
-          'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
-          'X-Title': 'Canvas Chatbot',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: this.model,
-          messages,
-          temperature: 0.4,
-          max_tokens: 15000,
-          stream: false
-        })
-      })
+	async testConnection(): Promise<{
+		success: boolean;
+		error?: string;
+		models?: OpenRouterModel[];
+	}> {
+		try {
+			// Test API key validity by fetching available models
+			const response = await fetch(`${this.baseURL}/models`, {
+				headers: {
+					Authorization: `Bearer ${this.apiKey}`,
+					'HTTP-Referer':
+						process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+					'X-Title': 'Canvas Chatbot',
+				},
+			});
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: { code: 'UNKNOWN', message: 'Unknown error' } }))
-        throw new Error(`OpenRouter API error: ${errorData.error?.message || response.statusText}`)
-      }
+			if (!response.ok) {
+				const errorData = await response
+					.json()
+					.catch(() => ({ error: { message: 'Connection failed' } }));
+				return {
+					success: false,
+					error: errorData.error?.message || 'Failed to connect to OpenRouter',
+				};
+			}
 
-      const data = await response.json()
-      
-      if (data.error) {
-        throw new Error(`OpenRouter error: ${data.error.message}`)
-      }
+			const data = await response.json();
+			return {
+				success: true,
+				models: data.data || [],
+			};
+		} catch (error) {
+			console.error('OpenRouter connection test error:', error);
+			return {
+				success: false,
+				error:
+					error instanceof Error ? error.message : 'Connection test failed',
+			};
+		}
+	}
 
-      const usage = data.usage || {}
-      const responseTime = Date.now() - startTime
+	async getAvailableModels(): Promise<OpenRouterModel[]> {
+		try {
+			const response = await fetch(`${this.baseURL}/models`, {
+				headers: {
+					Authorization: `Bearer ${this.apiKey}`,
+					'HTTP-Referer':
+						process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+					'X-Title': 'Canvas Chatbot',
+				},
+			});
 
-      return {
-        content: data.choices[0]?.message?.content || '',
-        usage: {
-          promptTokens: usage.prompt_tokens || 0,
-          completionTokens: usage.completion_tokens || 0,
-          totalTokens: usage.total_tokens || 0,
-        }
-      }
-    } catch (error) {
-      console.error('OpenRouter service error:', error)
-      
-      if (error instanceof Error) {
-        // Handle specific OpenRouter errors
-        if (error.message.includes('insufficient_quota')) {
-          throw new Error('OpenRouter quota exceeded. Please check your account balance.')
-        } else if (error.message.includes('invalid_api_key')) {
-          throw new Error('Invalid OpenRouter API key. Please check your configuration.')
-        } else if (error.message.includes('model_not_found')) {
-          throw new Error(`Model '${this.model}' not found on OpenRouter.`)
-        }
-      }
-      
-      throw new Error('Failed to generate response from OpenRouter')
-    }
-  }
+			if (!response.ok) {
+				throw new Error(`Failed to fetch models: ${response.statusText}`);
+			}
 
-  async testConnection(): Promise<{ success: boolean; error?: string; models?: OpenRouterModel[] }> {
-    try {
-      // Test API key validity by fetching available models
-      const response = await fetch(`${this.baseURL}/models`, {
-        headers: {
-          'Authorization': `Bearer ${this.apiKey}`,
-          'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
-          'X-Title': 'Canvas Chatbot'
-        }
-      })
+			const data = await response.json();
+			return data.data || [];
+		} catch (error) {
+			console.error('Error fetching OpenRouter models:', error);
+			throw new Error('Failed to fetch available models from OpenRouter');
+		}
+	}
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: { message: 'Connection failed' } }))
-        return { 
-          success: false, 
-          error: errorData.error?.message || 'Failed to connect to OpenRouter' 
-        }
-      }
+	private convertToOpenRouterMessages(
+		history: ConversationMessage[],
+	): Array<{ role: string; content: string }> {
+		return history.map((msg) => ({
+			role: msg.role === 'assistant' ? 'assistant' : 'user',
+			content: msg.content,
+		}));
+	}
 
-      const data = await response.json()
-      return { 
-        success: true, 
-        models: data.data || []
-      }
-    } catch (error) {
-      console.error('OpenRouter connection test error:', error)
-      return { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Connection test failed' 
-      }
-    }
-  }
-
-  async getAvailableModels(): Promise<OpenRouterModel[]> {
-    try {
-      const response = await fetch(`${this.baseURL}/models`, {
-        headers: {
-          'Authorization': `Bearer ${this.apiKey}`,
-          'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
-          'X-Title': 'Canvas Chatbot'
-        }
-      })
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch models: ${response.statusText}`)
-      }
-
-      const data = await response.json()
-      return data.data || []
-    } catch (error) {
-      console.error('Error fetching OpenRouter models:', error)
-      throw new Error('Failed to fetch available models from OpenRouter')
-    }
-  }
-
-  private convertToOpenRouterMessages(history: ConversationMessage[]): Array<{role: string, content: string}> {
-    return history.map(msg => ({
-      role: msg.role === 'assistant' ? 'assistant' : 'user',
-      content: msg.content
-    }))
-  }
-
-  private getSystemPrompt(canvasContext: string): string {
-    return `You are a friendly, helpful Canvas Learning Assistant that creates EASY-TO-READ, STUDENT-FRIENDLY study materials and helps with grade calculations.
+	private getSystemPrompt(canvasContext: string): string {
+		return `You are a friendly, helpful Canvas Learning Assistant that creates EASY-TO-READ, STUDENT-FRIENDLY study materials and helps with grade calculations.
 
 STUDENT'S CANVAS DATA:
 ${canvasContext}
@@ -387,6 +456,6 @@ CRITICAL INSTRUCTIONS:
    - Use bullet points for lists, but explain each point
    - Always end summaries with a "🔗 All Resources & Links" section
 
-REMEMBER: Your goal is to make learning EASY and ENJOYABLE using the Pareto Principle (focus on the 20% that matters most), provide ALL clickable resource links, and help students understand exactly what they need to achieve their grade goals. Always be encouraging and supportive!`
-  }
+REMEMBER: Your goal is to make learning EASY and ENJOYABLE using the Pareto Principle (focus on the 20% that matters most), provide ALL clickable resource links, and help students understand exactly what they need to achieve their grade goals. Always be encouraging and supportive!`;
+	}
 }

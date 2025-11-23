@@ -3,16 +3,17 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createBrowserClient } from '@supabase/ssr'
-import { Send, Settings, Plus, Search, Trash2, Edit3, Paperclip, BookOpen, Menu, X } from 'lucide-react'
+import { Send, Settings, Plus, Search, Trash2, Edit3, Paperclip, BookOpen, Menu, X, Brain, ChevronDown } from 'lucide-react'
 import { marked } from 'marked'
 import EnhancedSidebar from '@/components/EnhancedSidebar'
+import { AIProvider } from '@/lib/ai-provider-service'
 
 let supabase: any = null
 
 try {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-  
+
   if (supabaseUrl && supabaseAnonKey) {
     supabase = createBrowserClient(supabaseUrl, supabaseAnonKey)
   } else {
@@ -27,6 +28,8 @@ interface Message {
   role: 'user' | 'assistant'
   content: string
   timestamp: Date
+  provider_type?: 'configured' | 'legacy'
+  provider_id?: string
 }
 
 interface ChatSession {
@@ -47,8 +50,10 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [isTyping, setIsTyping] = useState(false)
-  const [showSettings, setShowSettings] = useState(false)
-  const [geminiKey, setGeminiKey] = useState('')
+  const [aiProviders, setAiProviders] = useState<AIProvider[]>([])
+  const [activeProvider, setActiveProvider] = useState<AIProvider | null>(null)
+  const [selectedModel, setSelectedModel] = useState<string>('anthropic/claude-3.5-sonnet')
+  const [showProviderSelector, setShowProviderSelector] = useState(false)
   const [canvasInstitution, setCanvasInstitution] = useState('https://swinburne.instructure.com')
   const [canvasUrl, setCanvasUrl] = useState('https://swinburne.instructure.com')
   const [canvasToken, setCanvasToken] = useState('')
@@ -71,7 +76,7 @@ export default function ChatPage() {
     throw new Error(`Non-JSON response from ${url} (${response.status}): ${preview}`)
   }
 
-  // Check authentication
+  // Check authentication and load data
   useEffect(() => {
     const checkAuth = async () => {
       try {
@@ -83,14 +88,14 @@ export default function ChatPage() {
         }
 
         const { data: { session }, error } = await supabase.auth.getSession()
-        
+
         if (error || !session) {
           router.push('/login')
           return
         }
 
         setUser(session.user)
-        
+
         // Load user data from profiles table
         const { data: userData } = await supabase
           .from('profiles')
@@ -100,7 +105,7 @@ export default function ChatPage() {
 
         if (userData) {
           setUser((prev: any) => ({ ...prev, user_name: userData.full_name }))
-          
+
           // Prioritize database credentials over localStorage
           if (userData.canvas_api_url) {
             setCanvasStatus('connected')
@@ -109,7 +114,7 @@ export default function ChatPage() {
               setCanvasInstitution(base)
               setCanvasUrl(base)
               // Don't set token here since it's encrypted in database
-            } catch {}
+            } catch { }
           } else {
             // Fallback to localStorage if no database credentials
             const savedToken = typeof window !== 'undefined' ? localStorage.getItem('canvasToken') : null
@@ -121,22 +126,24 @@ export default function ChatPage() {
                 setCanvasInstitution(base)
                 setCanvasUrl(base)
                 setCanvasToken(savedToken)
-              } catch {}
+              } catch { }
             } else {
               setCanvasStatus('missing')
-              setShowSettings(true)
             }
           }
         } else {
           setCanvasStatus('missing')
         }
 
-        // Load saved Gemini key
-        const savedKey = localStorage.getItem('geminiKey')
-        if (savedKey) {
-          setGeminiKey(savedKey)
-        }
+        // Gemini removed
 
+        await loadAIProviders(session.user.id)
+        try {
+          const savedModel = typeof window !== 'undefined' ? localStorage.getItem('preferredModel') : null
+          if (savedModel && savedModel.trim()) {
+            setSelectedModel(savedModel)
+          }
+        } catch {}
         // Load chat sessions
         await loadChatSessions(session.user.id)
       } catch (error) {
@@ -149,6 +156,37 @@ export default function ChatPage() {
 
     checkAuth()
   }, [router])
+
+  useEffect(() => {
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === 'preferredModel' && typeof event.newValue === 'string') {
+        const value = event.newValue.trim()
+        if (value) setSelectedModel(value)
+      }
+    }
+    if (typeof window !== 'undefined') {
+      window.addEventListener('storage', handleStorage)
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('storage', handleStorage)
+      }
+    }
+  }, [])
+
+  const loadAIProviders = async (userId: string) => {
+    try {
+      const response = await fetch('/api/ai-providers', { credentials: 'include' })
+      if (response.ok) {
+        const data = await response.json()
+        setAiProviders(data.providers)
+        const active = data.providers.find((p: AIProvider) => p.is_active)
+        setActiveProvider(active || null)
+      }
+    } catch (error) {
+      console.error('Error loading AI providers:', error)
+    }
+  }
 
   const loadChatSessions = async (userId: string) => {
     try {
@@ -212,7 +250,7 @@ export default function ChatPage() {
           created_at: new Date(data.created_at),
           updated_at: new Date(data.updated_at),
         }
-        
+
         setSessions(prev => [newSession, ...prev])
         setCurrentSession(newSession)
         setMessages([])
@@ -224,12 +262,14 @@ export default function ChatPage() {
   }
 
   const sendMessage = async () => {
-    if (!input.trim() || !geminiKey || isTyping) return
+    if (!input.trim() || isTyping) return
 
     if (!user) {
       alert('Please log in first')
       return
     }
+
+    // Default OpenRouter flow does not require a configured provider or Gemini key
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -244,6 +284,28 @@ export default function ChatPage() {
 
     try {
       const chatUrl = `${apiBase || ''}/api/chat`
+      const requestBody: any = {
+        query: input,
+        history: messages.map(msg => ({
+          role: msg.role,
+          content: msg.content,
+        })),
+      }
+
+      if (activeProvider) {
+        requestBody.provider_id = activeProvider.id
+        if (activeProvider.provider_name === 'openrouter') {
+          requestBody.model_override = selectedModel
+        }
+      } else {
+        requestBody.model = selectedModel
+      }
+
+      if (canvasStatus === 'connected') {
+        requestBody.canvas_token = canvasToken
+        requestBody.canvas_url = canvasUrl
+      }
+
       const response = await fetch(chatUrl, {
         method: 'POST',
         headers: {
@@ -251,14 +313,7 @@ export default function ChatPage() {
           'X-Session-ID': currentSession?.id || 'default',
         },
         credentials: 'include',
-        body: JSON.stringify({
-          query: input,
-          gemini_key: geminiKey,
-          history: messages.map(msg => ({
-            role: msg.role,
-            content: msg.content,
-          })),
-        }),
+        body: JSON.stringify(requestBody),
       })
 
       const data = await safeJson(response, chatUrl)
@@ -272,10 +327,12 @@ export default function ChatPage() {
         role: 'assistant',
         content: data.response,
         timestamp: new Date(),
+        provider_type: activeProvider ? 'configured' : 'legacy',
+        provider_id: activeProvider?.id,
       }
 
       setMessages(prev => [...prev, assistantMessage])
-      
+
       // Update session title if it's the first message
       if (messages.length === 0 && currentSession) {
         const newTitle = input.substring(0, 50) + (input.length > 50 ? '...' : '')
@@ -314,8 +371,10 @@ export default function ChatPage() {
         role: msg.role,
         content: msg.content,
         timestamp: new Date(msg.created_at),
+        provider_type: msg.metadata?.provider_type,
+        provider_id: msg.metadata?.provider_id,
       }))
-      
+
       setMessages(loadedMessages)
       setCurrentSession({
         ...session,
@@ -364,7 +423,7 @@ export default function ChatPage() {
       }
 
       setUploadedFile({ name: data.filename, content: data.content })
-      
+
       // Add file content as a message
       const fileMessage: Message = {
         id: Date.now().toString(),
@@ -379,13 +438,7 @@ export default function ChatPage() {
     }
   }
 
-  useEffect(() => {
-    if (geminiKey && geminiKey.trim()) {
-      try {
-        localStorage.setItem('geminiKey', geminiKey)
-      } catch {}
-    }
-  }, [geminiKey])
+  // Gemini key persistence removed
   useEffect(() => {
     try {
       if (canvasToken && canvasToken.trim()) {
@@ -396,7 +449,7 @@ export default function ChatPage() {
       if (finalUrl) {
         localStorage.setItem('canvasUrl', finalUrl)
       }
-    } catch {}
+    } catch { }
   }, [canvasToken, canvasInstitution, canvasUrl])
 
   const handleLogout = async () => {
@@ -430,7 +483,7 @@ export default function ChatPage() {
           currentSession={currentSession}
           onSessionSelect={handleSessionSelect}
           onNewSession={createNewSession}
-          onSettingsClick={() => setShowSettings(!showSettings)}
+          onSettingsClick={() => router.push('/settings')}
           onLogout={handleLogout}
           onSessionDelete={handleSessionDelete}
           onSessionRename={handleSessionRename}
@@ -449,7 +502,7 @@ export default function ChatPage() {
               onSessionSelect={handleSessionSelect}
               onNewSession={createNewSession}
               onSettingsClick={() => {
-                setShowSettings(!showSettings)
+                router.push('/settings')
                 setMobileMenuOpen(false)
               }}
               onLogout={handleLogout}
@@ -463,7 +516,7 @@ export default function ChatPage() {
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col">
         {/* Header */}
-        <div className="bg-white border-b border-slate-200 px-6 py-4">
+        <div className="bg-white border-b border-slate-200 px-6 py-4 relative">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               {/* Mobile menu button */}
@@ -481,127 +534,92 @@ export default function ChatPage() {
                 <h1 className="text-lg font-semibold text-slate-900">
                   Canvas AI Assistant
                 </h1>
-                <p className="text-sm text-slate-500">Powered by Google Gemini</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm text-slate-500">
+                    {activeProvider ? `Powered by ${activeProvider.provider_name}` : `Powered by OpenRouter • ${selectedModel}`}
+                  </p>
+                  {(activeProvider || aiProviders.length > 0) && (
+                    <button
+                      onClick={() => setShowProviderSelector(!showProviderSelector)}
+                      className="text-xs text-slate-500 hover:text-slate-700 flex items-center gap-1"
+                    >
+                      <Brain className="w-3 h-3" />
+                      Change
+                      <ChevronDown className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
-        </div>
-
-        {/* Settings Panel */}
-        {showSettings && (
-          <div className="bg-white border-b border-slate-200 p-6">
-            <div className="max-w-2xl">
-              <h3 className="text-lg font-semibold text-slate-900 mb-4">Settings</h3>
-              <div className="space-y-6">
-                <div>
-                  <label htmlFor="geminiKey" className="block text-sm font-medium text-slate-700 mb-1">
-                    Google Gemini API Key
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      id="geminiKey"
-                      type="password"
-                      value={geminiKey}
-                      onChange={(e) => setGeminiKey(e.target.value)}
-                      className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-slate-500 outline-none"
-                      placeholder="Enter your Gemini API key"
-                    />
-                  </div>
-                  <p className="text-xs text-slate-500 mt-1">
-                    Your API key is stored locally and never sent to our servers.
-                  </p>
-                </div>
-                <div className="pt-4 border-t border-slate-200">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-slate-700">Canvas Connection</span>
-                    <span className={`text-xs ${canvasStatus === 'connected' ? 'text-green-600' : canvasStatus === 'error' ? 'text-red-600' : 'text-slate-500'}`}>
-                      {canvasStatus === 'connected' ? 'Connected' : canvasStatus === 'error' ? 'Error' : 'Not connected'}
-                    </span>
-                  </div>
-
-                  <label htmlFor="canvasInstitution" className="block text-sm font-medium text-slate-700 mb-1">Canvas Institution</label>
-                  <select
-                    id="canvasInstitution"
-                    value={canvasInstitution}
-                    onChange={(e) => setCanvasInstitution(e.target.value)}
-                    className="w-full px-3 py-2 mb-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-slate-500 outline-none"
-                  >
-                    <option value="https://swinburne.instructure.com">Swinburne University</option>
-                    <option value="https://canvas.mit.edu">MIT</option>
-                    <option value="https://canvas.harvard.edu">Harvard University</option>
-                    <option value="https://bcourses.berkeley.edu">UC Berkeley</option>
-                    <option value="https://canvas.stanford.edu">Stanford University</option>
-                    <option value="https://canvas.uw.edu">University of Washington</option>
-                    <option value="https://canvas.yale.edu">Yale University</option>
-                    <option value="https://canvas.cornell.edu">Cornell University</option>
-                    <option value="custom">Custom Institution URL</option>
-                  </select>
-
-                  {canvasInstitution === 'custom' && (
-                    <>
-                      <label htmlFor="customCanvasUrl" className="block text-sm font-medium text-slate-700 mb-1">Custom Canvas URL</label>
-                      <input
-                        id="customCanvasUrl"
-                        type="url"
-                        value={canvasUrl}
-                        onChange={(e) => setCanvasUrl(e.target.value)}
-                        className="w-full px-3 py-2 mb-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-slate-500 outline-none"
-                        placeholder="https://yourschool.instructure.com"
-                      />
-                    </>
-                  )}
-
-                  <label htmlFor="canvasToken" className="block text-sm font-medium text-slate-700 mb-1">Canvas API Token</label>
-                  <input
-                    id="canvasToken"
-                    type="password"
-                    value={canvasToken}
-                    onChange={(e) => setCanvasToken(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-slate-500 outline-none"
-                    placeholder="Paste your Canvas API token"
-                  />
-                  <p className="text-xs text-slate-500 mt-1">Get it in Canvas: Profile → Settings → Approved Integrations → + New Access Token</p>
-
-                  {canvasError && (
-                    <div className="mt-3 bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg text-sm">{canvasError}</div>
-                  )}
-
+          {showProviderSelector && (
+            <div className="absolute top-16 left-6 right-6 md:left-auto md:right-6 bg-white border border-slate-200 rounded-lg shadow-lg z-10 max-w-sm">
+              <div className="p-4 border-b border-slate-200">
+                <h3 className="font-medium text-slate-900">Select AI Provider</h3>
+                <p className="text-sm text-slate-500">Choose which AI provider to use for this chat</p>
+              </div>
+              <div className="max-h-60 overflow-y-auto">
+                {aiProviders.map((provider) => (
                   <button
+                    key={provider.id}
                     onClick={async () => {
-                      const base = canvasInstitution === 'custom' ? canvasUrl.trim() : canvasInstitution.trim()
-                      const finalUrl = base.endsWith('/api/v1') ? base : (base.endsWith('/') ? `${base}api/v1` : `${base}/api/v1`)
-                      setCanvasError('')
                       try {
-                        const verifyUrl = `${apiBase || ''}/api/auth/canvas-login`
-                        const response = await fetch(verifyUrl, {
+                        const response = await fetch('/api/ai-providers/active', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
                           credentials: 'include',
-                          body: JSON.stringify({ canvas_token: canvasToken, canvas_url: finalUrl }),
+                          body: JSON.stringify({ providerId: provider.id })
                         })
-                        const data = await safeJson(response, verifyUrl)
-                        if (!response.ok) {
-                          setCanvasStatus('error')
-                          setCanvasError(data.error || 'Failed to connect Canvas')
-                        } else {
-                          setCanvasStatus('connected')
-                          setCanvasError('')
+                        if (response.ok) {
+                          setActiveProvider(provider)
+                          setAiProviders(prev => prev.map(p => ({
+                            ...p,
+                            is_active: p.id === provider.id
+                          })))
                         }
-                      } catch (error: any) {
-                        setCanvasStatus('error')
-                        setCanvasError(error?.message || 'Network error')
+                      } catch (error) {
+                      } finally {
+                        setShowProviderSelector(false)
                       }
                     }}
-                    className="mt-3 px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors disabled:opacity-50"
-                    disabled={!canvasToken || (!canvasUrl && canvasInstitution === 'custom')}
+                    className={`w-full text-left px-4 py-3 hover:bg-slate-50 transition-colors flex items-center justify-between ${provider.is_active ? 'bg-slate-50' : ''
+                      }`}
                   >
-                    Save Canvas Connection
+                    <div>
+                      <div className="font-medium text-slate-900 capitalize">{provider.provider_name}</div>
+                      <div className="text-sm text-slate-500">{provider.model_name}</div>
+                    </div>
+                    {provider.is_active && (
+                      <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                    )}
                   </button>
-                </div>
+                ))}
+                {aiProviders.length === 0 && (
+                  <div className="p-4 text-center text-slate-500">
+                    <p className="text-sm">No AI providers configured</p>
+                    <a
+                      href="/settings"
+                      className="text-sm text-indigo-600 hover:text-indigo-500 mt-2 inline-block"
+                    >
+                      Configure providers
+                    </a>
+                  </div>
+                )}
+              </div>
+              <div className="p-4 border-t border-slate-200">
+                <a
+                  href="/settings"
+                  className="text-sm text-indigo-600 hover:text-indigo-500 flex items-center gap-1"
+                >
+                  <Settings className="w-4 h-4" />
+                  Manage AI Providers
+                </a>
               </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
+
+
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-6">
@@ -641,12 +659,17 @@ export default function ChatPage() {
                   className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
                   <div
-                    className={`max-w-2xl px-4 py-3 rounded-lg ${
-                      message.role === 'user'
+                    className={`max-w-2xl px-4 py-3 rounded-lg relative ${message.role === 'user'
                         ? 'bg-slate-900 text-white'
                         : 'bg-white border border-slate-200'
-                    }`}
+                      }`}
                   >
+                    {message.role === 'assistant' && message.provider_type === 'configured' && (
+                      <div className="absolute -top-6 left-0 text-xs text-slate-500 flex items-center gap-1">
+                        <Brain className="w-3 h-3" />
+                        {aiProviders.find(p => p.id === message.provider_id)?.provider_name || 'AI'}
+                      </div>
+                    )}
                     <div
                       dangerouslySetInnerHTML={{
                         __html: marked.parse(message.content),
@@ -708,23 +731,19 @@ export default function ChatPage() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && sendMessage()}
-                placeholder="Ask about your courses, assignments, modules..."
+                placeholder={"Ask about your courses, assignments, modules..."}
                 className="flex-1 px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-slate-500 outline-none"
-                disabled={isTyping || !geminiKey}
+                disabled={isTyping}
               />
               <button
                 onClick={sendMessage}
-                disabled={isTyping || !input.trim() || !geminiKey}
+                disabled={isTyping || !input.trim()}
                 className="p-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 <Send className="w-5 h-5" />
               </button>
             </div>
-            {!geminiKey && (
-              <p className="text-sm text-slate-500 mt-2">
-                Please add your Gemini API key in settings to start chatting.
-              </p>
-            )}
+            
           </div>
         </div>
       </div>

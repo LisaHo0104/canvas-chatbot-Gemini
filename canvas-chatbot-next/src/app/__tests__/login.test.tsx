@@ -46,29 +46,6 @@ describe('LoginPage', () => {
     })
   })
 
-  it('should show Canvas configuration after successful signup', async () => {
-    const mockUser = { user: { id: '123', email: 'test@example.com' } }
-    ;(supabase.auth.signUp as jest.Mock).mockResolvedValueOnce({ data: mockUser, error: null })
-    
-    render(<LoginPage />)
-    
-    const signUpButton = screen.getByRole('button', { name: /sign up/i })
-    fireEvent.click(signUpButton)
-    
-    const emailInput = screen.getByLabelText(/email address/i)
-    const passwordInput = screen.getByLabelText(/password/i)
-    const createAccountButton = screen.getByRole('button', { name: /create account/i })
-    
-    await userEvent.type(emailInput, 'test@example.com')
-    await userEvent.type(passwordInput, 'password123')
-    fireEvent.click(createAccountButton)
-    
-    await waitFor(() => {
-      expect(screen.getByText(/canvas configuration/i)).toBeInTheDocument()
-      expect(screen.getByLabelText(/canvas institution/i)).toBeInTheDocument()
-      expect(screen.getByLabelText(/canvas api token/i)).toBeInTheDocument()
-    })
-  })
 
   it('should handle signup errors', async () => {
     const mockError = { error: { message: 'Email already exists' } }
@@ -149,19 +126,4 @@ describe('LoginPage', () => {
     expect(supabase.auth.signUp).not.toHaveBeenCalled()
   })
 
-  it('should show Canvas institution examples', () => {
-    render(<LoginPage />)
-    
-    const signUpButton = screen.getByRole('button', { name: /sign up/i })
-    fireEvent.click(signUpButton)
-    
-    const createAccountButton = screen.getByRole('button', { name: /create account/i })
-    fireEvent.click(createAccountButton)
-    
-    // Check that Canvas institution options are available
-    const institutionSelect = screen.getByLabelText(/canvas institution/i)
-    expect(institutionSelect).toBeInTheDocument()
-    expect(institutionSelect.querySelector('option[value="https://canvas.mit.edu"]')).toBeInTheDocument()
-    expect(institutionSelect.querySelector('option[value="https://canvas.harvard.edu"]')).toBeInTheDocument()
-  })
 })

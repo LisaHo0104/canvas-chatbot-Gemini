@@ -2,13 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { decrypt } from '@/lib/crypto'
 import { CanvasContextService } from '@/lib/canvas-context'
-import { CanvasAIAssistant } from '@/lib/ai-assistant'
 import { AIProviderService } from '@/lib/ai-provider-service'
+import { OpenRouterService } from '@/lib/openrouter-service'
 import { rateLimitMiddleware, getClientIP } from '@/lib/rate-limit'
 
 async function chatHandler(request: NextRequest) {
   try {
-    const { query, gemini_key, history = [], canvas_token, canvas_url, provider_id } = await request.json()
+    const { query, history = [], canvas_token, canvas_url, provider_id, model, model_override } = await request.json()
 
     if (!query) {
       return NextResponse.json(
@@ -86,26 +86,31 @@ async function chatHandler(request: NextRequest) {
     let aiResponse
     const sessionId = request.headers.get('x-session-id') || 'default'
     
-    // Use the new AI provider service if available, otherwise fall back to legacy gemini_key
+    // Preferred: OpenRouter-first flow
     if (provider_id) {
-      // Use the new provider service
       const providerService = new AIProviderService()
+      const overrideModel = typeof model_override === 'string' && model_override.trim().length > 0 ? model_override : undefined
       aiResponse = await providerService.generateResponse(
         user.id,
         query,
         canvasContext,
         history,
-        sessionId
+        sessionId,
+        overrideModel
       )
-    } else if (gemini_key) {
-      // Legacy fallback for backward compatibility
-      const aiAssistant = new CanvasAIAssistant(gemini_key)
-      aiResponse = await aiAssistant.generateResponse(query, canvasContext, history)
     } else {
-      return NextResponse.json(
-        { error: 'Either provider_id or gemini_key is required' },
-        { status: 400 }
-      )
+      const ownerKey = process.env.OPENROUTER_API_KEY_OWNER || process.env.OPENROUTER_API_KEY
+      if (!ownerKey) {
+        return NextResponse.json(
+          { error: 'OpenRouter API key not configured' },
+          { status: 500 }
+        )
+      }
+      const selectedModel = typeof model === 'string' && model.trim().length > 0
+        ? model
+        : 'anthropic/claude-3.5-sonnet'
+      const openrouter = new OpenRouterService(ownerKey, selectedModel)
+      aiResponse = await openrouter.generateResponse(query, canvasContext, history)
     }
 
     // Save chat message to database

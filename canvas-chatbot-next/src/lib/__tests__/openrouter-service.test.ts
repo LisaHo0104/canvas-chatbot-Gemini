@@ -1,8 +1,21 @@
 import { OpenRouterService } from '@/lib/openrouter-service'
 import { OpenRouterModel } from '@/lib/openrouter-service'
 
-// Mock fetch globally
-global.fetch = jest.fn()
+jest.mock('@openrouter/sdk', () => {
+  const MockOpenRouter = function(options: any) {
+    return {
+      chat: {
+        completions: {
+          create: (MockOpenRouter as any).__create || jest.fn()
+        }
+      }
+    }
+  }
+  return { OpenRouter: MockOpenRouter }
+})
+const setCreateMock = (fn: any) => {
+  ;(jest.requireMock('@openrouter/sdk') as any).OpenRouter.__create = fn
+}
 
 describe('OpenRouterService', () => {
   let service: OpenRouterService
@@ -35,82 +48,54 @@ describe('OpenRouterService', () => {
 
     it('should successfully generate a response', async () => {
       const mockResponse = {
-        choices: [{
-          message: {
-            content: 'The capital of France is Paris.',
-          },
-        }],
-        usage: {
-          prompt_tokens: 100,
-          completion_tokens: 50,
-          total_tokens: 150,
-        },
+        choices: [{ message: { content: 'The capital of France is Paris.' } }],
+        usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
       }
-
-      ;(global.fetch as jest.Mock).mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockResponse,
-      })
-
+      const create = jest.fn().mockResolvedValue(mockResponse)
+      setCreateMock(create)
       const result = await service.generateResponse(mockUserQuery, mockCanvasContext, mockHistory)
-
       expect(result.content).toBe('The capital of France is Paris.')
-      expect(result.usage).toEqual({
-        promptTokens: 100,
-        completionTokens: 50,
-        totalTokens: 150,
-      })
-      expect(global.fetch).toHaveBeenCalledWith(
-        'https://openrouter.ai/api/v1/chat/completions',
-        expect.objectContaining({
-          method: 'POST',
-          headers: expect.objectContaining({
-            'Authorization': `Bearer ${mockApiKey}`,
-            'Content-Type': 'application/json',
-          }),
-        })
-      )
+      expect(result.usage).toEqual({ promptTokens: 100, completionTokens: 50, totalTokens: 150 })
+      expect(create).toHaveBeenCalledWith(expect.objectContaining({ model: mockModel }))
+    })
+
+    it('should include the provided model in request payload', async () => {
+      const customModel = 'openai/gpt-4'
+      const svc = new OpenRouterService(mockApiKey, customModel)
+      const mockResponse = {
+        choices: [{ message: { content: 'ok' } }],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      }
+      const create = jest.fn().mockResolvedValue(mockResponse)
+      setCreateMock(create)
+      await svc.generateResponse('q', 'ctx', [])
+      expect(create).toHaveBeenCalledWith(expect.objectContaining({ model: customModel }))
     })
 
     it('should handle API errors', async () => {
-      ;(global.fetch as jest.Mock).mockResolvedValueOnce({
-        ok: false,
-        status: 401,
-        statusText: 'Unauthorized',
-        json: async () => ({ error: { message: 'Invalid API key' } }),
-      })
-
+      const create = jest.fn().mockRejectedValue(new Error('invalid_api_key'))
+      setCreateMock(create)
       await expect(service.generateResponse(mockUserQuery, mockCanvasContext, mockHistory))
-        .rejects.toThrow('Failed to generate response from OpenRouter')
+        .rejects.toThrow('Invalid OpenRouter API key. Please check your configuration.')
     })
 
     it('should handle quota exceeded errors', async () => {
-      ;(global.fetch as jest.Mock).mockResolvedValueOnce({
-        ok: false,
-        status: 429,
-        statusText: 'Too Many Requests',
-        json: async () => ({ error: { message: 'Quota exceeded' } }),
-      })
-
+      const create = jest.fn().mockRejectedValue(new Error('insufficient_quota'))
+      setCreateMock(create)
       await expect(service.generateResponse(mockUserQuery, mockCanvasContext, mockHistory))
-        .rejects.toThrow('Failed to generate response from OpenRouter')
+        .rejects.toThrow('OpenRouter quota exceeded. Please check your account balance.')
     })
 
     it('should handle model not found errors', async () => {
-      ;(global.fetch as jest.Mock).mockResolvedValueOnce({
-        ok: false,
-        status: 404,
-        statusText: 'Not Found',
-        json: async () => ({ error: { message: 'Model not found' } }),
-      })
-
+      const create = jest.fn().mockRejectedValue(new Error('model_not_found'))
+      setCreateMock(create)
       await expect(service.generateResponse(mockUserQuery, mockCanvasContext, mockHistory))
-        .rejects.toThrow('Failed to generate response from OpenRouter')
+        .rejects.toThrow(`Model '${mockModel}' not found on OpenRouter.`)
     })
 
     it('should handle network errors', async () => {
-      ;(global.fetch as jest.Mock).mockRejectedValueOnce(new Error('Network error'))
-
+      const create = jest.fn().mockRejectedValue(new Error('Network error'))
+      setCreateMock(create)
       await expect(service.generateResponse(mockUserQuery, mockCanvasContext, mockHistory))
         .rejects.toThrow('Failed to generate response from OpenRouter')
     })
@@ -124,24 +109,14 @@ describe('OpenRouterService', () => {
         }],
       }
 
-      ;(global.fetch as jest.Mock).mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockResponse,
-      })
-
+      const create = jest.fn().mockResolvedValue(mockResponse)
+      setCreateMock(create)
       await service.generateResponse(mockUserQuery, mockCanvasContext, mockHistory)
-
-      const fetchCall = (global.fetch as jest.Mock).mock.calls[0]
-      const requestBody = JSON.parse(fetchCall[1].body)
-
-      expect(requestBody.messages).toContainEqual({
-        role: 'system',
-        content: expect.stringContaining('Course: History 101'),
-      })
-      expect(requestBody.messages).toContainEqual({
-        role: 'user',
-        content: mockUserQuery,
-      })
+      const callArg = create.mock.calls[0][0]
+      expect(callArg.messages).toEqual(expect.arrayContaining([
+        { role: 'system', content: expect.stringContaining('Course: History 101') },
+        { role: 'user', content: mockUserQuery },
+      ]))
     })
   })
 
@@ -236,8 +211,10 @@ describe('OpenRouterService', () => {
         },
       })
 
-      await expect(service.generateResponse('test query', '', []))
-        .rejects.toThrow('Failed to generate response from OpenRouter')
+      const create = jest.fn().mockResolvedValue({})
+      setCreateMock(create)
+      const result = await service.generateResponse('test query', '', [])
+      expect(result.content).toBe('')
     })
 
     it('should handle missing choices in response', async () => {
@@ -261,11 +238,8 @@ describe('OpenRouterService', () => {
         usage: { prompt_tokens: 100, completion_tokens: 50 },
       }
 
-      ;(global.fetch as jest.Mock).mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockResponse,
-      })
-
+      const create = jest.fn().mockResolvedValue(mockResponse)
+      setCreateMock(create)
       const result = await service.generateResponse('test query', '', [])
 
       expect(result.content).toBe('')

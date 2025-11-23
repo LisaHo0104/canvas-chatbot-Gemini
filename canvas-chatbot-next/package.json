@@ -15,7 +15,10 @@
     "build-storybook": "storybook build"
   },
   "dependencies": {
-    "@langchain/google-genai": "^1.0.3",
+    "@langchain/core": "^1.0.6",
+    "langchain": "^1.0.6",
+    
+    "@openrouter/sdk": "^0.1.27",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-dropdown-menu": "^2.1.16",
     "@supabase/auth-helpers-nextjs": "^0.10.0",
@@ -25,7 +28,6 @@
     "@types/pdf-parse": "^1.1.5",
     "axios": "^1.7.7",
     "crypto-js": "^4.2.0",
-    "langchain": "^1.0.6",
     "lucide-react": "^0.554.0",
     "marked": "^15.0.0",
     "next": "16.0.3",

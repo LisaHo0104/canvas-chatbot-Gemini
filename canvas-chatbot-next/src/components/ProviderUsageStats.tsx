@@ -54,7 +54,7 @@ export default function ProviderUsageStats({ providerId }: ProviderUsageStatsPro
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
-        <Spinner size="lg" />
+        <Spinner />
       </div>
     )
   }

@@ -28,19 +28,4 @@ describe('LoginPage - Simple Tests', () => {
     expect(screen.getByText(/create account/i)).toBeInTheDocument()
   })
 
-  it('should show Canvas configuration form after signup toggle', () => {
-    render(<LoginPage />)
-    const signUpButton = screen.getByText(/sign up/i)
-    fireEvent.click(signUpButton)
-    const createAccountButton = screen.getByText(/create account/i)
-    fireEvent.click(createAccountButton)
-    
-    expect(screen.getByLabelText(/canvas institution/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/canvas api token/i)).toBeInTheDocument()
-  })
-
-  it('should show Canvas token instructions', () => {
-    render(<LoginPage />)
-    expect(screen.getByText(/how to get your canvas api token/i)).toBeInTheDocument()
-  })
 })

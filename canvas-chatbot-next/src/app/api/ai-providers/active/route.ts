@@ -41,7 +41,16 @@ async function setActiveProviderHandler(request: NextRequest) {
       )
     }
 
-    const providerService = new AIProviderService()
+    const providerService = new AIProviderService({
+      getAll() {
+        return request.cookies.getAll()
+      },
+      setAll(cookiesToSet) {
+        cookiesToSet.forEach(({ name, value, options }: any) => {
+          request.cookies.set(name, value)
+        })
+      }
+    })
     await providerService.setActiveProvider(user.id, providerId)
 
     return NextResponse.json({ success: true })

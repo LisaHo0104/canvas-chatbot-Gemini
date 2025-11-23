@@ -41,7 +41,16 @@ async function testProviderHandler(request: NextRequest) {
       )
     }
 
-    const providerService = new AIProviderService()
+    const providerService = new AIProviderService({
+      getAll() {
+        return request.cookies.getAll()
+      },
+      setAll(cookiesToSet) {
+        cookiesToSet.forEach(({ name, value, options }: any) => {
+          request.cookies.set(name, value)
+        })
+      }
+    })
     const result = await providerService.testProviderConnection(user.id, providerId)
 
     return NextResponse.json(result)
