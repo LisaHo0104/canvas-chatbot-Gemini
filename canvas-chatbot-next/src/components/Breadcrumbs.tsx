@@ -16,18 +16,18 @@ export default function Breadcrumbs() {
   if (items.length <= 1) return null
 
   return (
-    <nav aria-label="Breadcrumb" className="bg-white border-b border-slate-200">
+    <nav aria-label="Breadcrumb" className="bg-background border-b border-border">
       <ol className="max-w-7xl mx-auto px-4 py-2 flex items-center gap-1 text-sm">
         <li>
-          <Link href="/" className="text-slate-600 hover:text-slate-900">Home</Link>
+          <Link href="/" className="text-muted-foreground hover:text-foreground">Home</Link>
         </li>
         {items.map((item, idx) => (
           <li key={idx} className="flex items-center gap-1">
-            <span className="text-slate-300">/</span>
+            <span className="text-muted-foreground">/</span>
             {item.isLast ? (
-              <span className="text-slate-900">{item.label}</span>
+              <span className="text-foreground">{item.label}</span>
             ) : (
-              <Link href={item.href} className="text-slate-600 hover:text-slate-900">
+              <Link href={item.href} className="text-muted-foreground hover:text-foreground">
                 {item.label}
               </Link>
             )}

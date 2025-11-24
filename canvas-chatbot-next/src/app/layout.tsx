@@ -25,13 +25,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" className="h-full">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`h-full flex flex-col ${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <MainNavBar />
         <Breadcrumbs />
-        <div className="min-h-screen">{children}</div>
+        <div className="flex-1 min-h-0">{children}</div>
       </body>
     </html>
   );

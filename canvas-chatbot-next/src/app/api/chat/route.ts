@@ -84,7 +84,14 @@ async function chatHandler(request: NextRequest) {
 
     // Generate AI response
     let aiResponse
-    const sessionId = request.headers.get('x-session-id') || 'default'
+    const sessionIdHeader = request.headers.get('x-session-id') || ''
+    if (!sessionIdHeader || sessionIdHeader === 'default') {
+      return NextResponse.json(
+        { error: 'Session ID is required' },
+        { status: 400 }
+      )
+    }
+    const sessionId = sessionIdHeader
     
     // Preferred: OpenRouter-first flow
     if (provider_id) {

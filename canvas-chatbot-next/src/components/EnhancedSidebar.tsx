@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import { Search, Plus, Settings, Menu, X, ChevronLeft, ChevronRight, Trash2, Edit3 } from 'lucide-react'
+import { Search, Plus, ChevronLeft, ChevronRight, Trash2, Edit3 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { createBrowserClient } from '@supabase/ssr'
 
 let supabase: any = null
@@ -40,8 +40,6 @@ interface EnhancedSidebarProps {
   currentSession: ChatSession | null
   onSessionSelect: (session: ChatSession) => void
   onNewSession: () => void
-  onSettingsClick: () => void
-  onLogout: () => void
   onSessionDelete?: (sessionId: string) => void
   onSessionRename?: (sessionId: string, newTitle: string) => void
 }
@@ -52,12 +50,9 @@ export default function EnhancedSidebar({
   currentSession,
   onSessionSelect,
   onNewSession,
-  onSettingsClick,
-  onLogout,
   onSessionDelete,
   onSessionRename
 }: EnhancedSidebarProps) {
-  const router = useRouter()
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [filteredSessions, setFilteredSessions] = useState<ChatSession[]>([])
@@ -186,52 +181,33 @@ export default function EnhancedSidebar({
 
   if (isCollapsed) {
     return (
-      <div className="relative">
-        {/* Collapsed Sidebar Toggle */}
-        <button
-          onClick={() => setIsCollapsed(false)}
-          className="fixed left-0 top-1/2 transform -translate-y-1/2 z-50 bg-slate-900 text-white p-2 rounded-r-lg shadow-lg hover:bg-slate-800 transition-all duration-300"
-          aria-label="Expand sidebar"
-        >
+      <div className="relative h-full min-h-0">
+        <Button onClick={() => setIsCollapsed(false)} aria-label="Expand sidebar" variant="ghost" size="icon" className="absolute left-0 top-1/2 -translate-y-1/2 z-10 rounded-r-lg shadow-lg text-muted-foreground">
           <ChevronRight className="w-4 h-4" />
-        </button>
+        </Button>
 
-        {/* Mini sidebar for quick access */}
-        <div className="fixed left-0 top-0 h-full w-16 bg-white border-r border-slate-200 flex flex-col items-center py-4 space-y-4 z-40">
-          <button
-            onClick={onNewSession}
-            className="p-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors"
-            aria-label="New chat"
-          >
+        <div className="absolute left-0 top-0 h-full w-16 bg-white border-r border-slate-200 flex flex-col items-center py-4 space-y-4 z-10 box-border">
+          <Button onClick={() => setIsCollapsed(false)} aria-label="Expand sidebar" variant="ghost" size="icon" className="text-muted-foreground">
+            <ChevronRight className="w-4 h-4" />
+          </Button>
+          <Button onClick={onNewSession} aria-label="New chat" size="icon">
             <Plus className="w-4 h-4" />
-          </button>
-
-          <button
-            onClick={onSettingsClick}
-            className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
-            aria-label="Settings"
-          >
-            <Settings className="w-4 h-4" />
-          </button>
+          </Button>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full min-h-0">
       {/* Main Sidebar */}
-      <div className="w-80 bg-white border-r border-slate-200 flex flex-col transition-all duration-300 ease-in-out">
+      <div className="w-80 bg-white border-r border-slate-200 flex flex-col transition-all duration-300 ease-in-out box-border">
         {/* Header with Toggle */}
         <div className="p-4 border-b border-slate-200 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-slate-900">Conversations</h2>
-          <button
-            onClick={() => setIsCollapsed(true)}
-            className="p-1 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded transition-colors"
-            aria-label="Collapse sidebar"
-          >
+          <Button onClick={() => setIsCollapsed(true)} aria-label="Collapse sidebar" variant="ghost" size="icon">
             <ChevronLeft className="w-4 h-4" />
-          </button>
+          </Button>
         </div>
 
         {/* Search Section */}
@@ -251,17 +227,14 @@ export default function EnhancedSidebar({
 
         {/* New Chat Button - Fixed at top */}
         <div className="p-4 border-b border-slate-200">
-          <button
-            onClick={onNewSession}
-            className="w-full flex items-center justify-center gap-2 bg-slate-900 text-white px-4 py-2 rounded-lg hover:bg-slate-800 transition-colors font-medium"
-          >
+          <Button onClick={onNewSession} className="w-full">
             <Plus className="w-4 h-4" />
             New Chat
-          </button>
+          </Button>
         </div>
 
         {/* Conversation History */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 min-h-0 overflow-y-auto scroll-smooth">
           {filteredSessions.length === 0 ? (
             <div className="p-4 text-center text-slate-500">
               {searchTerm ? (
@@ -325,20 +298,12 @@ export default function EnhancedSidebar({
 
                     {/* Action Buttons - Show on hover */}
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity ml-2">
-                      <button
-                        onClick={(e) => handleSessionRename(session.id, e)}
-                        className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded transition-colors"
-                        aria-label="Rename conversation"
-                      >
+                      <Button onClick={(e) => handleSessionRename(session.id, e)} aria-label="Rename conversation" variant="ghost" size="icon" className="text-muted-foreground">
                         <Edit3 className="w-3 h-3" />
-                      </button>
-                      <button
-                        onClick={(e) => handleSessionDelete(session.id, e)}
-                        className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                        aria-label="Delete conversation"
-                      >
+                      </Button>
+                      <Button onClick={(e) => handleSessionDelete(session.id, e)} aria-label="Delete conversation" variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive">
                         <Trash2 className="w-3 h-3" />
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 </div>
@@ -347,38 +312,6 @@ export default function EnhancedSidebar({
           )}
         </div>
 
-        {/* User Info & Settings - Fixed at bottom */}
-        <div className="p-4 border-t border-slate-200 bg-white">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2 min-w-0">
-              <div className="w-8 h-8 bg-slate-200 rounded-full flex items-center justify-center flex-shrink-0">
-                <span className="text-xs font-medium text-slate-600">
-                  {user?.user_name?.charAt(0)?.toUpperCase() || user?.email?.charAt(0)?.toUpperCase() || 'U'}
-                </span>
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-slate-900 truncate">
-                  {user?.user_name || user?.email}
-                </p>
-                <p className="text-xs text-slate-500">Online</p>
-              </div>
-            </div>
-            <button
-              onClick={onLogout}
-              className="text-xs text-slate-500 hover:text-slate-700 px-2 py-1 rounded hover:bg-slate-100 transition-colors"
-            >
-              Logout
-            </button>
-          </div>
-
-          <button
-            onClick={onSettingsClick}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors text-sm font-medium"
-          >
-            <Settings className="w-4 h-4" />
-            Settings
-          </button>
-        </div>
       </div>
     </div>
   )

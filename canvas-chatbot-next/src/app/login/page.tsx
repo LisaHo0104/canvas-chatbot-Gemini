@@ -4,6 +4,11 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createBrowserClient } from '@supabase/ssr'
 import { BookOpen, Eye, EyeOff } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Spinner } from '@/components/ui/spinner'
 
 let supabase: any = null
 
@@ -94,102 +99,92 @@ export default function LoginPage() {
           </p>
         </div>
 
-        <div className="bg-white rounded-xl shadow-lg p-8">
-          <div className="flex mb-6">
-            <button
-              onClick={() => setIsSignUp(false)}
-              className={`flex-1 py-2 px-4 text-sm font-medium rounded-l-lg transition-colors ${
-                !isSignUp
-                  ? 'bg-slate-900 text-white'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              Sign In
-            </button>
-            <button
-              onClick={() => setIsSignUp(true)}
-              className={`flex-1 py-2 px-4 text-sm font-medium rounded-r-lg transition-colors ${
-                isSignUp
-                  ? 'bg-slate-900 text-white'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              Sign Up
-            </button>
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-slate-700 mb-1">
-                Email Address
-              </label>
-              <input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-slate-500 outline-none transition-colors"
-                placeholder="your@email.com"
-                required
-              />
+        <Card>
+          <CardHeader>
+            <CardTitle>Sign In</CardTitle>
+            <CardDescription>
+              {isSignUp ? 'Create a new account' : 'Enter your credentials to sign in'}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="mb-6 grid grid-cols-2 gap-2">
+              <Button variant={isSignUp ? 'outline' : 'default'} onClick={() => setIsSignUp(false)}>Sign In</Button>
+              <Button variant={isSignUp ? 'default' : 'outline'} onClick={() => setIsSignUp(true)}>Sign Up</Button>
             </div>
 
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-slate-700 mb-1">
-                Password
-              </label>
-              <div className="relative">
-                <input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-3 py-2 pr-10 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-slate-500 outline-none transition-colors"
-                  placeholder="Enter your password"
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="grid gap-2">
+                <Label htmlFor="email">Email Address</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="your@email.com"
                   required
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600"
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
               </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="password">Password</Label>
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Enter your password"
+                    required
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-1 top-1/2 -translate-y-1/2"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                  </Button>
+                </div>
+              </div>
+
+              {isSignUp && (
+                <div className="rounded-lg border bg-muted p-3 text-sm text-muted-foreground">
+                  After creating your account, configure your Canvas connection in Settings.
+                </div>
+              )}
+
+              {error && (
+                <div className="rounded-lg border border-destructive bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                  {error}
+                </div>
+              )}
+
+              {success && (
+                <div className="rounded-lg border bg-secondary px-3 py-2 text-sm text-secondary-foreground">
+                  {success}
+                </div>
+              )}
+
+              <Button type="submit" disabled={loading} className="w-full" aria-busy={loading}>
+                {loading ? (
+                  <span className="inline-flex items-center gap-2">
+                    <Spinner />
+                    Processing...
+                  </span>
+                ) : (
+                  isSignUp ? 'Create Account' : 'Sign In'
+                )}
+              </Button>
+            </form>
+
+            <div className="mt-6">
+              <Label className="mb-1">Connect Canvas after signup</Label>
+              <p className="text-sm text-muted-foreground">Use the Settings panel in the chat page to link your Canvas account securely.</p>
             </div>
-
-            {isSignUp && (
-              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm text-slate-600">
-                After creating your account, configure your Canvas connection in Settings.
-              </div>
-            )}
-
-            {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg text-sm">
-                {error}
-              </div>
-            )}
-
-            {success && (
-              <div className="bg-green-50 border border-green-200 text-green-700 px-3 py-2 rounded-lg text-sm">
-                {success}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-slate-900 text-white py-2 px-4 rounded-lg hover:bg-slate-800 focus:ring-2 focus:ring-slate-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {loading ? 'Processing...' : (isSignUp ? 'Create Account' : 'Sign In')}
-            </button>
-          </form>
-
-          <div className="mt-6 pt-6 border-t border-slate-200">
-            <h3 className="text-sm font-medium text-slate-900 mb-3">Connect Canvas after signup</h3>
-            <p className="text-sm text-slate-600">Use the Settings panel in the chat page to link your Canvas account securely.</p>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   )

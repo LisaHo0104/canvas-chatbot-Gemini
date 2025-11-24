@@ -1,12 +1,18 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { createBrowserClient } from '@supabase/ssr'
-import { Send, Settings, Plus, Search, Trash2, Edit3, Paperclip, BookOpen, Menu, X, Brain, ChevronDown } from 'lucide-react'
+import { Send, Settings, Plus, Search, Trash2, Edit3, Paperclip, BookOpen, Menu, X, Brain, ChevronDown, AlarmClock } from 'lucide-react'
 import { marked } from 'marked'
 import EnhancedSidebar from '@/components/EnhancedSidebar'
 import { AIProvider } from '@/lib/ai-provider-service'
+import { Button } from '@/components/ui/button'
+import { Card, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Dropzone } from '@/components/ui/dropzone'
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
+import { Spinner } from '@/components/ui/spinner'
 
 let supabase: any = null
 
@@ -65,6 +71,21 @@ export default function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const apiBase = ''
+
+  const quickActions = useMemo(() => [
+    {
+      id: 'qa-courses',
+      label: 'Current courses',
+      prompt: 'What are my current courses?',
+      icon: <BookOpen className="w-4 h-4 mr-1.5" aria-hidden="true" />,
+    },
+    {
+      id: 'qa-deadlines',
+      label: 'Upcoming deadlines',
+      prompt: 'What are my upcoming deadlines?',
+      icon: <AlarmClock className="w-4 h-4 mr-1.5" aria-hidden="true" />,
+    },
+  ], [])
 
   async function safeJson(response: Response, url: string) {
     const ct = response.headers.get('content-type') || ''
@@ -194,14 +215,14 @@ export default function ChatPage() {
         .from('chat_sessions')
         .select('*')
         .eq('user_id', userId)
-        .order('updated_at', { ascending: false })
+        .order('last_message_at', { ascending: false })
 
       if (!error && data) {
         const loadedSessions = data.map((session: any) => ({
           id: session.id,
           title: session.title,
           messages: [],
-          lastMessage: new Date(session.updated_at),
+          lastMessage: new Date(session.last_message_at),
           created_at: new Date(session.created_at),
           updated_at: new Date(session.updated_at),
         }))
@@ -220,7 +241,7 @@ export default function ChatPage() {
     scrollToBottom()
   }, [messages])
 
-  const createNewSession = async () => {
+  const createNewSession = async (): Promise<ChatSession | null> => {
     if (!user) return
 
     try {
@@ -255,10 +276,12 @@ export default function ChatPage() {
         setCurrentSession(newSession)
         setMessages([])
         setUploadedFile(null)
+        return newSession
       }
     } catch (error) {
       console.error('Error creating session:', error)
     }
+    return null
   }
 
   const sendMessage = async () => {
@@ -283,6 +306,15 @@ export default function ChatPage() {
     setIsTyping(true)
 
     try {
+      let sessionForSend = currentSession
+      if (!sessionForSend) {
+        const created = await createNewSession()
+        if (created) {
+          sessionForSend = created
+        } else {
+          throw new Error('Failed to create chat session')
+        }
+      }
       const chatUrl = `${apiBase || ''}/api/chat`
       const requestBody: any = {
         query: input,
@@ -310,7 +342,7 @@ export default function ChatPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Session-ID': currentSession?.id || 'default',
+          'X-Session-ID': sessionForSend.id,
         },
         credentials: 'include',
         body: JSON.stringify(requestBody),
@@ -334,10 +366,16 @@ export default function ChatPage() {
       setMessages(prev => [...prev, assistantMessage])
 
       // Update session title if it's the first message
-      if (messages.length === 0 && currentSession) {
+      if (messages.length === 0 && sessionForSend) {
         const newTitle = input.substring(0, 50) + (input.length > 50 ? '...' : '')
+        try {
+          await supabase
+            .from('chat_sessions')
+            .update({ title: newTitle })
+            .eq('id', sessionForSend.id)
+        } catch {}
         setCurrentSession(prev => prev ? { ...prev, title: newTitle } : null)
-        setSessions(prev => prev.map(s => s.id === currentSession.id ? { ...s, title: newTitle } : s))
+        setSessions(prev => prev.map(s => s.id === sessionForSend!.id ? { ...s, title: newTitle } : s))
       }
     } catch (error) {
       console.error('Error sending message:', error)
@@ -380,6 +418,7 @@ export default function ChatPage() {
         ...session,
         messages: loadedMessages
       })
+      setSessions(prev => prev.map(s => s.id === session.id ? { ...s, messages: loadedMessages } : s))
     } else {
       setCurrentSession(session)
       setMessages([])
@@ -474,7 +513,7 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="flex h-screen bg-slate-50">
+    <div className="flex h-full bg-slate-50">
       {/* Enhanced Sidebar */}
       <div className="hidden md:block">
         <EnhancedSidebar
@@ -483,8 +522,6 @@ export default function ChatPage() {
           currentSession={currentSession}
           onSessionSelect={handleSessionSelect}
           onNewSession={createNewSession}
-          onSettingsClick={() => router.push('/settings')}
-          onLogout={handleLogout}
           onSessionDelete={handleSessionDelete}
           onSessionRename={handleSessionRename}
         />
@@ -494,6 +531,15 @@ export default function ChatPage() {
       {mobileMenuOpen && (
         <div className="fixed inset-0 z-50 md:hidden">
           <div className="absolute inset-0 bg-black bg-opacity-50" onClick={() => setMobileMenuOpen(false)} />
+          <Button
+            onClick={() => setMobileMenuOpen(false)}
+            aria-label="Close menu"
+            variant="ghost"
+            size="icon"
+            className="absolute right-3 top-3 z-50"
+          >
+            <X className="w-4 h-4" />
+          </Button>
           <div className="absolute left-0 top-0 h-full w-80">
             <EnhancedSidebar
               user={user}
@@ -501,11 +547,6 @@ export default function ChatPage() {
               currentSession={currentSession}
               onSessionSelect={handleSessionSelect}
               onNewSession={createNewSession}
-              onSettingsClick={() => {
-                router.push('/settings')
-                setMobileMenuOpen(false)
-              }}
-              onLogout={handleLogout}
               onSessionDelete={handleSessionDelete}
               onSessionRename={handleSessionRename}
             />
@@ -514,19 +555,20 @@ export default function ChatPage() {
       )}
 
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-h-0">
         {/* Header */}
-        <div className="bg-white border-b border-slate-200 px-6 py-4 relative">
+        <div className="bg-background border-b border-border px-6 py-4 relative">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               {/* Mobile menu button */}
-              <button
+              <Button
                 onClick={() => setMobileMenuOpen(true)}
-                className="md:hidden p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
+                variant="ghost"
+                className="md:hidden"
                 aria-label="Open menu"
               >
                 <Menu className="w-5 h-5" />
-              </button>
+              </Button>
               <div className="w-10 h-10 bg-gradient-to-br from-slate-600 to-slate-800 rounded-lg flex items-center justify-center">
                 <BookOpen className="w-5 h-5 text-white" />
               </div>
@@ -535,34 +577,30 @@ export default function ChatPage() {
                   Canvas AI Assistant
                 </h1>
                 <div className="flex items-center gap-2">
-                  <p className="text-sm text-slate-500">
+                  <p className="text-sm text-muted-foreground">
                     {activeProvider ? `Powered by ${activeProvider.provider_name}` : `Powered by OpenRouter • ${selectedModel}`}
                   </p>
                   {(activeProvider || aiProviders.length > 0) && (
-                    <button
-                      onClick={() => setShowProviderSelector(!showProviderSelector)}
-                      className="text-xs text-slate-500 hover:text-slate-700 flex items-center gap-1"
-                    >
+                    <Button variant="ghost" size="sm" className="text-xs" onClick={() => setShowProviderSelector(!showProviderSelector)}>
                       <Brain className="w-3 h-3" />
                       Change
                       <ChevronDown className="w-3 h-3" />
-                    </button>
+                    </Button>
                   )}
                 </div>
               </div>
             </div>
           </div>
           {showProviderSelector && (
-            <div className="absolute top-16 left-6 right-6 md:left-auto md:right-6 bg-white border border-slate-200 rounded-lg shadow-lg z-10 max-w-sm">
-              <div className="p-4 border-b border-slate-200">
-                <h3 className="font-medium text-slate-900">Select AI Provider</h3>
-                <p className="text-sm text-slate-500">Choose which AI provider to use for this chat</p>
-              </div>
-              <div className="max-h-60 overflow-y-auto">
+            <DropdownMenu open onOpenChange={setShowProviderSelector}>
+              <DropdownMenuTrigger asChild>
+                <span />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="max-w-sm">
                 {aiProviders.map((provider) => (
-                  <button
+                  <DropdownMenuItem
                     key={provider.id}
-                    onClick={async () => {
+                    onSelect={async () => {
                       try {
                         const response = await fetch('/api/ai-providers/active', {
                           method: 'POST',
@@ -572,50 +610,35 @@ export default function ChatPage() {
                         })
                         if (response.ok) {
                           setActiveProvider(provider)
-                          setAiProviders(prev => prev.map(p => ({
-                            ...p,
-                            is_active: p.id === provider.id
-                          })))
+                          setAiProviders(prev => prev.map(p => ({ ...p, is_active: p.id === provider.id })))
                         }
-                      } catch (error) {
                       } finally {
                         setShowProviderSelector(false)
                       }
                     }}
-                    className={`w-full text-left px-4 py-3 hover:bg-slate-50 transition-colors flex items-center justify-between ${provider.is_active ? 'bg-slate-50' : ''
-                      }`}
+                    className={provider.is_active ? 'bg-accent' : undefined}
                   >
-                    <div>
-                      <div className="font-medium text-slate-900 capitalize">{provider.provider_name}</div>
-                      <div className="text-sm text-slate-500">{provider.model_name}</div>
+                    <div className="flex items-center justify-between w-full">
+                      <div>
+                        <div className="font-medium capitalize text-foreground">{provider.provider_name}</div>
+                        <div className="text-sm text-muted-foreground">{provider.model_name}</div>
+                      </div>
+                      {provider.is_active && <div className="size-2 rounded-full bg-primary" />}
                     </div>
-                    {provider.is_active && (
-                      <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                    )}
-                  </button>
+                  </DropdownMenuItem>
                 ))}
                 {aiProviders.length === 0 && (
-                  <div className="p-4 text-center text-slate-500">
-                    <p className="text-sm">No AI providers configured</p>
-                    <a
-                      href="/settings"
-                      className="text-sm text-indigo-600 hover:text-indigo-500 mt-2 inline-block"
-                    >
-                      Configure providers
-                    </a>
-                  </div>
+                  <DropdownMenuItem disabled>No AI providers configured</DropdownMenuItem>
                 )}
-              </div>
-              <div className="p-4 border-t border-slate-200">
-                <a
-                  href="/settings"
-                  className="text-sm text-indigo-600 hover:text-indigo-500 flex items-center gap-1"
-                >
-                  <Settings className="w-4 h-4" />
-                  Manage AI Providers
-                </a>
-              </div>
-            </div>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <a href="/settings" className="flex items-center gap-1">
+                    <Settings className="w-4 h-4" />
+                    Manage AI Providers
+                  </a>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
         </div>
 
@@ -634,22 +657,7 @@ export default function ChatPage() {
               <p className="text-slate-600 mb-8">
                 I can help you with your courses, assignments, modules, and answer questions about your learning materials.
               </p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <button
-                  onClick={() => setInput('What are my current courses?')}
-                  className="p-4 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors text-left"
-                >
-                  <div className="font-medium text-slate-900">📚 What are my current courses?</div>
-                  <div className="text-sm text-slate-500 mt-1">View your enrolled courses</div>
-                </button>
-                <button
-                  onClick={() => setInput('What are my upcoming deadlines?')}
-                  className="p-4 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors text-left"
-                >
-                  <div className="font-medium text-slate-900">⏰ What are my upcoming deadlines?</div>
-                  <div className="text-sm text-slate-500 mt-1">Check upcoming assignments</div>
-                </button>
-              </div>
+              {/* CTA cards removed as requested */}
             </div>
           ) : (
             <div className="max-w-3xl mx-auto space-y-6">
@@ -681,12 +689,8 @@ export default function ChatPage() {
               ))}
               {isTyping && (
                 <div className="flex justify-start">
-                  <div className="bg-white border border-slate-200 px-4 py-3 rounded-lg">
-                    <div className="flex space-x-2">
-                      <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"></div>
-                      <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                      <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                    </div>
+                  <div className="bg-background border border-border px-4 py-3 rounded-lg">
+                    <Spinner />
                   </div>
                 </div>
               )}
@@ -696,52 +700,83 @@ export default function ChatPage() {
         </div>
 
         {/* Input Area */}
-        <div className="bg-white border-t border-slate-200 p-6">
+        <div className="bg-background border-t border-border p-6">
           <div className="max-w-3xl mx-auto">
+            <div
+              className="mb-4 -mt-1"
+              role="group"
+              aria-label="Quick actions"
+            >
+              <div className="flex gap-2 flex-wrap md:flex-nowrap md:overflow-x-auto md:[&>*]:shrink-0">
+                {quickActions.map((qa) => (
+                  <Button
+                    key={qa.id}
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    className="rounded-full px-3 h-8 bg-secondary text-secondary-foreground hover:bg-secondary/90 shadow-sm hover:shadow-md transition-transform transition-shadow focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+                    aria-label={qa.label}
+                    onClick={() => setInput(qa.prompt)}
+                    title={qa.label}
+                  >
+                    {qa.icon}
+                    {qa.label}
+                  </Button>
+                ))}
+              </div>
+            </div>
             {uploadedFile && (
-              <div className="mb-4 p-3 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-between">
+              <div className="mb-4 p-3 bg-muted border border-border rounded-lg flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Paperclip className="w-4 h-4 text-slate-500" />
-                  <span className="text-sm text-slate-700">{uploadedFile.name}</span>
+                  <Paperclip className="w-4 h-4 text-muted-foreground" />
+                  <span className="text-sm text-foreground">{uploadedFile.name}</span>
                 </div>
-                <button
-                  onClick={() => setUploadedFile(null)}
-                  className="text-slate-400 hover:text-slate-600"
-                >
+                <Button variant="ghost" size="icon" onClick={() => setUploadedFile(null)} aria-label="Remove file">
                   <Trash2 className="w-4 h-4" />
-                </button>
+                </Button>
               </div>
             )}
             <div className="flex gap-3">
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
-              >
-                <Paperclip className="w-5 h-5" />
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".pdf,.txt"
-                onChange={handleFileUpload}
-                className="hidden"
-              />
-              <input
+              <Dropzone onFiles={(files) => {
+                const f = files[0]
+                if (!f) return
+                const formData = new FormData()
+                formData.append('file', f)
+                ;(async () => {
+                  try {
+                    const uploadUrl = `${apiBase || ''}/api/upload`
+                    const response = await fetch(uploadUrl, {
+                      method: 'POST',
+                      credentials: 'include',
+                      headers: { 'X-Session-ID': currentSession?.id || '' },
+                      body: formData,
+                    })
+                    const data = await safeJson(response, uploadUrl)
+                    if (!response.ok) throw new Error(data.error || 'Failed to upload file')
+                    setUploadedFile({ name: data.filename, content: data.content })
+                    const fileMessage = {
+                      id: Date.now().toString(),
+                      role: 'user',
+                      content: `[UPLOADED FILE: ${data.filename}]\n\nFile Content:\n${data.content}\n\n[END OF FILE]`,
+                      timestamp: new Date(),
+                    }
+                    setMessages(prev => [...prev, fileMessage])
+                  } catch (error) {
+                    alert(`Error uploading file: ${error instanceof Error ? error.message : 'Unknown error'}`)
+                  }
+                })()
+              }} />
+              <Input
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && sendMessage()}
+                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }}
                 placeholder={"Ask about your courses, assignments, modules..."}
-                className="flex-1 px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-slate-500 outline-none"
                 disabled={isTyping}
               />
-              <button
-                onClick={sendMessage}
-                disabled={isTyping || !input.trim()}
-                className="p-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
+              <Button onClick={sendMessage} disabled={isTyping || !input.trim()} aria-busy={isTyping}>
                 <Send className="w-5 h-5" />
-              </button>
+              </Button>
             </div>
             
           </div>

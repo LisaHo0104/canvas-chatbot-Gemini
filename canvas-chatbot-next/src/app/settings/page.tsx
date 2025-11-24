@@ -4,11 +4,14 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Settings } from 'lucide-react'
 import { createBrowserClient } from '@supabase/ssr'
-import EnhancedSidebar from '@/components/EnhancedSidebar'
 import AIProvidersSettings from '@/app/settings/ai-providers/page'
-import { Input } from '@/ui/atoms/Input'
-import { Label } from '@/ui/atoms/Label'
-import { Button } from '@/ui/atoms/Button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
+import { Spinner } from '@/components/ui/spinner'
+import { Separator } from '@/components/ui/separator'
 
 interface User {
   id: string
@@ -177,10 +180,10 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-900 mx-auto mb-4"></div>
-          <p className="text-slate-600">Loading settings...</p>
+          <Spinner className="mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading settings...</p>
         </div>
       </div>
     )
@@ -190,99 +193,100 @@ export default function SettingsPage() {
     return null
   }
 
+
   return (
-    <div className="flex h-screen bg-slate-50">
-      <div className="hidden md:block">
-        <EnhancedSidebar
-          user={user}
-          sessions={sessions}
-          currentSession={currentSession}
-          onSessionSelect={handleSessionSelect}
-          onNewSession={() => {}}
-          onSettingsClick={() => {}}
-          onLogout={handleSignOut}
-        />
-      </div>
+    <div className="flex min-h-screen bg-slate-50">
       <div className="flex-1 flex flex-col">
-        <div className="bg-white border-b border-slate-200 px-6 py-4">
+        <div className="bg-background border-b border-border px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <Settings className="w-5 h-5 text-slate-600" />
-              <h1 className="text-xl font-semibold text-slate-900">Settings</h1>
+              <Settings className="w-5 h-5 text-muted-foreground" aria-hidden="true" />
+              <h1 className="text-xl font-semibold text-foreground">Settings</h1>
             </div>
-            <button
-              onClick={handleSignOut}
-              className="px-3 py-1.5 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
-            >
-              Sign Out
-            </button>
           </div>
         </div>
-        <div className="p-6">
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
-            <div className="p-6 border-b border-gray-200 flex justify-between items-center">
-              <h2 className="text-xl font-semibold text-gray-900">Canvas Configuration</h2>
-              <div className="text-sm">
-                {canvasStatus === 'connected' && <span className="text-green-600">Connected</span>}
-                {canvasStatus === 'missing' && <span className="text-yellow-600">Not configured</span>}
-                {canvasStatus === 'error' && <span className="text-red-600">Error</span>}
-              </div>
-            </div>
-            <form className="p-6 space-y-4" onSubmit={handleCanvasSave}>
-              <div>
-                <Label htmlFor="institution">Canvas Institution</Label>
-                <select
-                  id="institution"
-                  value={canvasInstitution}
-                  onChange={(e) => setCanvasInstitution(e.target.value)}
-                  className="mt-2 w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                >
-                  {institutions.map((inst) => (
-                    <option key={inst.value} value={inst.value}>{inst.label}</option>
-                  ))}
-                </select>
-                {canvasInstitution === 'custom' && (
-                  <div className="mt-3">
-                    <Label htmlFor="canvasUrl">Canvas URL</Label>
-                    <Input
-                      id="canvasUrl"
-                      value={canvasUrl}
-                      onChange={(e) => setCanvasUrl(e.target.value)}
-                      placeholder="your-school.instructure.com"
-                    />
+        <div className="w-full max-w-4xl mx-auto p-6">
+
+          <div id="general" className="space-y-4">
+            <Card className="mb-6">
+              <CardHeader>
+                <CardTitle>Canvas Configuration</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <form className="space-y-4" onSubmit={handleCanvasSave} aria-busy={savingCanvas}>
+                  <div>
+                    <Label htmlFor="institution">Canvas Institution</Label>
+                    <Select value={canvasInstitution} onValueChange={setCanvasInstitution}>
+                      <SelectTrigger id="institution" className="mt-2">
+                        <SelectValue placeholder="Select institution" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {institutions.map((inst) => (
+                          <SelectItem key={inst.value} value={inst.value}>{inst.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {canvasInstitution === 'custom' && (
+                      <div className="mt-3">
+                        <Label htmlFor="canvasUrl">Canvas URL</Label>
+                        <Input
+                          id="canvasUrl"
+                          value={canvasUrl}
+                          onChange={(e) => setCanvasUrl(e.target.value)}
+                          placeholder="your-school.instructure.com"
+                        />
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
 
-              <div>
-                <Label htmlFor="canvasToken">Canvas API Token</Label>
-                <Input
-                  id="canvasToken"
-                  type="password"
-                  value={canvasToken}
-                  onChange={(e) => setCanvasToken(e.target.value)}
-                  placeholder="Canvas API Token"
-                />
-                <p className="mt-2 text-xs text-gray-500">Token is sent securely to the server and stored encrypted. It is not saved in your browser.</p>
-              </div>
+                  <div>
+                    <Label htmlFor="canvasToken">Canvas API Token</Label>
+                    <Input
+                      id="canvasToken"
+                      type="password"
+                      value={canvasToken}
+                      onChange={(e) => setCanvasToken(e.target.value)}
+                      placeholder="Canvas API Token"
+                      aria-describedby="canvasTokenHelp"
+                    />
+                    <p id="canvasTokenHelp" className="mt-2 text-xs text-muted-foreground">Token is sent securely to the server and stored encrypted. It is not saved in your browser.</p>
+                  </div>
 
-              {canvasMessage && (
-                <div className={`p-3 rounded-lg text-sm ${canvasStatus === 'error' ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-green-50 text-green-700 border border-green-200'}`}>
-                  {canvasMessage}
-                </div>
-              )}
+                  {canvasMessage && (
+                    <div role="status" aria-live="polite" className={`p-3 rounded-lg text-sm ${canvasStatus === 'error' ? 'border border-destructive bg-destructive/10 text-destructive' : 'bg-secondary text-secondary-foreground'}`}>
+                      {canvasMessage}
+                    </div>
+                  )}
 
-              <div className="flex items-center gap-3">
-                <Button type="submit" disabled={savingCanvas}>
-                  {savingCanvas ? 'Saving…' : 'Save Canvas Settings'}
-                </Button>
-                {canvasStatus === 'connected' && (
-                  <span className="text-sm text-gray-600">Connected to {canvasInstitution === 'custom' ? canvasUrl : canvasInstitution}</span>
-                )}
-              </div>
-            </form>
+                  <div className="flex items-center gap-3">
+                    <Button type="submit" disabled={savingCanvas}>
+                      {savingCanvas ? (
+                        <span className="inline-flex items-center gap-2"><Spinner aria-hidden="true" /> Saving…</span>
+                      ) : (
+                        'Save Canvas Settings'
+                      )}
+                    </Button>
+                    {canvasStatus === 'connected' && (
+                      <span className="text-sm text-muted-foreground">Connected to {canvasInstitution === 'custom' ? canvasUrl : canvasInstitution}</span>
+                    )}
+                  </div>
+                </form>
+              </CardContent>
+            </Card>
           </div>
-          <AIProvidersSettings />
+
+          <Separator className="my-6 h-px" />
+
+          <div id="providers" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>AI Providers Configuration</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <AIProvidersSettings compact />
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
     </div>
