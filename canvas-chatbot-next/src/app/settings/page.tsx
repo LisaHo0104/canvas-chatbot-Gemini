@@ -275,8 +275,6 @@ export default function SettingsPage() {
             </Card>
           </div>
 
-          <Separator className="my-6 h-px" />
-
           <div id="providers" className="space-y-4">
             <Card>
               <CardHeader>

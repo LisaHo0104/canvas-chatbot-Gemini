@@ -3,12 +3,11 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { createBrowserClient } from '@supabase/ssr'
-import { Send, Settings, Plus, Search, Trash2, Edit3, Paperclip, BookOpen, Menu, X, Brain, ChevronDown, AlarmClock } from 'lucide-react'
+import { Send, Settings, Trash2, Paperclip, BookOpen, Menu, X, Brain, ChevronDown, AlarmClock } from 'lucide-react'
 import { marked } from 'marked'
 import EnhancedSidebar from '@/components/EnhancedSidebar'
 import { AIProvider } from '@/lib/ai-provider-service'
 import { Button } from '@/components/ui/button'
-import { Card, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Dropzone } from '@/components/ui/dropzone'
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
@@ -164,7 +163,7 @@ export default function ChatPage() {
           if (savedModel && savedModel.trim()) {
             setSelectedModel(savedModel)
           }
-        } catch {}
+        } catch { }
         // Load chat sessions
         await loadChatSessions(session.user.id)
       } catch (error) {
@@ -373,7 +372,7 @@ export default function ChatPage() {
             .from('chat_sessions')
             .update({ title: newTitle })
             .eq('id', sessionForSend.id)
-        } catch {}
+        } catch { }
         setCurrentSession(prev => prev ? { ...prev, title: newTitle } : null)
         setSessions(prev => prev.map(s => s.id === sessionForSend!.id ? { ...s, title: newTitle } : s))
       }
@@ -668,8 +667,8 @@ export default function ChatPage() {
                 >
                   <div
                     className={`max-w-2xl px-4 py-3 rounded-lg relative ${message.role === 'user'
-                        ? 'bg-slate-900 text-white'
-                        : 'bg-white border border-slate-200'
+                      ? 'bg-slate-900 text-white'
+                      : 'bg-white border border-slate-200'
                       }`}
                   >
                     {message.role === 'assistant' && message.provider_type === 'configured' && (
@@ -707,14 +706,14 @@ export default function ChatPage() {
               role="group"
               aria-label="Quick actions"
             >
-              <div className="flex gap-2 flex-wrap md:flex-nowrap md:overflow-x-auto md:[&>*]:shrink-0">
+              <div className="pb-2 flex gap-2 flex-wrap md:flex-nowrap md:overflow-x-auto md:[&>*]:shrink-0">
                 {quickActions.map((qa) => (
                   <Button
                     key={qa.id}
                     type="button"
                     size="sm"
                     variant="secondary"
-                    className="rounded-full px-3 h-8 bg-secondary text-secondary-foreground hover:bg-secondary/90 shadow-sm hover:shadow-md transition-transform transition-shadow focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+                    className="rounded-full px-3 h-8 bg-secondary text-secondary-foreground hover:bg-secondary/90 shadow-sm hover:shadow-md transition-transform focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                     aria-label={qa.label}
                     onClick={() => setInput(qa.prompt)}
                     title={qa.label}
@@ -742,29 +741,29 @@ export default function ChatPage() {
                 if (!f) return
                 const formData = new FormData()
                 formData.append('file', f)
-                ;(async () => {
-                  try {
-                    const uploadUrl = `${apiBase || ''}/api/upload`
-                    const response = await fetch(uploadUrl, {
-                      method: 'POST',
-                      credentials: 'include',
-                      headers: { 'X-Session-ID': currentSession?.id || '' },
-                      body: formData,
-                    })
-                    const data = await safeJson(response, uploadUrl)
-                    if (!response.ok) throw new Error(data.error || 'Failed to upload file')
-                    setUploadedFile({ name: data.filename, content: data.content })
-                    const fileMessage = {
-                      id: Date.now().toString(),
-                      role: 'user',
-                      content: `[UPLOADED FILE: ${data.filename}]\n\nFile Content:\n${data.content}\n\n[END OF FILE]`,
-                      timestamp: new Date(),
+                  ; (async () => {
+                    try {
+                      const uploadUrl = `${apiBase || ''}/api/upload`
+                      const response = await fetch(uploadUrl, {
+                        method: 'POST',
+                        credentials: 'include',
+                        headers: { 'X-Session-ID': currentSession?.id || '' },
+                        body: formData,
+                      })
+                      const data = await safeJson(response, uploadUrl)
+                      if (!response.ok) throw new Error(data.error || 'Failed to upload file')
+                      setUploadedFile({ name: data.filename, content: data.content })
+                      const fileMessage = {
+                        id: Date.now().toString(),
+                        role: 'user',
+                        content: `[UPLOADED FILE: ${data.filename}]\n\nFile Content:\n${data.content}\n\n[END OF FILE]`,
+                        timestamp: new Date(),
+                      }
+                      setMessages(prev => [...prev, fileMessage])
+                    } catch (error) {
+                      alert(`Error uploading file: ${error instanceof Error ? error.message : 'Unknown error'}`)
                     }
-                    setMessages(prev => [...prev, fileMessage])
-                  } catch (error) {
-                    alert(`Error uploading file: ${error instanceof Error ? error.message : 'Unknown error'}`)
-                  }
-                })()
+                  })()
               }} />
               <Input
                 type="text"
@@ -778,7 +777,6 @@ export default function ChatPage() {
                 <Send className="w-5 h-5" />
               </Button>
             </div>
-            
           </div>
         </div>
       </div>
