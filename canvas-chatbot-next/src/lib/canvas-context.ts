@@ -26,8 +26,8 @@ export class CanvasContextService {
 
       // Fetch all courses
       const [activeCourses, completedCourses] = await Promise.all([
-        this.canvasService.getCourses('active'),
-        this.canvasService.getCourses('completed'),
+        this.canvasService.getCourses({ enrollmentState: 'active' }),
+        this.canvasService.getCourses({ enrollmentState: 'completed' }),
       ])
 
       const allCourses = [...activeCourses, ...completedCourses]
@@ -218,7 +218,7 @@ export class CanvasContextService {
 
   private async buildGradeContext(courseId: number, query: string): Promise<string> {
     try {
-      const assignments = await this.canvasService.getAssignments(courseId)
+      const assignments = await this.canvasService.getAssignments(courseId, { includeSubmission: true })
       
       // Calculate grades
       const gradeInfo = this.calculateRequiredGrade(assignments, query)
@@ -349,9 +349,12 @@ export class CanvasContextService {
       const modules = await this.canvasService.getModules(courseId)
       let context = '📚 DETAILED COURSE CONTENT:\n\n'
       
-      const courseName = (await this.canvasService.getCourses()).find(c => c.id === courseId)?.name
+      const courseName = (await this.canvasService.getCourses({ enrollmentState: 'all' }))
+        .find(c => c.id === courseId)?.name
       context += `${'='.repeat(60)}\n`
-      context += `📖 COURSE: ${courseName} (Code: ${(await this.canvasService.getCourses()).find(c => c.id === courseId)?.course_code})\n`
+      const courseInfo = (await this.canvasService.getCourses({ enrollmentState: 'all' }))
+        .find(c => c.id === courseId)
+      context += `📖 COURSE: ${courseName} (Code: ${courseInfo?.course_code})\n`
       context += `${'='.repeat(60)}\n\n`
 
       // Filter modules if specific week/module is mentioned
@@ -419,7 +422,7 @@ export class CanvasContextService {
             }
           } else if (item.type === 'Assignment' && item.content_id) {
             try {
-              const assignments = await this.canvasService.getAssignments(courseId)
+              const assignments = await this.canvasService.getAssignments(courseId, { includeSubmission: true })
               const assignment = assignments.find(a => a.id === item.content_id)
               if (assignment) {
                 context += `    📝 Assignment Details:\n`
@@ -452,7 +455,7 @@ export class CanvasContextService {
 
   private async buildGradesContext(courseId: number): Promise<string> {
     try {
-      const assignments = await this.canvasService.getAssignments(courseId)
+      const assignments = await this.canvasService.getAssignments(courseId, { includeSubmission: true })
       let context = '📊 YOUR GRADES & SUBMISSIONS:\n\n'
       
       const courseName = (await this.canvasService.getCourses()).find(c => c.id === courseId)?.name
@@ -483,13 +486,18 @@ export class CanvasContextService {
 
   private async getUpcomingAssignments(daysAhead: number = 14): Promise<any[]> {
     try {
-      const activeCourses = await this.canvasService.getCourses('active')
+      const activeCourses = await this.canvasService.getCourses({ enrollmentState: 'active' })
       const allAssignments = []
       const cutoffDate = new Date(Date.now() + daysAhead * 24 * 60 * 60 * 1000)
 
       for (const course of activeCourses) {
         try {
-          const assignments = await this.canvasService.getAssignments(course.id)
+          const assignments = await this.canvasService.getAssignments(course.id, {
+            includeSubmission: true,
+            bucket: 'upcoming',
+            orderBy: 'due_at',
+            perPage: 100,
+          })
           
           for (const assignment of assignments) {
             const dueAt = assignment.due_at

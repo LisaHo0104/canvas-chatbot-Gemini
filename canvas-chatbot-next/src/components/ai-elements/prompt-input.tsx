@@ -715,6 +715,10 @@ export const PromptInput = ({
       form.reset();
     }
 
+    if (usingProvider) {
+      controller.textInput.clear();
+    }
+
     // Convert blob URLs to data URLs asynchronously
     Promise.all(
       files.map(async ({ id, ...item }) => {

@@ -1,0 +1,1 @@
+- Always preview the application at `http://localhost:3000` if nothing there run the `npm run dev` command

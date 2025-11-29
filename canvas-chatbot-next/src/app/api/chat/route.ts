@@ -4,7 +4,12 @@ import { decrypt } from '@/lib/crypto';
 import { createCanvasTools } from '@/lib/canvas-tools';
 import { AIProviderService } from '@/lib/ai-provider-service';
 import { rateLimitMiddleware } from '@/lib/rate-limit';
-import { streamText, convertToModelMessages, stepCountIs, type UIMessage } from 'ai';
+import {
+	streamText,
+	convertToModelMessages,
+	stepCountIs,
+	type UIMessage,
+} from 'ai';
 import { createOpenRouterProvider } from '@/lib/ai-sdk/openrouter';
 import { SYSTEM_PROMPT } from '@/lib/system-prompt';
 import { getDefaultModelId } from '@/lib/ai-sdk/openrouter';
@@ -75,8 +80,8 @@ async function chatHandler(request: NextRequest) {
 			});
 		}
 
-		let canvasApiKey: string;
-		let canvasApiUrl: string;
+		let canvasApiKey: string | undefined;
+		let canvasApiUrl: string | undefined;
 		if (canvas_token && canvas_url) {
 			canvasApiKey = canvas_token;
 			canvasApiUrl = canvas_url;
@@ -87,39 +92,36 @@ async function chatHandler(request: NextRequest) {
 				.eq('id', user.id)
 				.single();
 			if (
-				userError ||
-				!userData?.canvas_api_key_encrypted ||
-				!userData?.canvas_api_url
+				!userError &&
+				userData?.canvas_api_key_encrypted &&
+				userData?.canvas_api_url
 			) {
-				return new Response(
-					JSON.stringify({
-						error: 'Please configure your Canvas API credentials first',
-					}),
-					{ status: 400 },
-				);
-			}
-			try {
-				canvasApiKey = decrypt(userData.canvas_api_key_encrypted);
-				canvasApiUrl = userData.canvas_api_url;
-			} catch (error) {
-				return new Response(
-					JSON.stringify({ error: 'Failed to decrypt Canvas API key' }),
-					{ status: 500 },
-				);
+				try {
+					canvasApiKey = decrypt(userData.canvas_api_key_encrypted);
+					canvasApiUrl = userData.canvas_api_url;
+				} catch (error) {
+					return new Response(
+						JSON.stringify({ error: 'Failed to decrypt Canvas API key' }),
+						{ status: 500 },
+					);
+				}
 			}
 		}
 
-		const tools = createCanvasTools(canvasApiKey, canvasApiUrl);
+		const tools =
+			canvasApiKey && canvasApiUrl
+				? createCanvasTools(canvasApiKey, canvasApiUrl)
+				: {};
 
 		// Generate AI response
 		let aiResponse;
 		const sessionIdHeader = request.headers.get('x-session-id') || '';
-		if (!sessionIdHeader || sessionIdHeader === 'default') {
-			return new Response(JSON.stringify({ error: 'Session ID is required' }), {
-				status: 400,
-			});
-		}
-		const sessionId = sessionIdHeader;
+		const sessionId =
+			sessionIdHeader && sessionIdHeader !== 'default'
+				? sessionIdHeader
+				: typeof (body as any)?.session_id === 'string'
+				? (body as any).session_id
+				: 'default';
 
 		let apiKey =
 			process.env.OPENROUTER_API_KEY_OWNER || process.env.OPENROUTER_API_KEY;
@@ -150,38 +152,43 @@ async function chatHandler(request: NextRequest) {
 
 		const openrouter = createOpenRouterProvider(apiKey);
 
-		const uiMessages: UIMessage[] = Array.isArray(incomingMessages)
-			? [
-					{
-						role: 'system',
-						parts: [
-							{
-								type: 'text',
-								text: `${SYSTEM_PROMPT}`,
-							},
-						],
-					},
-					...incomingMessages,
-			  ]
-			: [
-					{
-						role: 'system',
-						parts: [
-							{
-								type: 'text',
-								text: `${SYSTEM_PROMPT}`,
-							},
-						],
-					},
-					...history.map((m: any) => ({
-						role: m.role,
-						parts: [{ type: 'text', text: String(m.parts ?? '') }],
-					})),
-					{
-						role: 'user',
-						parts: [{ type: 'text', text: String(effectiveQuery) }],
-					},
-			  ];
+		const sanitizedIncoming: any[] = Array.isArray(incomingMessages)
+			? (incomingMessages as UIMessage[]).map((m: any) => ({
+					role: m.role,
+					parts: Array.isArray(m.parts)
+						? m.parts.filter(
+								(p: any) =>
+									p?.type === 'text' ||
+									p?.type === 'file' ||
+									p?.type === 'reasoning',
+						  )
+						: [],
+			  }))
+			: [];
+
+		const uiMessages: any[] =
+			sanitizedIncoming.length > 0
+				? [
+						{
+							role: 'system',
+							parts: [{ type: 'text', text: `${SYSTEM_PROMPT}` }],
+						},
+						...sanitizedIncoming,
+				  ]
+				: [
+						{
+							role: 'system',
+							parts: [{ type: 'text', text: `${SYSTEM_PROMPT}` }],
+						},
+						...history.map((m: any) => ({
+							role: m.role,
+							parts: [{ type: 'text', text: String(m.parts ?? '') }],
+						})),
+						{
+							role: 'user',
+							parts: [{ type: 'text', text: String(effectiveQuery) }],
+						},
+				  ];
 
 		const messages = convertToModelMessages(uiMessages);
 
@@ -191,6 +198,61 @@ async function chatHandler(request: NextRequest) {
 			tools,
 			toolChoice: 'auto',
 			stopWhen: stepCountIs(3),
+			onFinish: async ({ text }: any) => {
+				try {
+					const userText = String(effectiveQuery || '');
+					const assistantText = String(text || '');
+					if (sessionId && sessionId !== 'default' && userText) {
+						const { error: insertError } = await supabase
+							.from('chat_messages')
+							.insert([
+								{
+									user_id: user.id,
+									session_id: sessionId,
+									role: 'user',
+									content: userText,
+									metadata: null,
+								},
+								{
+									user_id: user.id,
+									session_id: sessionId,
+									role: 'assistant',
+									content: assistantText,
+									metadata: {
+										provider_id: provider_id || null,
+										provider_type: 'configured',
+									},
+								},
+							]);
+
+						if (!insertError) {
+							const { data: sessionRow } = await supabase
+								.from('chat_sessions')
+								.select('title')
+								.eq('id', sessionId)
+								.single();
+
+							const currentTitle = String(sessionRow?.title || '');
+							if (!currentTitle || currentTitle === 'New Chat') {
+								const newTitleBase = userText.substring(0, 50);
+								const newTitle =
+									newTitleBase + (userText.length > 50 ? '...' : '');
+								await supabase
+									.from('chat_sessions')
+									.update({ title: newTitle })
+									.eq('id', sessionId);
+							}
+						} else {
+							console.error('Persist messages error:', insertError);
+						}
+					}
+				} catch (persistError) {
+					console.error('Server-side persistence error:', persistError);
+				}
+			},
+			onError: (err: any) => {
+				console.error('Stream error:', err);
+			},
 		});
 
 		return result.toUIMessageStreamResponse({ sendReasoning: true });

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { Search, Plus, ChevronLeft, ChevronRight, Trash2, Edit3 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { createBrowserClient } from '@supabase/ssr'
+import { Shimmer } from '@/components/ai-elements/shimmer'
 
 let supabase: any = null
 
@@ -42,6 +43,7 @@ interface EnhancedSidebarProps {
   onNewSession: () => void
   onSessionDelete?: (sessionId: string) => void
   onSessionRename?: (sessionId: string, newTitle: string) => void
+  status?: 'streaming' | 'submitted' | 'error' | 'ready'
 }
 
 export default function EnhancedSidebar({
@@ -51,7 +53,8 @@ export default function EnhancedSidebar({
   onSessionSelect,
   onNewSession,
   onSessionDelete,
-  onSessionRename
+  onSessionRename,
+  status
 }: EnhancedSidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
@@ -158,10 +161,15 @@ export default function EnhancedSidebar({
     if (editingSession && editTitle.trim()) {
       try {
         if (supabase) {
-          await supabase
+          const { error } = await supabase
             .from('chat_sessions')
             .update({ title: editTitle.trim() })
             .eq('id', editingSession)
+          if (error) {
+            console.error('Error renaming session:', error)
+            alert('Failed to rename conversation')
+            return
+          }
         }
 
         onSessionRename?.(editingSession, editTitle.trim())
@@ -181,12 +189,9 @@ export default function EnhancedSidebar({
 
   if (isCollapsed) {
     return (
-      <div className="relative h-full min-h-0">
-        <Button onClick={() => setIsCollapsed(false)} aria-label="Expand sidebar" variant="ghost" size="icon" className="absolute left-0 top-1/2 -translate-y-1/2 z-10 rounded-r-lg shadow-lg text-muted-foreground">
-          <ChevronRight className="w-4 h-4" />
-        </Button>
+      <div className="relative h-full min-h-0 w-16 flex-shrink-0">
 
-        <div className="absolute left-0 top-0 h-full w-16 bg-white border-r border-slate-200 flex flex-col items-center py-4 space-y-4 z-10 box-border">
+        <div className="h-full w-full bg-white border-r border-slate-200 flex flex-col items-center py-4 space-y-4 box-border">
           <Button onClick={() => setIsCollapsed(false)} aria-label="Expand sidebar" variant="ghost" size="icon" className="text-muted-foreground">
             <ChevronRight className="w-4 h-4" />
           </Button>
@@ -276,9 +281,15 @@ export default function EnhancedSidebar({
                           />
                         </div>
                       ) : (
-                        <h3 className="font-medium text-slate-900 truncate text-sm">
-                          {session.title}
-                        </h3>
+                        (
+                          (currentSession?.id === session.id && (status === 'streaming' || status === 'submitted')) ? (
+                            <Shimmer as="h3" duration={1}>{session.title}</Shimmer>
+                          ) : (
+                            <h3 className="font-medium text-slate-900 truncate text-sm">
+                              {session.title}
+                            </h3>
+                          )
+                        )
                       )}
 
                       <p className="text-xs text-slate-500 mt-1 line-clamp-2">

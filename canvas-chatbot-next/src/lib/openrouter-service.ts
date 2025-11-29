@@ -11,7 +11,6 @@ export interface AIResponse {
 		totalTokens: number;
 	};
 }
-import { OpenRouter } from '@openrouter/sdk';
 
 export interface OpenRouterModel {
 	id: string;

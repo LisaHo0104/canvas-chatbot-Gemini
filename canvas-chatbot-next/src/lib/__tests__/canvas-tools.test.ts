@@ -3,22 +3,23 @@ import { createCanvasTools } from '../canvas-tools'
 jest.mock('../canvas-api', () => {
   class MockCanvasAPIService {
     constructor(_token: string, _url: string) {}
-    getCourses(enrollmentState: 'active' | 'completed' | 'all' = 'active') {
-      if (enrollmentState === 'active') {
+    getCourses(options: { enrollmentState?: 'active' | 'completed' | 'all' } = { enrollmentState: 'active' }) {
+      const state = options.enrollmentState ?? 'active'
+      if (state === 'active') {
         return Promise.resolve([{ id: 1, name: 'CS101', course_code: 'CS101', enrollment_term_id: 1, start_at: null, end_at: null, workflow_state: 'available' }])
       }
       return Promise.resolve([])
     }
-    getAssignments(courseId: number, _includeSubmission: boolean = true) {
+    getAssignments(courseId: number, options: { includeSubmission?: boolean } = { includeSubmission: true }) {
       return Promise.resolve([{ id: 10, name: 'HW1', points_possible: 100, course_id: courseId, description: null, due_at: null, html_url: '', submission: null }])
     }
-    getModules(courseId: number) {
+    getModules(courseId: number, _options?: { includeContentDetails?: boolean, perPage?: number }) {
       return Promise.resolve([{ id: 7, name: 'Week 1', position: 1, items: [] }])
     }
-    getCalendarEvents(daysAhead: number = 14) {
+    getCalendarEvents(_options: { daysAhead?: number } = { daysAhead: 14 }) {
       return Promise.resolve([{ id: 5, title: 'Exam', start_at: new Date().toISOString(), end_at: new Date().toISOString(), description: null, context_name: 'CS101', html_url: '' }])
     }
-    getPageContent(courseId: number, pageUrl: string) {
+    getPageContent(_courseId: number, pageUrl: string) {
       return Promise.resolve({ title: 'Intro', body: 'Welcome', url: pageUrl })
     }
     getFileContent(fileId: number) {
@@ -62,4 +63,3 @@ describe('canvas tools', () => {
     expect(res.filename).toBe('file.pdf')
   })
 })
-

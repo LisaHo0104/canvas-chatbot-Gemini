@@ -6,6 +6,8 @@ import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { Menu } from 'lucide-react'
+import { NavigationMenu, NavigationMenuList, NavigationMenuItem, NavigationMenuLink } from '@/components/ui/navigation-menu'
+import { cn } from '@/lib/utils'
 import { createBrowserClient } from '@supabase/ssr'
 
 const NavItem = ({ href, label }: { href: string; label: string }) => {
@@ -68,10 +70,47 @@ export default function MainNavBar() {
         <div className="flex items-center gap-2">
           {authUser ? (
             <>
-              <div className="hidden sm:flex items-center gap-2">
-                <Link href="/chat" aria-current={pathname === '/chat' ? 'page' : undefined}><Button variant={pathname === '/chat' ? 'default' : 'ghost'} size="sm">Chat</Button></Link>
-                <Link href="/settings" aria-current={pathname.startsWith('/settings') ? 'page' : undefined}><Button variant={pathname.startsWith('/settings') ? 'default' : 'ghost'} size="sm">Settings</Button></Link>
-                <Link href="/help" aria-current={pathname.startsWith('/help') ? 'page' : undefined}><Button variant={pathname.startsWith('/help') ? 'default' : 'ghost'} size="sm">Help</Button></Link>
+              <div className="hidden sm:block">
+                <NavigationMenu>
+                  <NavigationMenuList>
+                    <NavigationMenuItem>
+                      <NavigationMenuLink
+                        asChild
+                        className={cn(
+                          pathname === '/chat' ? 'bg-accent text-accent-foreground' : '',
+                          'px-3 py-2'
+                        )}
+                        aria-current={pathname === '/chat' ? 'page' : undefined}
+                      >
+                        <Link href="/chat">Chat</Link>
+                      </NavigationMenuLink>
+                    </NavigationMenuItem>
+                    <NavigationMenuItem>
+                      <NavigationMenuLink
+                        asChild
+                        className={cn(
+                          pathname.startsWith('/settings') ? 'bg-accent text-accent-foreground' : '',
+                          'px-3 py-2'
+                        )}
+                        aria-current={pathname.startsWith('/settings') ? 'page' : undefined}
+                      >
+                        <Link href="/settings">Settings</Link>
+                      </NavigationMenuLink>
+                    </NavigationMenuItem>
+                    <NavigationMenuItem>
+                      <NavigationMenuLink
+                        asChild
+                        className={cn(
+                          pathname.startsWith('/help') ? 'bg-accent text-accent-foreground' : '',
+                          'px-3 py-2'
+                        )}
+                        aria-current={pathname.startsWith('/help') ? 'page' : undefined}
+                      >
+                        <Link href="/help">Help</Link>
+                      </NavigationMenuLink>
+                    </NavigationMenuItem>
+                  </NavigationMenuList>
+                </NavigationMenu>
               </div>
               <div className="sm:hidden">
                 <DropdownMenu>

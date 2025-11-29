@@ -68,17 +68,23 @@ export interface CanvasCalendarEvent {
 export class CanvasAPIService {
   private apiKey: string
   private baseURL: string
+  private forceStringIds: boolean
 
-  constructor(apiKey: string, canvasURL: string) {
+  constructor(apiKey: string, canvasURL: string, options?: { forceStringIds?: boolean }) {
     this.apiKey = apiKey
     this.baseURL = canvasURL.endsWith('/api/v1') ? canvasURL : `${canvasURL}/api/v1`
+    this.forceStringIds = options?.forceStringIds === true
   }
 
   private getHeaders() {
-    return {
+    const headers: Record<string, string> = {
       'Authorization': `Bearer ${this.apiKey}`,
       'Content-Type': 'application/json',
     }
+    if (this.forceStringIds) {
+      headers['Accept'] = 'application/json+canvas-string-ids'
+    }
+    return headers
   }
 
   async getCurrentUser() {
@@ -93,16 +99,36 @@ export class CanvasAPIService {
     }
   }
 
-  async getCourses(enrollmentState: 'active' | 'completed' | 'all' = 'active') {
+  async getCourses(enrollmentStateOrOptions: ('active' | 'completed' | 'all') | {
+    enrollmentState?: 'active' | 'completed' | 'all'
+    enrollmentType?: 'student' | 'teacher' | 'ta' | 'observer' | 'designer'
+    include?: string[]
+    perPage?: number
+    searchTerm?: string
+  } = 'active') {
     try {
-      const params: any = {
-        per_page: 100,
-        include: ['total_scores'],
+      const params: any = {}
+      let enrollmentState: 'active' | 'completed' | 'all' = 'active'
+      let include: string[] | undefined
+      let perPage: number | undefined
+      let enrollmentType: string | undefined
+      let searchTerm: string | undefined
+
+      if (typeof enrollmentStateOrOptions === 'string') {
+        enrollmentState = enrollmentStateOrOptions
+      } else if (typeof enrollmentStateOrOptions === 'object') {
+        enrollmentState = enrollmentStateOrOptions.enrollmentState ?? 'active'
+        include = enrollmentStateOrOptions.include
+        perPage = enrollmentStateOrOptions.perPage
+        enrollmentType = enrollmentStateOrOptions.enrollmentType
+        searchTerm = enrollmentStateOrOptions.searchTerm
       }
 
-      if (enrollmentState !== 'all') {
-        params.enrollment_state = enrollmentState
-      }
+      params.per_page = perPage ?? 100
+      if (include && include.length) params.include = include
+      if (enrollmentState !== 'all') params.enrollment_state = enrollmentState
+      if (enrollmentType) params.enrollment_type = enrollmentType
+      if (searchTerm) params.search_term = searchTerm
 
       const response = await axios.get(`${this.baseURL}/users/self/courses`, {
         headers: this.getHeaders(),
@@ -116,16 +142,36 @@ export class CanvasAPIService {
     }
   }
 
-  async getAssignments(courseId: number, includeSubmission: boolean = true) {
+  async getAssignments(courseId: number, optionsOrIncludeSubmission: boolean | {
+    includeSubmission?: boolean
+    bucket?: 'upcoming' | 'past' | 'undated' | 'overdue' | 'ungraded'
+    perPage?: number
+    orderBy?: 'due_at' | 'position' | 'name'
+    searchTerm?: string
+  } = true) {
     try {
-      const params: any = {
-        per_page: 50,
-        include: [],
+      const params: any = { include: [] }
+      let includeSubmission = true
+      let bucket: string | undefined
+      let perPage: number | undefined
+      let orderBy: string | undefined
+      let searchTerm: string | undefined
+
+      if (typeof optionsOrIncludeSubmission === 'boolean') {
+        includeSubmission = optionsOrIncludeSubmission
+      } else if (typeof optionsOrIncludeSubmission === 'object') {
+        includeSubmission = optionsOrIncludeSubmission.includeSubmission ?? true
+        bucket = optionsOrIncludeSubmission.bucket
+        perPage = optionsOrIncludeSubmission.perPage
+        orderBy = optionsOrIncludeSubmission.orderBy
+        searchTerm = optionsOrIncludeSubmission.searchTerm
       }
 
-      if (includeSubmission) {
-        params.include.push('submission')
-      }
+      params.per_page = perPage ?? 50
+      if (includeSubmission) params.include.push('submission')
+      if (bucket) params.bucket = bucket
+      if (orderBy) params.order_by = orderBy
+      if (searchTerm) params.search_term = searchTerm
 
       const response = await axios.get(`${this.baseURL}/courses/${courseId}/assignments`, {
         headers: this.getHeaders(),
@@ -139,13 +185,21 @@ export class CanvasAPIService {
     }
   }
 
-  async getModules(courseId: number) {
+  async getModules(courseId: number, options?: { includeItems?: boolean, includeContentDetails?: boolean, perPage?: number }) {
     try {
+      const includeItems = options?.includeItems !== false
+      const includeContentDetails = options?.includeContentDetails === true
+      const perPage = options?.perPage ?? 50
+
+      const include: string[] = []
+      if (includeItems) include.push('items')
+      if (includeContentDetails) include.push('content_details')
+
       const response = await axios.get(`${this.baseURL}/courses/${courseId}/modules`, {
         headers: this.getHeaders(),
         params: {
-          per_page: 50,
-          include: ['items'],
+          per_page: perPage,
+          include,
         },
         timeout: 10000,
       })
@@ -201,19 +255,51 @@ export class CanvasAPIService {
     }
   }
 
-  async getCalendarEvents(daysAhead: number = 14) {
+  async getCalendarEvents(daysAheadOrOptions: number | {
+    daysAhead?: number
+    startDate?: string
+    endDate?: string
+    contextCodes?: string[]
+    type?: 'event' | 'assignment'
+    allEvents?: boolean
+    perPage?: number
+  } = 14) {
     try {
-      const startDate = new Date().toISOString()
-      const endDate = new Date(Date.now() + daysAhead * 24 * 60 * 60 * 1000).toISOString()
+      let startDate: string
+      let endDate: string
+      let contextCodes: string[] | undefined
+      let type: string | undefined
+      let allEvents: boolean | undefined
+      let perPage: number | undefined
+      let daysAhead = 14
+
+      if (typeof daysAheadOrOptions === 'number') {
+        daysAhead = daysAheadOrOptions
+      } else {
+        daysAhead = daysAheadOrOptions.daysAhead ?? 14
+        startDate = daysAheadOrOptions.startDate ?? new Date().toISOString()
+        endDate = daysAheadOrOptions.endDate ?? new Date(Date.now() + daysAhead * 24 * 60 * 60 * 1000).toISOString()
+        contextCodes = daysAheadOrOptions.contextCodes
+        type = daysAheadOrOptions.type
+        allEvents = daysAheadOrOptions.allEvents
+        perPage = daysAheadOrOptions.perPage
+      }
+
+      startDate = startDate ?? new Date().toISOString()
+      endDate = endDate ?? new Date(Date.now() + daysAhead * 24 * 60 * 60 * 1000).toISOString()
+
+      const params: any = {
+        start_date: startDate,
+        end_date: endDate,
+        per_page: perPage ?? 100,
+      }
+      if (typeof allEvents === 'boolean') params.all_events = allEvents
+      if (type) params.type = type
+      if (contextCodes && contextCodes.length) params.context_codes = contextCodes
 
       const response = await axios.get(`${this.baseURL}/calendar_events`, {
         headers: this.getHeaders(),
-        params: {
-          start_date: startDate,
-          end_date: endDate,
-          per_page: 100,
-          all_events: true,
-        },
+        params,
         timeout: 10000,
       })
 

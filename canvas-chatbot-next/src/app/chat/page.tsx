@@ -17,10 +17,11 @@ import { Reasoning, ReasoningContent, ReasoningTrigger } from '@/components/ai-e
 import { Tool, ToolHeader, ToolContent, ToolInput, ToolOutput } from '@/components/ai-elements/tool'
 import { Confirmation, ConfirmationTitle, ConfirmationRequest, ConfirmationAccepted, ConfirmationRejected, ConfirmationActions, ConfirmationAction } from '@/components/ai-elements/confirmation'
 import type { ToolUIPart } from 'ai'
-import { Loader } from '@/components/ai-elements/loader'
+import { Shimmer } from '@/components/ai-elements/shimmer'
 import EnhancedSidebar from '@/components/EnhancedSidebar'
 import { AIProvider } from '@/lib/ai-provider-service'
 import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 
 let supabase: any = null
 
@@ -62,18 +63,13 @@ export default function ChatPage() {
   const [sessions, setSessions] = useState<ChatSession[]>([])
   const [currentSession, setCurrentSession] = useState<ChatSession | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
-  const [input, setInput] = useState('')
-  const [isTyping, setIsTyping] = useState(false)
   const [aiProviders, setAiProviders] = useState<AIProvider[]>([])
   const [activeProvider, setActiveProvider] = useState<AIProvider | null>(null)
   const [selectedModel, setSelectedModel] = useState<string>('anthropic/claude-3.5-sonnet')
-  const [showProviderSelector, setShowProviderSelector] = useState(false)
   const [canvasInstitution, setCanvasInstitution] = useState('https://swinburne.instructure.com')
   const [canvasUrl, setCanvasUrl] = useState('https://swinburne.instructure.com')
   const [canvasToken, setCanvasToken] = useState('')
   const [canvasStatus, setCanvasStatus] = useState<'connected' | 'missing' | 'error'>('missing')
-  const [canvasError, setCanvasError] = useState('')
-  const [searchTerm, setSearchTerm] = useState('')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [webSearch, setWebSearch] = useState(false)
   const [modelSelectorOpen, setModelSelectorOpen] = useState(false)
@@ -84,33 +80,71 @@ export default function ChatPage() {
     { id: 'openai/gpt-4o', name: 'GPT-4o', chef: 'OpenAI', chefSlug: 'openai', providers: ['openai', 'azure'] },
     { id: 'google/gemini-2.0-flash-exp', name: 'Gemini 2.0 Flash', chef: 'Google', chefSlug: 'google', providers: ['google'] },
   ])
-  const { messages: uiMessages, sendMessage: sendChatMessage, status, regenerate, addToolApprovalResponse } = useChat({
+  const { messages: uiMessages, sendMessage: sendChatMessage, status, regenerate, addToolApprovalResponse, setMessages: setUIMessages } = useChat({
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
   })
-  const [lastPersistedId, setLastPersistedId] = useState<string | null>(null)
 
-  const suggestions = useMemo(() => [
+
+  const staticSuggestions = useMemo(() => [
     'Show my current courses',
     'List upcoming deadlines',
     'Summarize latest Canvas announcements',
     'What modules need attention this week?',
   ], [])
+  const [dynamicSuggestions, setDynamicSuggestions] = useState<string[]>([])
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false)
+  const lastAssistantIdRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    const lastAssistant = [...uiMessages].reverse().find((m) => m.role === 'assistant')
+    const isIdle = status !== 'streaming' && status !== 'submitted'
+    if (!lastAssistant || !isIdle) return
+    if (lastAssistantIdRef.current === lastAssistant.id) return
+    const hasFinalText = lastAssistant.parts.some((p: any) => p.type === 'text' && String((p as any).text || '').trim().length > 0)
+    if (!hasFinalText) return
+    setLoadingSuggestions(true)
+      ; (async () => {
+        try {
+          const res = await fetch('/api/suggestions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              messages: uiMessages,
+              provider_id: activeProvider?.id,
+              model: selectedModel,
+              model_override: activeProvider?.provider_name === 'openrouter' ? selectedModel : undefined,
+              max_suggestions: 4,
+            }),
+          })
+          if (res.ok) {
+            const data = await res.json()
+            const suggestions = Array.isArray(data?.suggestions) ? data.suggestions : []
+            setDynamicSuggestions(suggestions)
+            lastAssistantIdRef.current = lastAssistant.id
+          }
+        } catch (e) {
+          console.error('Failed to load suggestions', e)
+        } finally {
+          setLoadingSuggestions(false)
+        }
+      })()
+  }, [uiMessages, status, selectedModel, activeProvider])
 
   const getToolPartId = (tp: ToolUIPart): string | undefined => {
     const anyTp = tp as any
-    return anyTp.id || anyTp.toolCallId || anyTp.callId || (anyTp.tool && anyTp.tool.id) || undefined
+    return anyTp.approval?.id
   }
 
   const onApproveTool = (tp: ToolUIPart) => {
     const id = getToolPartId(tp)
     if (!id || !(addToolApprovalResponse as any)) return
-      ; (addToolApprovalResponse as any)({ id, approved: true })
+      ; (addToolApprovalResponse as any)({ id, response: 'approved' })
   }
 
   const onDenyTool = (tp: ToolUIPart) => {
     const id = getToolPartId(tp)
     if (!id || !(addToolApprovalResponse as any)) return
-      ; (addToolApprovalResponse as any)({ id, approved: false, reason: 'User denied' })
+      ; (addToolApprovalResponse as any)({ id, response: 'denied', reason: 'User denied' })
   }
 
 
@@ -238,54 +272,7 @@ export default function ChatPage() {
     initModels()
   }, [])
 
-  useEffect(() => {
-    const persistLatest = async () => {
-      if (!user || !currentSession) return
-      const lastAssistant = [...uiMessages].reverse().find((m) => m.role === 'assistant')
-      const lastUser = [...uiMessages].reverse().find((m) => m.role === 'user')
-      if (!lastAssistant || !lastAssistant.id || lastPersistedId === lastAssistant.id) return
-      const assistantText = lastAssistant.parts
-        .filter((p) => p.type === 'text')
-        .map((p: any) => String(p.text || ''))
-        .join('')
-      const userText = lastUser?.parts
-        .filter((p) => p.type === 'text')
-        .map((p: any) => String(p.text || ''))
-        .join('') || ''
-      try {
-        await supabase
-          .from('chat_messages')
-          .insert([
-            {
-              user_id: user.id,
-              session_id: currentSession.id,
-              role: 'user',
-              content: userText,
-              created_at: new Date().toISOString(),
-            },
-            {
-              user_id: user.id,
-              session_id: currentSession.id,
-              role: 'assistant',
-              content: assistantText,
-              created_at: new Date().toISOString(),
-              metadata: {
-                provider_id: activeProvider?.id || null,
-                provider_type: activeProvider ? 'configured' : 'legacy',
-              },
-            },
-          ])
-        setLastPersistedId(lastAssistant.id)
-        if (!currentSession.title || currentSession.title === 'New Chat') {
-          const newTitle = userText.substring(0, 50) + (userText.length > 50 ? '...' : '')
-          await supabase.from('chat_sessions').update({ title: newTitle }).eq('id', currentSession.id)
-          setCurrentSession((prev) => (prev ? { ...prev, title: newTitle } : prev))
-          setSessions((prev) => prev.map((s) => (s.id === currentSession.id ? { ...s, title: newTitle } : s)))
-        }
-      } catch { }
-    }
-    persistLatest()
-  }, [uiMessages, user, currentSession, activeProvider])
+
 
   const loadAIProviders = async () => {
     try {
@@ -333,6 +320,16 @@ export default function ChatPage() {
     scrollToBottom()
   }, [messages])
 
+  useEffect(() => {
+    try {
+      const id = currentSession?.id
+      if (typeof window !== 'undefined') {
+        ; (window as any).__currentSessionId = id || undefined
+        if (id) localStorage.setItem('currentSessionId', id)
+      }
+    } catch { }
+  }, [currentSession])
+
   const createNewSession = async (): Promise<ChatSession | null> => {
     if (!user) return null
 
@@ -343,8 +340,6 @@ export default function ChatPage() {
         .insert([{
           user_id: user.id,
           title: 'New Chat',
-          created_at: new Date(),
-          updated_at: new Date(),
         }])
         .select()
         .single()
@@ -366,7 +361,14 @@ export default function ChatPage() {
 
         setSessions(prev => [newSession, ...prev])
         setCurrentSession(newSession)
+        try {
+          if (typeof window !== 'undefined') {
+            ; (window as any).__currentSessionId = newSession.id
+            localStorage.setItem('currentSessionId', newSession.id)
+          }
+        } catch { }
         setMessages([])
+        setUIMessages([])
         // setUploadedFile(null)
         return newSession
       }
@@ -423,14 +425,29 @@ export default function ChatPage() {
       }))
 
       setMessages(loadedMessages)
+      const uiHistory = loadedMessages.map((m: any) => ({ id: m.id, role: m.role, parts: [{ type: 'text', text: m.content }] }))
+      setUIMessages(uiHistory as any)
       setCurrentSession({
         ...session,
         messages: loadedMessages
       })
+      try {
+        if (typeof window !== 'undefined') {
+          ; (window as any).__currentSessionId = session.id
+          localStorage.setItem('currentSessionId', session.id)
+        }
+      } catch { }
       setSessions(prev => prev.map(s => s.id === session.id ? { ...s, messages: loadedMessages } : s))
     } else {
       setCurrentSession(session)
+      try {
+        if (typeof window !== 'undefined') {
+          ; (window as any).__currentSessionId = session.id
+          localStorage.setItem('currentSessionId', session.id)
+        }
+      } catch { }
       setMessages([])
+      setUIMessages([])
     }
   }
 
@@ -439,6 +456,7 @@ export default function ChatPage() {
     if (currentSession?.id === sessionId) {
       setCurrentSession(null)
       setMessages([])
+      setUIMessages([])
     }
   }
 
@@ -470,7 +488,7 @@ export default function ChatPage() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-900"></div>
+        <Shimmer duration={1}>Loading workspace</Shimmer>
       </div>
     )
   }
@@ -478,7 +496,7 @@ export default function ChatPage() {
   return (
     <div className="flex h-full">
       {/* Enhanced Sidebar */}
-      <div className="hidden md:block">
+      <div className="hidden md:block flex-shrink-0">
         <EnhancedSidebar
           user={user}
           sessions={sessions}
@@ -487,6 +505,7 @@ export default function ChatPage() {
           onNewSession={createNewSession}
           onSessionDelete={handleSessionDelete}
           onSessionRename={handleSessionRename}
+          status={status}
         />
       </div>
 
@@ -512,6 +531,7 @@ export default function ChatPage() {
               onNewSession={createNewSession}
               onSessionDelete={handleSessionDelete}
               onSessionRename={handleSessionRename}
+              status={status}
             />
           </div>
         </div>
@@ -539,7 +559,20 @@ export default function ChatPage() {
               uiMessages.map((message) => {
                 const fileParts = message.parts.filter((p) => p.type === 'file') as any[];
                 const textParts = message.parts.filter((p) => p.type === 'text') as any[];
+                const textDeltaParts = message.parts.filter((p) => (p as any).type === 'text-delta') as any[];
                 const toolParts = message.parts.filter((p) => typeof (p as any).type === 'string' && (p as any).type.startsWith('tool-')) as ToolUIPart[];
+                const reasoningParts = message.parts.filter((p) => (p as any).type === 'reasoning') as any[];
+                const reasoningDeltaParts = message.parts.filter((p) => (p as any).type === 'reasoning-delta') as any[];
+
+                const streamedText = textDeltaParts.map((tp: any) => String(tp.textDelta ?? tp.text ?? '')).join('');
+                const finalText = textParts.map((p: any) => String(p.text || '')).join('');
+                const textToRender = finalText || streamedText;
+
+                const streamedReasoning = reasoningDeltaParts.map((rp: any) => String(rp.textDelta ?? rp.text ?? '')).join('');
+                const finalReasoning = reasoningParts.map((rp: any) => String(rp.text || '')).join('');
+                const reasoningToRender = finalReasoning || streamedReasoning;
+
+                const isMessageStreaming = message.role === 'assistant' && (textDeltaParts.length > 0 || reasoningDeltaParts.length > 0);
                 return (
                   <div key={message.id}>
                     {message.role === 'assistant' && message.parts.filter((p) => p.type === 'source-url').length > 0 && (
@@ -563,13 +596,13 @@ export default function ChatPage() {
                         </MessageAttachments>
                       )}
                       <AIMessageContent>
-                        {textParts.map((tp, i) => (
-                          <MessageResponse key={`${message.id}-text-${i}`}>{tp.text}</MessageResponse>
-                        ))}
                         {message.role === 'assistant' && toolParts.length > 0 && (
-                          <div className="mt-2">
+                          <div className="mt-2 w-full max-w-full min-w-0 overflow-x-auto break-words">
                             {toolParts.map((tp, i) => (
-                              <Tool key={`${message.id}-tool-${i}`} defaultOpen>
+                              <Tool
+                                key={`${message.id}-tool-${i}-${(message.role === 'assistant' && (textDeltaParts.length > 0 || reasoningDeltaParts.length > 0 || textParts.length > 0)) ? 'collapsed' : 'open'}`}
+                                defaultOpen={!(message.role === 'assistant' && (textDeltaParts.length > 0 || reasoningDeltaParts.length > 0 || textParts.length > 0))}
+                              >
                                 <ToolHeader type={tp.type} state={tp.state} />
                                 <ToolContent>
                                   <ToolInput input={tp.input} />
@@ -599,13 +632,24 @@ export default function ChatPage() {
                                       <div className="text-sm text-muted-foreground">Denied</div>
                                     </ConfirmationRejected>
                                   </Confirmation>
-                                  <ToolOutput output={tp.output} errorText={tp.errorText} />
+                                  <ToolOutput className="min-w-0" output={tp.output} errorText={tp.errorText} />
                                 </ToolContent>
                               </Tool>
                             ))}
                           </div>
                         )}
-                        {message.role === 'assistant' && (
+                        {message.role === 'assistant' && (reasoningParts.length > 0 || reasoningDeltaParts.length > 0) && (
+                          <Reasoning isStreaming={isMessageStreaming} defaultOpen>
+                            <ReasoningTrigger />
+                            <ReasoningContent>
+                              {reasoningToRender}
+                            </ReasoningContent>
+                          </Reasoning>
+                        )}
+                        {textToRender && (
+                          <MessageResponse>{textToRender}</MessageResponse>
+                        )}
+                        {message.role === 'assistant' && !isMessageStreaming && status !== 'streaming' && status !== 'submitted' && (
                           <div className="mt-1">
                             <MessageActions>
                               <MessageAction
@@ -629,7 +673,11 @@ export default function ChatPage() {
                 );
               })
             )}
-            {(status === 'streaming' || status === 'submitted') && <Loader />}
+            {(status === 'streaming' || status === 'submitted') && (
+              <div className="flex justify-center py-2">
+                <Shimmer duration={1}>Thinking...</Shimmer>
+              </div>
+            )}
           </ConversationContent>
           <ConversationScrollButton />
         </Conversation>
@@ -637,16 +685,25 @@ export default function ChatPage() {
         <div className="grid shrink-0 gap-2">
           <PromptInputProvider>
             <Suggestions className="px-4 pt-2">
-              {suggestions.map((s) => (
-                <Suggestion
-                  key={s}
-                  suggestion={s}
-                  onClick={() => {
-                    // Auto-send suggestion through the same pipeline as manual submit
-                    onSubmitAI({ text: s })
-                  }}
-                />
-              ))}
+              {loadingSuggestions ? (
+                <div className="flex gap-2">
+                  <Skeleton className="h-8 w-40 rounded-full" />
+                  <Skeleton className="h-8 w-32 rounded-full" />
+                  <Skeleton className="h-8 w-48 rounded-full" />
+                  <Skeleton className="h-8 w-36 rounded-full" />
+                </div>
+              ) : (
+                (dynamicSuggestions.length > 0 ? dynamicSuggestions : staticSuggestions).map((s) => (
+                  <Suggestion
+                    key={s}
+                    suggestion={s}
+                    disabled={status !== 'ready'}
+                    onClick={() => {
+                      onSubmitAI({ text: s })
+                    }}
+                  />
+                ))
+              )}
             </Suggestions>
             <PromptInput className="px-4 pb-4 w-full" globalDrop multiple onSubmit={onSubmitAI}>
               <PromptInputBody>

@@ -17,7 +17,7 @@ import {
   XCircleIcon,
 } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
-import { isValidElement } from "react";
+import { isValidElement, cloneElement } from "react";
 import { CodeBlock } from "./code-block";
 
 export type ToolProps = ComponentProps<typeof Collapsible>;
@@ -133,14 +133,27 @@ export const ToolOutput = ({
     return null;
   }
 
-  let Output = <div>{output as ReactNode}</div>;
+  let Output: ReactNode = <div>{output as ReactNode}</div>;
 
-  if (typeof output === "object" && !isValidElement(output)) {
+  if (isValidElement(output)) {
+    if ((output as any).type === CodeBlock) {
+      const existingClass = (output as any).props?.className ?? "";
+      Output = cloneElement(output as any, {
+        className: cn(existingClass, "max-h-80 overflow-auto"),
+      });
+    }
+  } else if (typeof output === "object" && output !== null) {
     Output = (
-      <CodeBlock code={JSON.stringify(output, null, 2)} language="json" />
+      <CodeBlock
+        code={JSON.stringify(output, null, 2)}
+        language="json"
+        className="max-h-80 overflow-auto"
+      />
     );
   } else if (typeof output === "string") {
-    Output = <CodeBlock code={output} language="json" />;
+    Output = (
+      <CodeBlock code={output} language="json" className="max-h-80 overflow-auto" />
+    );
   }
 
   return (

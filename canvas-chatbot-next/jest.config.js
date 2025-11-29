@@ -9,6 +9,7 @@ const customJestConfig = {
 	testEnvironment: 'jsdom',
 	moduleNameMapper: {
 		'^@/(.*)$': '<rootDir>/src/$1',
+		'^nanoid$': '<rootDir>/src/__mocks__/nanoid.ts',
 	},
 	collectCoverageFrom: [
 		'src/**/*.{js,jsx,ts,tsx}',
@@ -18,7 +19,7 @@ const customJestConfig = {
 	],
 	testPathIgnorePatterns: ['/node_modules/', '/.next/', '/cypress/', '/e2e/'],
 	transformIgnorePatterns: [
-		'/node_modules/',
+		'/node_modules/(?!(nanoid)/)',
 		'^.+\\.module\\.(css|sass|scss)$',
 	],
 	moduleDirectories: ['node_modules', 'src'],
