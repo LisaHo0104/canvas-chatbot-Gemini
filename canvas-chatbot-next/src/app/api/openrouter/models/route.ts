@@ -49,11 +49,14 @@ async function getModelsHandler(request: NextRequest) {
     const service = new OpenRouterService(ownerKey);
     const all = await service.getAvailableModels();
     let models = (all || []).filter((m: any) => typeof m?.id === 'string' && m.id.endsWith(':free'))
+    models = (models || []).filter((m: any) => Array.isArray(m?.supported_parameters) && m.supported_parameters.includes('tools'))
+    models = (models || []).filter((m: any) => Array.isArray(m?.supported_parameters) && m.supported_parameters.some((p: string) => /reasoning/i.test(p)))
     if (!models || models.length === 0) {
       models = (all || []).filter((m: any) => {
         const p = m?.pricing || {}
         return p?.prompt === 0 && p?.completion === 0
-      })
+      }).filter((m: any) => Array.isArray(m?.supported_parameters) && m.supported_parameters.includes('tools'))
+        .filter((m: any) => Array.isArray(m?.supported_parameters) && m.supported_parameters.some((p: string) => /reasoning/i.test(p)))
     }
 
     return NextResponse.json({ models });

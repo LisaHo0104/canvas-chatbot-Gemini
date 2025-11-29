@@ -1,8 +1,18 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Search, Plus, ChevronLeft, ChevronRight, Trash2, Edit3 } from 'lucide-react'
+import { Search, Plus, ChevronLeft, ChevronRight, MoreHorizontalIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogTrigger,
+  DialogClose,
+} from '@/components/ui/dialog'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { createBrowserClient } from '@supabase/ssr'
 import { Shimmer } from '@/components/ai-elements/shimmer'
 
@@ -61,6 +71,9 @@ export default function EnhancedSidebar({
   const [filteredSessions, setFilteredSessions] = useState<ChatSession[]>([])
   const [editingSession, setEditingSession] = useState<string | null>(null)
   const [editTitle, setEditTitle] = useState('')
+  const [actionDialogOpen, setActionDialogOpen] = useState(false)
+  const [actionSessionId, setActionSessionId] = useState<string | null>(null)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
 
   // Load sidebar state from localStorage
   useEffect(() => {
@@ -128,43 +141,44 @@ export default function EnhancedSidebar({
     return preview.length < lastMessage.content.length ? `${preview}...` : preview
   }
 
-  const handleSessionDelete = async (sessionId: string, e: React.MouseEvent) => {
-    e.stopPropagation()
-
-    if (confirm('Are you sure you want to delete this conversation?')) {
-      try {
-        if (supabase) {
-          await supabase
-            .from('chat_sessions')
-            .delete()
-            .eq('id', sessionId)
-        }
-
-        onSessionDelete?.(sessionId)
-      } catch (error) {
-        console.error('Error deleting session:', error)
-        alert('Failed to delete conversation')
+  const handleSessionDelete = async () => {
+    if (!actionSessionId) return
+    try {
+      if (supabase) {
+        await supabase
+          .from('chat_sessions')
+          .delete()
+          .eq('id', actionSessionId)
       }
+
+      onSessionDelete?.(actionSessionId)
+      setActionDialogOpen(false)
+      setActionSessionId(null)
+    } catch (error) {
+      console.error('Error deleting session:', error)
+      alert('Failed to delete conversation')
     }
   }
 
-  const handleSessionRename = (sessionId: string, e: React.MouseEvent) => {
+  const openActionDialog = (sessionId: string, e: React.MouseEvent) => {
     e.stopPropagation()
     const session = sessions.find(s => s.id === sessionId)
     if (session) {
-      setEditingSession(sessionId)
+      setActionSessionId(sessionId)
       setEditTitle(session.title)
+      setActionDialogOpen(true)
     }
   }
 
   const saveSessionRename = async () => {
-    if (editingSession && editTitle.trim()) {
+    const targetId = actionSessionId ?? editingSession
+    if (targetId && editTitle.trim()) {
       try {
         if (supabase) {
           const { error } = await supabase
             .from('chat_sessions')
             .update({ title: editTitle.trim() })
-            .eq('id', editingSession)
+            .eq('id', targetId)
           if (error) {
             console.error('Error renaming session:', error)
             alert('Failed to rename conversation')
@@ -172,9 +186,11 @@ export default function EnhancedSidebar({
           }
         }
 
-        onSessionRename?.(editingSession, editTitle.trim())
+        onSessionRename?.(targetId, editTitle.trim())
         setEditingSession(null)
         setEditTitle('')
+        setActionDialogOpen(false)
+        setActionSessionId(null)
       } catch (error) {
         console.error('Error renaming session:', error)
         alert('Failed to rename conversation')
@@ -255,71 +271,108 @@ export default function EnhancedSidebar({
               )}
             </div>
           ) : (
-            <div className="divide-y divide-slate-100">
-              {filteredSessions.map((session) => (
-                <div
-                  key={session.id}
-                  className={`group relative p-4 hover:bg-slate-50 transition-colors cursor-pointer ${currentSession?.id === session.id ? 'bg-slate-100 border-r-2 border-slate-900' : ''
-                    }`}
-                  onClick={() => onSessionSelect(session)}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1 min-w-0">
-                      {editingSession === session.id ? (
-                        <div className="mb-2">
-                          <input
-                            type="text"
-                            value={editTitle}
-                            onChange={(e) => setEditTitle(e.target.value)}
-                            onKeyPress={(e) => {
-                              if (e.key === 'Enter') saveSessionRename()
-                              else if (e.key === 'Escape') cancelEdit()
-                            }}
-                            onBlur={saveSessionRename}
-                            className="w-full px-2 py-1 text-sm border border-slate-300 rounded focus:ring-2 focus:ring-slate-500 focus:border-slate-500 outline-none"
-                            autoFocus
-                          />
-                        </div>
-                      ) : (
-                        (
-                          (currentSession?.id === session.id && (status === 'streaming' || status === 'submitted')) ? (
-                            <Shimmer as="h3" duration={1}>{session.title}</Shimmer>
-                          ) : (
-                            <h3 className="font-medium text-slate-900 truncate text-sm">
-                              {session.title}
-                            </h3>
+            <>
+              <div className="divide-y divide-slate-100">
+                {filteredSessions.map((session) => (
+                  <div
+                    key={session.id}
+                    className={`group relative p-4 hover:bg-slate-50 transition-colors cursor-pointer ${currentSession?.id === session.id ? 'bg-slate-100' : ''
+                      }`}
+                    onClick={() => onSessionSelect(session)}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1 min-w-0">
+                        {editingSession === session.id ? (
+                          <div className="mb-2">
+                            <input
+                              type="text"
+                              value={editTitle}
+                              onChange={(e) => setEditTitle(e.target.value)}
+                              onKeyPress={(e) => {
+                                if (e.key === 'Enter') saveSessionRename()
+                                else if (e.key === 'Escape') cancelEdit()
+                              }}
+                              onBlur={saveSessionRename}
+                              className="w-full px-2 py-1 text-sm border border-slate-300 rounded focus:ring-2 focus:ring-slate-500 focus:border-slate-500 outline-none"
+                              autoFocus
+                            />
+                          </div>
+                        ) : (
+                          (
+                            (currentSession?.id === session.id && (status === 'streaming' || status === 'submitted')) ? (
+                              <Shimmer as="h3" duration={1}>{session.title}</Shimmer>
+                            ) : (
+                              <h3 className="font-medium text-slate-900 truncate text-sm">
+                                {session.title}
+                              </h3>
+                            )
                           )
-                        )
-                      )}
+                        )}
 
-                      <p className="text-xs text-slate-500 mt-1 line-clamp-2">
-                        {getLastMessagePreview(session)}
-                      </p>
+                        <p className="text-xs text-slate-500 mt-1 line-clamp-2">
+                          {getLastMessagePreview(session)}
+                        </p>
 
-                      <div className="flex items-center gap-2 mt-2">
-                        <span className="text-xs text-slate-400">
-                          {formatDate(session.lastMessage)}
-                        </span>
-                        <span className="text-xs text-slate-400">•</span>
-                        <span className="text-xs text-slate-400">
-                          {formatTime(session.lastMessage)}
-                        </span>
+                        <div className="flex items-center gap-2 mt-2">
+                          <span className="text-xs text-slate-400">
+                            {formatDate(session.lastMessage)}
+                          </span>
+                          <span className="text-xs text-slate-400">•</span>
+                          <span className="text-xs text-slate-400">
+                            {formatTime(session.lastMessage)}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity ml-2">
+                        <DropdownMenu modal={false}>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                openActionDialog(session.id, e)
+                              }}
+                              aria-label="Open menu"
+                              variant="ghost"
+                              size="icon"
+                              className="text-muted-foreground"
+                            >
+                              <MoreHorizontalIcon className="w-3 h-3" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent className="w-40" align="end" onClick={(e) => e.stopPropagation()}>
+                            <DropdownMenuLabel>Conversation Actions</DropdownMenuLabel>
+                            <DropdownMenuGroup>
+                              <DropdownMenuItem onSelect={() => { setEditingSession(session.id); setEditTitle(session.title) }}>
+                                Rename
+                              </DropdownMenuItem>
+                              <DropdownMenuItem variant="destructive" onSelect={() => setShowDeleteDialog(true)}>
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuGroup>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+
                       </div>
                     </div>
-
-                    {/* Action Buttons - Show on hover */}
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity ml-2">
-                      <Button onClick={(e) => handleSessionRename(session.id, e)} aria-label="Rename conversation" variant="ghost" size="icon" className="text-muted-foreground">
-                        <Edit3 className="w-3 h-3" />
-                      </Button>
-                      <Button onClick={(e) => handleSessionDelete(session.id, e)} aria-label="Delete conversation" variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive">
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
-                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+              <Dialog open={showDeleteDialog} onOpenChange={(open) => { setShowDeleteDialog(open) }}>
+                <DialogContent onInteractOutside={(e) => e.preventDefault()} onPointerDownOutside={(e) => e.preventDefault()}>
+                  <DialogHeader>
+                    <DialogTitle>Delete conversation</DialogTitle>
+                    <DialogDescription>This action cannot be undone.</DialogDescription>
+                  </DialogHeader>
+                  <div className="flex gap-2">
+                    <DialogClose asChild>
+                      <Button variant="outline">Cancel</Button>
+                    </DialogClose>
+                    <Button onClick={handleSessionDelete} variant="destructive">Delete</Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </>
           )}
         </div>
 

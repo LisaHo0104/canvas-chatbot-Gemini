@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createBrowserClient } from '@supabase/ssr'
-import { BookOpen, X, AlarmClock, CopyIcon, RefreshCcwIcon, GlobeIcon, CheckIcon } from 'lucide-react'
+import { X, AlarmClock, CopyIcon, RefreshCcwIcon, GlobeIcon, CheckIcon } from 'lucide-react'
 import { useChat } from '@ai-sdk/react'
 import { lastAssistantMessageIsCompleteWithApprovalResponses } from 'ai'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -94,6 +94,7 @@ export default function ChatPage() {
   const [dynamicSuggestions, setDynamicSuggestions] = useState<string[]>([])
   const [loadingSuggestions, setLoadingSuggestions] = useState(false)
   const lastAssistantIdRef = useRef<string | null>(null)
+  const lastUpdatedAssistantIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     const lastAssistant = [...uiMessages].reverse().find((m) => m.role === 'assistant')
@@ -129,6 +130,84 @@ export default function ChatPage() {
         }
       })()
   }, [uiMessages, status, selectedModel, activeProvider])
+
+  useEffect(() => {
+    const lastAssistant = [...uiMessages].reverse().find((m) => m.role === 'assistant')
+    const isIdle = status !== 'streaming' && status !== 'submitted'
+    if (!lastAssistant || !isIdle) return
+    if (lastUpdatedAssistantIdRef.current === lastAssistant.id) return
+    const finalAssistantText = lastAssistant.parts
+      .filter((p: any) => p.type === 'text')
+      .map((p: any) => String(p.text || ''))
+      .join('')
+    if (!String(finalAssistantText || '').trim()) return
+
+    const lastUser = [...uiMessages].reverse().find((m) => m.role === 'user')
+    const lastUserText = lastUser
+      ? lastUser.parts
+        .filter((p: any) => p.type === 'text')
+        .map((p: any) => String(p.text || ''))
+        .join('')
+      : ''
+
+    const now = new Date()
+    const mapUIMessagesToSessionMessages = (): Message[] => {
+      return uiMessages
+        .map((m: any) => {
+          const text = (Array.isArray(m.parts) ? m.parts : [])
+            .filter((p: any) => p.type === 'text')
+            .map((p: any) => String(p.text || ''))
+            .join('')
+          if (!String(text || '').trim()) return null as any
+          return {
+            id: String(m.id || `${Date.now()}`),
+            role: m.role,
+            content: text,
+            timestamp: now,
+          } as Message
+        })
+        .filter(Boolean) as Message[]
+    }
+
+    const mappedMessages = mapUIMessagesToSessionMessages()
+
+    setSessions((prev) => {
+      const updated = prev.map((s) => {
+        if (!currentSession || s.id !== currentSession.id) return s
+        const needsTitle = !s.title || s.title === 'New Chat'
+        const newTitleBase = String(lastUserText || '').substring(0, 50)
+        const newTitle = needsTitle
+          ? newTitleBase + (String(lastUserText || '').length > 50 ? '...' : '')
+          : s.title
+        return {
+          ...s,
+          title: newTitle,
+          messages: mappedMessages,
+          lastMessage: now,
+          updated_at: now,
+        }
+      })
+      return updated.sort((a, b) => b.lastMessage.getTime() - a.lastMessage.getTime())
+    })
+
+    setCurrentSession((prev) => {
+      if (!prev) return prev
+      const needsTitle = !prev.title || prev.title === 'New Chat'
+      const newTitleBase = String(lastUserText || '').substring(0, 50)
+      const newTitle = needsTitle
+        ? newTitleBase + (String(lastUserText || '').length > 50 ? '...' : '')
+        : prev.title
+      return {
+        ...prev,
+        title: newTitle,
+        messages: mappedMessages,
+        lastMessage: now,
+        updated_at: now,
+      }
+    })
+
+    lastUpdatedAssistantIdRef.current = lastAssistant.id
+  }, [uiMessages, status, currentSession])
 
   const getToolPartId = (tp: ToolUIPart): string | undefined => {
     const anyTp = tp as any
@@ -494,7 +573,7 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full overflow-x-hidden">
       {/* Enhanced Sidebar */}
       <div className="hidden md:block flex-shrink-0">
         <EnhancedSidebar
@@ -538,9 +617,9 @@ export default function ChatPage() {
       )}
 
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col min-h-0">
-        <Conversation className="h-full">
-          <ConversationContent>
+      <div className="flex-1 flex flex-col min-h-0 overflow-x-hidden">
+        <Conversation className="h-full relative">
+          <ConversationContent className="chat-content relative">
             {status === 'error' && (
               <Alert className="max-w-3xl mx-auto" variant="destructive">
                 <AlertTitle>Message failed</AlertTitle>
@@ -548,12 +627,16 @@ export default function ChatPage() {
               </Alert>
             )}
             {uiMessages.length === 0 ? (
-              <div className="max-w-3xl mx-auto text-center py-12">
-                <div className="w-16 h-16 bg-linear-to-br from-slate-600 to-slate-800 rounded-lg flex items-center justify-center mx-auto mb-4">
-                  <BookOpen className="w-8 h-8 text-white" />
+              <div className="max-w-3xl mx-auto text-center py-16">
+                <div className="mx-auto w-full max-w-md">
+                  <img
+                    src="/illustration_chat.png"
+                    alt="Chat assistant illustration"
+                    className="w-full h-auto"
+                  />
                 </div>
-                <h2 className="text-2xl font-semibold text-slate-900 mb-2">Welcome to Canvas AI Assistant</h2>
-                <p className="text-slate-600 mb-8">I can help you with your courses, assignments, modules, and answer questions about your learning materials.</p>
+                <h2 className="text-2xl font-semibold text-slate-900 mb-2">Start a conversation</h2>
+                <p className="text-slate-600 mb-8">Ask about your courses, assignments, modules, or Canvas announcements. I’ll guide you.</p>
               </div>
             ) : (
               uiMessages.map((message) => {
@@ -595,60 +678,112 @@ export default function ChatPage() {
                           ))}
                         </MessageAttachments>
                       )}
-                      <AIMessageContent>
-                        {message.role === 'assistant' && toolParts.length > 0 && (
-                          <div className="mt-2 w-full max-w-full min-w-0 overflow-x-auto break-words">
-                            {toolParts.map((tp, i) => (
-                              <Tool
-                                key={`${message.id}-tool-${i}-${(message.role === 'assistant' && (textDeltaParts.length > 0 || reasoningDeltaParts.length > 0 || textParts.length > 0)) ? 'collapsed' : 'open'}`}
-                                defaultOpen={!(message.role === 'assistant' && (textDeltaParts.length > 0 || reasoningDeltaParts.length > 0 || textParts.length > 0))}
-                              >
-                                <ToolHeader type={tp.type} state={tp.state} />
-                                <ToolContent>
-                                  <ToolInput input={tp.input} />
-                                  <Confirmation approval={(tp as any).approval} state={tp.state}>
-                                    <ConfirmationTitle>
-                                      Execute {tp.type.split('-').slice(1).join('-')}?
-                                    </ConfirmationTitle>
-                                    <ConfirmationRequest>
-                                      <ConfirmationActions>
-                                        <ConfirmationAction
-                                          onClick={() => onApproveTool(tp)}
-                                        >
-                                          Approve
-                                        </ConfirmationAction>
-                                        <ConfirmationAction
-                                          variant="outline"
-                                          onClick={() => onDenyTool(tp)}
-                                        >
-                                          Deny
-                                        </ConfirmationAction>
-                                      </ConfirmationActions>
-                                    </ConfirmationRequest>
-                                    <ConfirmationAccepted>
-                                      <div className="text-sm text-muted-foreground">Approved</div>
-                                    </ConfirmationAccepted>
-                                    <ConfirmationRejected>
-                                      <div className="text-sm text-muted-foreground">Denied</div>
-                                    </ConfirmationRejected>
-                                  </Confirmation>
-                                  <ToolOutput className="min-w-0" output={tp.output} errorText={tp.errorText} />
-                                </ToolContent>
-                              </Tool>
-                            ))}
-                          </div>
-                        )}
-                        {message.role === 'assistant' && (reasoningParts.length > 0 || reasoningDeltaParts.length > 0) && (
-                          <Reasoning isStreaming={isMessageStreaming} defaultOpen>
-                            <ReasoningTrigger />
-                            <ReasoningContent>
-                              {reasoningToRender}
-                            </ReasoningContent>
-                          </Reasoning>
-                        )}
-                        {textToRender && (
-                          <MessageResponse>{textToRender}</MessageResponse>
-                        )}
+                      <AIMessageContent className="w-full max-w-full min-w-0">
+                        {(() => {
+                          type Segment =
+                            | { kind: 'text'; content: string }
+                            | { kind: 'reasoning'; content: string; streaming: boolean }
+                            | { kind: 'tool'; part: ToolUIPart };
+
+                          const segments: Segment[] = []
+                          let current: Segment | null = null
+
+                          const finalizeCurrent = () => {
+                            if (current) {
+                              segments.push(current)
+                              current = null
+                            }
+                          }
+
+                          const partsInOrder = message.parts as any[]
+                          for (let i = 0; i < partsInOrder.length; i++) {
+                            const part: any = partsInOrder[i]
+                            const type: string = String(part.type || '')
+
+                            if (type.startsWith('tool-') && message.role === 'assistant') {
+                              finalizeCurrent()
+                              const tp = part as unknown as ToolUIPart
+                              segments.push({ kind: 'tool', part: tp })
+                              continue
+                            }
+
+                            if (type === 'text' || type === 'text-delta') {
+                              if (!current || current.kind !== 'text') {
+                                finalizeCurrent()
+                                current = { kind: 'text', content: '' }
+                              }
+                              const chunk = String(part.textDelta ?? part.text ?? '')
+                              current.content = (current.content || '') + chunk
+                              continue
+                            }
+
+                            if (type === 'reasoning' || type === 'reasoning-delta') {
+                              if (!current || current.kind !== 'reasoning') {
+                                finalizeCurrent()
+                                current = { kind: 'reasoning', content: '', streaming: false }
+                              }
+                              const chunk = String(part.textDelta ?? part.text ?? '')
+                              current.content = (current.content || '') + chunk
+                              if (type === 'reasoning-delta') {
+                                ; (current as any).streaming = true
+                              } else {
+                                ; (current as any).streaming = false
+                              }
+                              continue
+                            }
+                          }
+                          finalizeCurrent()
+
+                          return segments.map((seg, idx) => {
+                            if (seg.kind === 'tool') {
+                              const tp = seg.part
+                              return (
+                                <div className="mt-2 w-full max-w-full min-w-0 overflow-x-auto break-words" key={`${message.id}-tool-${idx}`}>
+                                  <Tool
+                                    key={`${message.id}-tool-${idx}-${(message.role === 'assistant' && (textDeltaParts.length > 0 || reasoningDeltaParts.length > 0 || textParts.length > 0)) ? 'collapsed' : 'open'}`}
+                                    defaultOpen={!(message.role === 'assistant' && (textDeltaParts.length > 0 || reasoningDeltaParts.length > 0 || textParts.length > 0))}
+                                  >
+                                    <ToolHeader type={tp.type} state={tp.state} />
+                                    <ToolContent>
+                                      <ToolInput input={tp.input} />
+                                      <Confirmation approval={(tp as any).approval} state={tp.state}>
+                                        <ConfirmationTitle>
+                                          Execute {tp.type.split('-').slice(1).join('-')}?
+                                        </ConfirmationTitle>
+                                        <ConfirmationRequest>
+                                          <ConfirmationActions>
+                                            <ConfirmationAction onClick={() => onApproveTool(tp)}>Approve</ConfirmationAction>
+                                            <ConfirmationAction variant="outline" onClick={() => onDenyTool(tp)}>Deny</ConfirmationAction>
+                                          </ConfirmationActions>
+                                        </ConfirmationRequest>
+                                        <ConfirmationAccepted>
+                                          <div className="text-sm text-muted-foreground">Approved</div>
+                                        </ConfirmationAccepted>
+                                        <ConfirmationRejected>
+                                          <div className="text-sm text-muted-foreground">Denied</div>
+                                        </ConfirmationRejected>
+                                      </Confirmation>
+                                      <ToolOutput className="min-w-0" output={tp.output} errorText={tp.errorText} />
+                                    </ToolContent>
+                                  </Tool>
+                                </div>
+                              )
+                            }
+                            if (seg.kind === 'reasoning') {
+                              return (
+                                <Reasoning isStreaming={seg.streaming && isMessageStreaming} defaultOpen key={`${message.id}-reasoning-${idx}`}>
+                                  <ReasoningTrigger />
+                                  <ReasoningContent>
+                                    {seg.content}
+                                  </ReasoningContent>
+                                </Reasoning>
+                              )
+                            }
+                            return (
+                              <MessageResponse key={`${message.id}-text-${idx}`}>{seg.content}</MessageResponse>
+                            )
+                          })
+                        })()}
                         {message.role === 'assistant' && !isMessageStreaming && status !== 'streaming' && status !== 'submitted' && (
                           <div className="mt-1">
                             <MessageActions>
@@ -674,13 +809,20 @@ export default function ChatPage() {
               })
             )}
             {(status === 'streaming' || status === 'submitted') && (
-              <div className="flex justify-center py-2">
+              <div className="flex flex-col items-start gap-2 p-2 rounded-md">
+                <img
+                  src="/illustration_thinking.png"
+                  alt="Thinking"
+                  className="w-24 h-auto rounded"
+                />
                 <Shimmer duration={1}>Thinking...</Shimmer>
               </div>
             )}
           </ConversationContent>
           <ConversationScrollButton />
         </Conversation>
+
+
 
         <div className="grid shrink-0 gap-2">
           <PromptInputProvider>

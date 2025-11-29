@@ -14,15 +14,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Ensure URL ends with /api/v1
-    let finalCanvasUrl = canvas_url.trim()
-    if (!finalCanvasUrl.endsWith('/api/v1')) {
-      if (finalCanvasUrl.endsWith('/')) {
-        finalCanvasUrl = finalCanvasUrl + 'api/v1'
-      } else {
-        finalCanvasUrl = finalCanvasUrl + '/api/v1'
-      }
-    }
+    let finalCanvasUrl = String(canvas_url || '').trim()
+    finalCanvasUrl = finalCanvasUrl.replace(/\/+$/, '')
+    finalCanvasUrl = finalCanvasUrl.replace(/\/api\/v1\/?$/, '')
+    finalCanvasUrl = `${finalCanvasUrl}/api/v1`
 
     // Verify Canvas API credentials
     const canvasService = new CanvasAPIService(canvas_token, finalCanvasUrl)

@@ -10,17 +10,7 @@ import { NavigationMenu, NavigationMenuList, NavigationMenuItem, NavigationMenuL
 import { cn } from '@/lib/utils'
 import { createBrowserClient } from '@supabase/ssr'
 
-const NavItem = ({ href, label }: { href: string; label: string }) => {
-  const pathname = usePathname()
-  const active = pathname === href || (href !== '/' && pathname.startsWith(href))
-  return (
-    <Link href={href} aria-current={active ? 'page' : undefined}>
-      <Button variant={active ? 'default' : 'ghost'} size="sm">
-        {label}
-      </Button>
-    </Link>
-  )
-}
+
 
 export default function MainNavBar() {
   const pathname = usePathname()
@@ -34,20 +24,20 @@ export default function MainNavBar() {
       if (supabaseUrl && supabaseAnonKey) {
         supabase = createBrowserClient(supabaseUrl, supabaseAnonKey)
       }
-    } catch {}
+    } catch { }
     ; (async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession()
         const user = session?.user || null
         setAuthUser(user)
-      } catch {}
+      } catch { }
       try {
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: string, session: any) => {
           const user = session?.user || null
           setAuthUser(user)
         })
-        unsubs.push(() => { try { subscription.unsubscribe() } catch {} })
-      } catch {}
+        unsubs.push(() => { try { subscription.unsubscribe() } catch { } })
+      } catch { }
       try {
         if (typeof window !== 'undefined') {
           const handler = async () => {
@@ -55,19 +45,22 @@ export default function MainNavBar() {
               const { data: { session } } = await supabase.auth.getSession()
               const user = session?.user || null
               setAuthUser(user)
-              } catch {}
+            } catch { }
           }
           window.addEventListener('storage', handler)
-          unsubs.push(() => { try { window.removeEventListener('storage', handler) } catch {} })
+          unsubs.push(() => { try { window.removeEventListener('storage', handler) } catch { } })
         }
-      } catch {}
+      } catch { }
     })()
-    return () => { unsubs.forEach((fn) => { try { fn() } catch {} }) }
+    return () => { unsubs.forEach((fn) => { try { fn() } catch { } }) }
   }, [])
   return (
     <header className="sticky top-0 z-40 bg-background border-b border-border" role="navigation" aria-label="Main">
-      <div className="max-w-7xl mx-auto px-4 h-12 flex items-center justify-between">
+      <div className="max-w-7xl px-4 h-12 flex items-center justify-start">
         <div className="flex items-center gap-2">
+          <Link href="/" aria-label="Home" className="flex items-center">
+            <img src="/logo.png" alt="Logo" className="h-12 w-auto" />
+          </Link>
           {authUser ? (
             <>
               <div className="hidden sm:block">
@@ -77,8 +70,7 @@ export default function MainNavBar() {
                       <NavigationMenuLink
                         asChild
                         className={cn(
-                          pathname === '/chat' ? 'bg-accent text-accent-foreground' : '',
-                          'px-3 py-2'
+                          pathname === '/chat' ? 'bg-accent text-accent-foreground' : ''
                         )}
                         aria-current={pathname === '/chat' ? 'page' : undefined}
                       >
@@ -89,8 +81,7 @@ export default function MainNavBar() {
                       <NavigationMenuLink
                         asChild
                         className={cn(
-                          pathname.startsWith('/settings') ? 'bg-accent text-accent-foreground' : '',
-                          'px-3 py-2'
+                          pathname.startsWith('/settings') ? 'bg-accent text-accent-foreground' : ''
                         )}
                         aria-current={pathname.startsWith('/settings') ? 'page' : undefined}
                       >
@@ -101,8 +92,7 @@ export default function MainNavBar() {
                       <NavigationMenuLink
                         asChild
                         className={cn(
-                          pathname.startsWith('/help') ? 'bg-accent text-accent-foreground' : '',
-                          'px-3 py-2'
+                          pathname.startsWith('/help') ? 'bg-accent text-accent-foreground' : ''
                         )}
                         aria-current={pathname.startsWith('/help') ? 'page' : undefined}
                       >

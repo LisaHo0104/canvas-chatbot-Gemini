@@ -72,7 +72,10 @@ export class CanvasAPIService {
 
   constructor(apiKey: string, canvasURL: string, options?: { forceStringIds?: boolean }) {
     this.apiKey = apiKey
-    this.baseURL = canvasURL.endsWith('/api/v1') ? canvasURL : `${canvasURL}/api/v1`
+    let url = String(canvasURL || '').trim()
+    url = url.replace(/\/+$/, '')
+    url = url.replace(/\/api\/v1\/?$/, '')
+    this.baseURL = `${url}/api/v1`
     this.forceStringIds = options?.forceStringIds === true
   }
 
@@ -180,8 +183,16 @@ export class CanvasAPIService {
       })
 
       return response.data as CanvasAssignment[]
-    } catch (error) {
-      throw new Error('Failed to fetch assignments')
+    } catch (error: any) {
+      const status = error?.response?.status
+      const data = error?.response?.data
+      const message =
+        (typeof data === 'string' ? data : data?.errors?.[0]?.message) ||
+        error?.message ||
+        'Unknown error'
+      throw new Error(
+        `Failed to fetch assignments${status ? ` (${status})` : ''}: ${message}`,
+      )
     }
   }
 

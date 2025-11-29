@@ -197,7 +197,7 @@ async function chatHandler(request: NextRequest) {
 			messages,
 			tools,
 			toolChoice: 'auto',
-			stopWhen: stepCountIs(3),
+			stopWhen: stepCountIs(20),
 			onFinish: async ({ text }: any) => {
 				try {
 					const userText = String(effectiveQuery || '');
