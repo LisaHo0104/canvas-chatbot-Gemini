@@ -40,7 +40,7 @@ export default function MainNavBar() {
         setAuthUser(user)
       } catch {}
       try {
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: string, session: any) => {
           const user = session?.user || null
           setAuthUser(user)
         })

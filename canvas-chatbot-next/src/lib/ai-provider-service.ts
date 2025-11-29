@@ -241,26 +241,26 @@ export class AIProviderService {
 				: modelName;
 		console.info('[AI] provider', providerName, 'model', usedModelName);
 
-		let response: AIResponse;
+		let response: AIResponse | null = null;
 		let status: 'success' | 'error' | 'timeout' = 'success';
 		let errorMessage: string | undefined;
-		let responseTimeMs: number;
+		let responseTimeMs: number = 0;
 
 		try {
-            if (providerName === 'openrouter') {
-                const ownerKey =
-                    process.env.OPENROUTER_API_KEY_OWNER ||
-                    process.env.OPENROUTER_API_KEY ||
-                    apiKey;
-                const service = new OpenRouterService(ownerKey, usedModelName);
-                response = await service.generateResponse(
-                    query,
-                    canvasContext,
-                    history,
-                );
-            } else {
-                throw new Error(`Unsupported provider: ${providerName}`);
-            }
+			if (providerName === 'openrouter') {
+				const ownerKey =
+					process.env.OPENROUTER_API_KEY_OWNER ||
+					process.env.OPENROUTER_API_KEY ||
+					apiKey;
+				const service = new OpenRouterService(ownerKey, usedModelName);
+				response = await service.generateResponse(
+					query,
+					canvasContext,
+					history,
+				);
+			} else {
+				throw new Error(`Unsupported provider: ${providerName}`);
+			}
 
 			responseTimeMs = Date.now() - startTime;
 		} catch (error) {
@@ -299,7 +299,7 @@ export class AIProviderService {
 			}
 		}
 
-		return response;
+		return response as AIResponse;
 	}
 
 	async testProviderConnection(
@@ -314,20 +314,20 @@ export class AIProviderService {
 		try {
 			const apiKey = decrypt(provider.api_key_encrypted);
 
-            if (provider.provider_name === 'openrouter') {
-                const ownerKey =
-                    process.env.OPENROUTER_API_KEY_OWNER ||
-                    process.env.OPENROUTER_API_KEY ||
-                    apiKey;
-                const service = new OpenRouterService(ownerKey, provider.model_name);
-                const result = await service.testConnection();
-                return result;
-            } else {
-                return {
-                    success: false,
-                    error: `Unsupported provider: ${provider.provider_name}`,
-                };
-            }
+			if (provider.provider_name === 'openrouter') {
+				const ownerKey =
+					process.env.OPENROUTER_API_KEY_OWNER ||
+					process.env.OPENROUTER_API_KEY ||
+					apiKey;
+				const service = new OpenRouterService(ownerKey, provider.model_name);
+				const result = await service.testConnection();
+				return result;
+			} else {
+				return {
+					success: false,
+					error: `Unsupported provider: ${provider.provider_name}`,
+				};
+			}
 		} catch (error) {
 			console.error(
 				`Provider connection test failed for ${provider.provider_name}:`,
@@ -374,19 +374,22 @@ export class AIProviderService {
 			const stats = {
 				totalRequests: data?.length || 0,
 				successfulRequests:
-					data?.filter((u) => u.status === 'success').length || 0,
-				errorRequests: data?.filter((u) => u.status === 'error').length || 0,
-				totalTokens: data?.reduce((sum, u) => sum + u.total_tokens, 0) || 0,
+					data?.filter((u: any) => u.status === 'success').length || 0,
+				errorRequests:
+					data?.filter((u: any) => u.status === 'error').length || 0,
+				totalTokens:
+					data?.reduce((sum: number, u: any) => sum + u.total_tokens, 0) || 0,
 				totalCost:
 					data?.reduce(
-						(sum, u) => sum + parseFloat(u.cost_usd.toString()),
+						(sum: number, u: any) => sum + parseFloat(u.cost_usd.toString()),
 						0,
 					) || 0,
 				averageResponseTime:
 					data
-						?.filter((u) => u.response_time_ms)
+						?.filter((u: any) => u.response_time_ms)
 						.reduce(
-							(sum, u, _, arr) => sum + (u.response_time_ms || 0) / arr.length,
+							(sum: number, u: any, _: any, arr: any[]) =>
+								sum + (u.response_time_ms || 0) / arr.length,
 							0,
 						) || 0,
 				usageByDay: this.aggregateUsageByDay(data || []),
@@ -496,23 +499,20 @@ export class AIProviderService {
 		model: string,
 		tokens: number,
 	): number {
-		// Simplified cost calculation - these are rough estimates
-		const costPer1KTokens = {
+		// Simplified cost calculation - rough estimates
+		const costPer1KTokens: Record<string, Record<string, number>> = {
 			gemini: {
-				'gemini-2.0-flash': 0.0015, // $0.0015 per 1K tokens (input)
+				'gemini-2.0-flash': 0.0015,
 				'gemini-pro': 0.0025,
 			},
 			openrouter: {
-				'anthropic/claude-3.5-sonnet': 0.003, // $0.003 per 1K tokens
+				'anthropic/claude-3.5-sonnet': 0.003,
 				'openai/gpt-4': 0.03,
 				'openai/gpt-3.5-turbo': 0.0005,
 			},
 		};
 
-		const modelCost =
-			costPer1KTokens[provider as keyof typeof costPer1KTokens]?.[
-				model as keyof typeof costPer1KTokens.gemini
-			] || 0.001;
+		const modelCost = costPer1KTokens[provider]?.[model] ?? 0.001;
 		return (tokens / 1000) * modelCost;
 	}
 

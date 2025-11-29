@@ -19,6 +19,7 @@
     "hooks": "@/hooks"
   },
   "registries": {
-		"@supabase": "https://supabase.com/ui/r/{name}.json"
-	}
+    "@supabase": "https://supabase.com/ui/r/{name}.json",
+    "@ai-elements": "https://registry.ai-sdk.dev/{name}.json"
+  }
 }

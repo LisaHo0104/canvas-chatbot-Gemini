@@ -109,6 +109,7 @@ canvas-chatbot-next/
 │   │   ├── ai-assistant.ts    # LangChain integration
 │   │   ├── canvas-api.ts      # Canvas API service
 │   │   ├── canvas-context.ts  # Context building
+│   │   ├── canvas-tools.ts    # AI SDK tool definitions for Canvas
 │   │   ├── crypto.ts          # Encryption utilities
 │   │   ├── rate-limit.ts      # Rate limiting
 │   │   └── supabase.ts        # Database client
