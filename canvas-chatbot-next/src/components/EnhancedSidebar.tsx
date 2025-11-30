@@ -152,7 +152,7 @@ export default function EnhancedSidebar({
       }
 
       onSessionDelete?.(actionSessionId)
-      setActionDialogOpen(false)
+      setShowDeleteDialog(false)
       setActionSessionId(null)
     } catch (error) {
       console.error('Error deleting session:', error)

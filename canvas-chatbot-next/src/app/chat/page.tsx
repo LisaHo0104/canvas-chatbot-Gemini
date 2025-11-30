@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createBrowserClient } from '@supabase/ssr'
-import { X, AlarmClock, CopyIcon, RefreshCcwIcon, GlobeIcon, CheckIcon } from 'lucide-react'
+import { X, CopyIcon, RefreshCcwIcon, GlobeIcon, CheckIcon, SparklesIcon } from 'lucide-react'
 import { useChat } from '@ai-sdk/react'
 import { lastAssistantMessageIsCompleteWithApprovalResponses } from 'ai'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -22,6 +22,7 @@ import EnhancedSidebar from '@/components/EnhancedSidebar'
 import { AIProvider } from '@/lib/ai-provider-service'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 
 let supabase: any = null
 
@@ -95,11 +96,14 @@ export default function ChatPage() {
   const [loadingSuggestions, setLoadingSuggestions] = useState(false)
   const lastAssistantIdRef = useRef<string | null>(null)
   const lastUpdatedAssistantIdRef = useRef<string | null>(null)
+  const suppressAutoSuggestionsRef = useRef<boolean>(false)
+  const [suggestionsVisible, setSuggestionsVisible] = useState<boolean>(true)
 
   useEffect(() => {
     const lastAssistant = [...uiMessages].reverse().find((m) => m.role === 'assistant')
     const isIdle = status !== 'streaming' && status !== 'submitted'
     if (!lastAssistant || !isIdle) return
+    if (suppressAutoSuggestionsRef.current) { suppressAutoSuggestionsRef.current = false; return }
     if (lastAssistantIdRef.current === lastAssistant.id) return
     const hasFinalText = lastAssistant.parts.some((p: any) => p.type === 'text' && String((p as any).text || '').trim().length > 0)
     if (!hasFinalText) return
@@ -130,6 +134,34 @@ export default function ChatPage() {
         }
       })()
   }, [uiMessages, status, selectedModel, activeProvider])
+
+
+  const regenerateAllSuggestions = async () => {
+    setLoadingSuggestions(true)
+    setSuggestionsVisible(true)
+    try {
+      const res = await fetch('/api/suggestions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: uiMessages,
+          provider_id: activeProvider?.id,
+          model: selectedModel,
+          model_override: activeProvider?.provider_name === 'openrouter' ? selectedModel : undefined,
+          max_suggestions: 4,
+        }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        const suggestions = Array.isArray(data?.suggestions) ? data.suggestions : []
+        setDynamicSuggestions(suggestions)
+      }
+    } catch (e) {
+      console.error('Failed to regenerate suggestions', e)
+    } finally {
+      setLoadingSuggestions(false)
+    }
+  }
 
   useEffect(() => {
     const lastAssistant = [...uiMessages].reverse().find((m) => m.role === 'assistant')
@@ -391,13 +423,7 @@ export default function ChatPage() {
     }
   }
 
-  const scrollToBottom = () => {
-    // messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }
 
-  useEffect(() => {
-    scrollToBottom()
-  }, [messages])
 
   useEffect(() => {
     try {
@@ -440,21 +466,35 @@ export default function ChatPage() {
 
         setSessions(prev => [newSession, ...prev])
         setCurrentSession(newSession)
+        setSuggestionsVisible(true)
+        setDynamicSuggestions([])
         try {
           if (typeof window !== 'undefined') {
             ; (window as any).__currentSessionId = newSession.id
             localStorage.setItem('currentSessionId', newSession.id)
           }
         } catch { }
-        setMessages([])
         setUIMessages([])
-        // setUploadedFile(null)
         return newSession
       }
     } catch (error) {
       console.error('Error creating session:', error)
     }
     return null
+  }
+
+  const startEphemeralSession = () => {
+    suppressAutoSuggestionsRef.current = false
+    setCurrentSession(null)
+    setSuggestionsVisible(true)
+    setDynamicSuggestions([])
+    setUIMessages([])
+    try {
+      if (typeof window !== 'undefined') {
+        ; (window as any).__currentSessionId = undefined
+        localStorage.removeItem('currentSessionId')
+      }
+    } catch { }
   }
 
   const onSubmitAI = async (message: any) => {
@@ -486,6 +526,9 @@ export default function ChatPage() {
 
   const handleSessionSelect = async (session: ChatSession) => {
     setMobileMenuOpen(false)
+    suppressAutoSuggestionsRef.current = true
+    setSuggestionsVisible(false)
+    setDynamicSuggestions([])
     // Load messages for the selected session
     const { data, error } = await supabase
       .from('chat_messages')
@@ -525,19 +568,27 @@ export default function ChatPage() {
           localStorage.setItem('currentSessionId', session.id)
         }
       } catch { }
-      setMessages([])
       setUIMessages([])
     }
   }
 
   const handleSessionDelete = async (sessionId: string) => {
     setSessions(prev => prev.filter(s => s.id !== sessionId))
-    if (currentSession?.id === sessionId) {
-      setCurrentSession(null)
-      setMessages([])
+    setCurrentSession(null)
+    setUIMessages([])
+    try {
+      if (typeof window !== 'undefined') {
+        ; (window as any).__currentSessionId = undefined
+        localStorage.removeItem('currentSessionId')
+      }
+    } catch { }
+  }
+
+  useEffect(() => {
+    if (!currentSession) {
       setUIMessages([])
     }
-  }
+  }, [currentSession])
 
   const handleSessionRename = (sessionId: string, newTitle: string) => {
     setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, title: newTitle } : s))
@@ -567,7 +618,14 @@ export default function ChatPage() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Shimmer duration={1}>Loading workspace</Shimmer>
+        <div className="flex flex-col items-center">
+          <img
+            src="/logo.png"
+            alt="App logo"
+            className="w-64 h-auto mb-4"
+          />
+          <Shimmer duration={1}>Loading workspace</Shimmer>
+        </div>
       </div>
     )
   }
@@ -581,7 +639,7 @@ export default function ChatPage() {
           sessions={sessions}
           currentSession={currentSession}
           onSessionSelect={handleSessionSelect}
-          onNewSession={createNewSession}
+          onNewSession={startEphemeralSession}
           onSessionDelete={handleSessionDelete}
           onSessionRename={handleSessionRename}
           status={status}
@@ -607,7 +665,7 @@ export default function ChatPage() {
               sessions={sessions}
               currentSession={currentSession}
               onSessionSelect={handleSessionSelect}
-              onNewSession={createNewSession}
+              onNewSession={startEphemeralSession}
               onSessionDelete={handleSessionDelete}
               onSessionRename={handleSessionRename}
               status={status}
@@ -647,13 +705,7 @@ export default function ChatPage() {
                 const reasoningParts = message.parts.filter((p) => (p as any).type === 'reasoning') as any[];
                 const reasoningDeltaParts = message.parts.filter((p) => (p as any).type === 'reasoning-delta') as any[];
 
-                const streamedText = textDeltaParts.map((tp: any) => String(tp.textDelta ?? tp.text ?? '')).join('');
-                const finalText = textParts.map((p: any) => String(p.text || '')).join('');
-                const textToRender = finalText || streamedText;
 
-                const streamedReasoning = reasoningDeltaParts.map((rp: any) => String(rp.textDelta ?? rp.text ?? '')).join('');
-                const finalReasoning = reasoningParts.map((rp: any) => String(rp.text || '')).join('');
-                const reasoningToRender = finalReasoning || streamedReasoning;
 
                 const isMessageStreaming = message.role === 'assistant' && (textDeltaParts.length > 0 || reasoningDeltaParts.length > 0);
                 return (
@@ -827,24 +879,43 @@ export default function ChatPage() {
         <div className="grid shrink-0 gap-2">
           <PromptInputProvider>
             <Suggestions className="px-4 pt-2">
-              {loadingSuggestions ? (
-                <div className="flex gap-2">
-                  <Skeleton className="h-8 w-40 rounded-full" />
-                  <Skeleton className="h-8 w-32 rounded-full" />
-                  <Skeleton className="h-8 w-48 rounded-full" />
-                  <Skeleton className="h-8 w-36 rounded-full" />
-                </div>
-              ) : (
-                (dynamicSuggestions.length > 0 ? dynamicSuggestions : staticSuggestions).map((s) => (
-                  <Suggestion
-                    key={s}
-                    suggestion={s}
-                    disabled={status !== 'ready'}
-                    onClick={() => {
-                      onSubmitAI({ text: s })
-                    }}
-                  />
-                ))
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    aria-label="Generate suggestions"
+                    variant="outline"
+                    size="icon"
+                    type="button"
+                    onClick={regenerateAllSuggestions}
+                    disabled={status !== 'ready' || loadingSuggestions}
+                  >
+                    <SparklesIcon className="size-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  Generate suggestions
+                </TooltipContent>
+              </Tooltip>
+              {suggestionsVisible && (
+                loadingSuggestions ? (
+                  <div className="flex gap-2">
+                    <Skeleton className="h-8 w-40 rounded-full" />
+                    <Skeleton className="h-8 w-32 rounded-full" />
+                    <Skeleton className="h-8 w-48 rounded-full" />
+                    <Skeleton className="h-8 w-36 rounded-full" />
+                  </div>
+                ) : (
+                  (dynamicSuggestions.length > 0 ? dynamicSuggestions : staticSuggestions).map((s, i) => (
+                    <Suggestion
+                      key={`${s}-${i}`}
+                      suggestion={s}
+                      disabled={status !== 'ready'}
+                      onClick={() => {
+                        onSubmitAI({ text: s })
+                      }}
+                    />
+                  ))
+                )
               )}
             </Suggestions>
             <PromptInput className="px-4 pb-4 w-full" globalDrop multiple onSubmit={onSubmitAI}>
