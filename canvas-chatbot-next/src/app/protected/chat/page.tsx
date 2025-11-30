@@ -655,7 +655,6 @@ export default function ChatPage() {
           </Button>
           <div className="absolute left-0 top-0 h-full w-80">
             <EnhancedSidebar
-              user={user}
               sessions={sessions}
               currentSession={currentSession}
               onSessionSelect={handleSessionSelect}
