@@ -1,4 +1,5 @@
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import { OpenRouterService } from '../openrouter-service';
 
 export function createOpenRouterProvider(apiKey: string) {
 	const provider = createOpenRouter({
@@ -14,7 +15,16 @@ export function createOpenRouterProvider(apiKey: string) {
 	return provider;
 }
 
-export function getDefaultModelId(model?: string) {
-	if (model && model.trim().length > 0) return model;
-	return 'anthropic/claude-3.5-sonnet';
+export async function getDefaultModelId(model?: string): Promise<string> {
+    if (model && model.trim().length > 0) return model;
+    const apiKey = process.env.OPENROUTER_API_KEY_OWNER || process.env.OPENROUTER_API_KEY;
+    if (apiKey) {
+        try {
+            const svc = new OpenRouterService(apiKey);
+            const models = await svc.getAvailableModels();
+            const firstId = models?.[0]?.id;
+            if (typeof firstId === 'string' && firstId.trim()) return firstId;
+        } catch {}
+    }
+    return 'google/gemini-2.0-flash-exp';
 }

@@ -59,7 +59,7 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([])
   const [aiProviders, setAiProviders] = useState<AIProvider[]>([])
   const [activeProvider, setActiveProvider] = useState<AIProvider | null>(null)
-  const [selectedModel, setSelectedModel] = useState<string>('anthropic/claude-3.5-sonnet')
+  const [selectedModel, setSelectedModel] = useState<string>('')
   const [canvasInstitution, setCanvasInstitution] = useState('https://swinburne.instructure.com')
   const [canvasUrl, setCanvasUrl] = useState('https://swinburne.instructure.com')
   const [canvasToken, setCanvasToken] = useState('')
@@ -391,7 +391,18 @@ export default function ChatPage() {
               return { id, name, chef, chefSlug, providers: [chefSlug] }
             })
             : []
-          if (models.length > 0) setOpenRouterModels(models)
+          if (models.length > 0) {
+            setOpenRouterModels(models)
+            try {
+              const saved = typeof window !== 'undefined' ? localStorage.getItem('preferredModel') : null
+              if (!saved) {
+                const firstId = models[0]?.id
+                if (typeof firstId === 'string' && firstId.trim()) {
+                  setSelectedModel(firstId)
+                }
+              }
+            } catch { }
+          }
         }
       } catch { }
       finally {

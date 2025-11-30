@@ -48,7 +48,7 @@ async function suggestionsHandler(request: NextRequest) {
       return new Response(JSON.stringify({ error: 'OpenRouter API key not configured' }), { status: 500 })
     }
 
-    let selectedModel = getDefaultModelId(typeof model === 'string' ? model : undefined)
+    let selectedModel = await getDefaultModelId(typeof model === 'string' ? model : undefined)
     if (provider_id) {
       const providerService = new AIProviderService()
       try {

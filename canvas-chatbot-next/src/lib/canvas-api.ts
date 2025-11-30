@@ -265,8 +265,8 @@ export class CanvasAPIService {
 	async getPageContent(courseId: number, pageUrl: string) {
 		try {
 			let response;
-			let slug = pageUrl;
 
+			// Try direct URL first
 			if (pageUrl.startsWith('http')) {
 				try {
 					response = await axios.get(pageUrl, {
@@ -274,23 +274,14 @@ export class CanvasAPIService {
 						timeout: 15000,
 					});
 				} catch (error) {
+					// If direct URL fails, try API endpoint
 					response = null;
 				}
-
-				try {
-					const u = new URL(pageUrl);
-					const parts = u.pathname.split('/').filter(Boolean);
-					const idx = parts.indexOf('pages');
-					if (idx !== -1 && parts[idx + 1]) {
-						slug = parts[idx + 1];
-					}
-				} catch {}
 			}
 
+			// If no response or failed, try API endpoint
 			if (!response) {
-				const apiPageUrl = `${
-					this.baseURL
-				}/courses/${courseId}/pages/${encodeURIComponent(slug)}`;
+				const apiPageUrl = `${this.baseURL}/courses/${courseId}/pages/${pageUrl}`;
 				response = await axios.get(apiPageUrl, {
 					headers: this.getHeaders(),
 					timeout: 15000,
@@ -342,25 +333,26 @@ export class CanvasAPIService {
 				daysAhead = daysAheadOrOptions;
 			} else {
 				daysAhead = daysAheadOrOptions.daysAhead ?? 14;
-				startDate = daysAheadOrOptions.startDate;
-				endDate = daysAheadOrOptions.endDate;
+				startDate = daysAheadOrOptions.startDate ?? new Date().toISOString();
+				endDate =
+					daysAheadOrOptions.endDate ??
+					new Date(Date.now() + daysAhead * 24 * 60 * 60 * 1000).toISOString();
 				contextCodes = daysAheadOrOptions.contextCodes;
 				type = daysAheadOrOptions.type;
 				allEvents = daysAheadOrOptions.allEvents;
 				perPage = daysAheadOrOptions.perPage;
 			}
 
-			if (!startDate) startDate = new Date().toISOString();
-			if (!endDate)
-				endDate = new Date(
-					Date.now() + daysAhead * 24 * 60 * 60 * 1000,
-				).toISOString();
+			startDate = startDate ?? new Date().toISOString();
+			endDate =
+				endDate ??
+				new Date(Date.now() + daysAhead * 24 * 60 * 60 * 1000).toISOString();
 
-			const params = {
+			const params: any = {
 				start_date: startDate,
 				end_date: endDate,
 				per_page: perPage ?? 100,
-			} as any;
+			};
 			if (typeof allEvents === 'boolean') params.all_events = allEvents;
 			if (type) params.type = type;
 			if (contextCodes && contextCodes.length)
