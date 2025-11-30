@@ -15,6 +15,7 @@ import {
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { createBrowserClient } from '@supabase/ssr'
 import { Shimmer } from '@/components/ai-elements/shimmer'
+import { Skeleton } from '@/components/ui/skeleton'
 
 let supabase: any = null
 
@@ -54,6 +55,7 @@ interface EnhancedSidebarProps {
   onSessionDelete?: (sessionId: string) => void
   onSessionRename?: (sessionId: string, newTitle: string) => void
   status?: 'streaming' | 'submitted' | 'error' | 'ready'
+  titleGenerating?: boolean
 }
 
 export default function EnhancedSidebar({
@@ -64,7 +66,8 @@ export default function EnhancedSidebar({
   onNewSession,
   onSessionDelete,
   onSessionRename,
-  status
+  status,
+  titleGenerating
 }: EnhancedSidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
@@ -114,14 +117,15 @@ export default function EnhancedSidebar({
 
   const formatDate = (date: Date) => {
     const now = new Date()
-    const diffTime = Math.abs(now.getTime() - date.getTime())
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const startOfDate = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+    const diffDays = Math.floor((startOfToday.getTime() - startOfDate.getTime()) / (1000 * 60 * 60 * 24))
 
     if (diffDays === 0) {
       return 'Today'
     } else if (diffDays === 1) {
       return 'Yesterday'
-    } else if (diffDays < 7) {
+    } else if (diffDays > 1 && diffDays < 7) {
       return `${diffDays} days ago`
     } else {
       return date.toLocaleDateString()
@@ -132,14 +136,6 @@ export default function EnhancedSidebar({
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   }
 
-  const getLastMessagePreview = (session: ChatSession) => {
-    const msgs = Array.isArray(session.messages) ? session.messages : []
-    const lastMessage = msgs[msgs.length - 1]
-    if (!lastMessage) return 'No messages yet'
-
-    const preview = lastMessage.content.substring(0, 80)
-    return preview.length < lastMessage.content.length ? `${preview}...` : preview
-  }
 
   const handleSessionDelete = async () => {
     if (!actionSessionId) return
@@ -276,7 +272,7 @@ export default function EnhancedSidebar({
                 {filteredSessions.map((session) => (
                   <div
                     key={session.id}
-                    className={`group relative p-4 hover:bg-slate-50 transition-colors cursor-pointer ${currentSession?.id === session.id ? 'bg-slate-100' : ''
+                    className={`group relative p-4 transition-colors cursor-pointer ${currentSession?.id === session.id ? 'bg-neutral-950 hover:bg-neutral-900 text-white ring-0' : 'hover:bg-slate-50'}
                       }`}
                     onClick={() => onSessionSelect(session)}
                   >
@@ -298,27 +294,25 @@ export default function EnhancedSidebar({
                             />
                           </div>
                         ) : (
-                          (
-                            (currentSession?.id === session.id && (status === 'streaming' || status === 'submitted')) ? (
-                              <Shimmer as="h3" duration={1}>{session.title}</Shimmer>
-                            ) : (
-                              <h3 className="font-medium text-slate-900 truncate text-sm">
-                                {session.title}
-                              </h3>
-                            )
+                          currentSession?.id === session.id && titleGenerating ? (
+                            <Skeleton className="h-5 w-56" />
+                          ) : (currentSession?.id === session.id && (status === 'streaming' || status === 'submitted')) ? (
+                            <Shimmer as="h3" duration={1}>{session.title}</Shimmer>
+                          ) : (
+                            <h3 className={`font-medium truncate text-sm ${currentSession?.id === session.id ? 'text-white' : 'text-slate-900'}`}>
+                              {session.title}
+                            </h3>
                           )
                         )}
 
-                        <p className="text-xs text-slate-500 mt-1 line-clamp-2">
-                          {getLastMessagePreview(session)}
-                        </p>
+                        <p className={`text-xs mt-1 line-clamp-2 ${currentSession?.id === session.id ? 'text-slate-300' : 'text-slate-500'}`}></p>
 
                         <div className="flex items-center gap-2 mt-2">
-                          <span className="text-xs text-slate-400">
+                          <span className={`text-xs ${currentSession?.id === session.id ? 'text-slate-300' : 'text-slate-400'}`}>
                             {formatDate(session.lastMessage)}
                           </span>
-                          <span className="text-xs text-slate-400">•</span>
-                          <span className="text-xs text-slate-400">
+                          <span className={`text-xs ${currentSession?.id === session.id ? 'text-slate-300' : 'text-slate-400'}`}>•</span>
+                          <span className={`text-xs ${currentSession?.id === session.id ? 'text-slate-300' : 'text-slate-400'}`}>
                             {formatTime(session.lastMessage)}
                           </span>
                         </div>

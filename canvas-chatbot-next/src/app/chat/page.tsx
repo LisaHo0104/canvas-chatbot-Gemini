@@ -81,6 +81,7 @@ export default function ChatPage() {
     { id: 'openai/gpt-4o', name: 'GPT-4o', chef: 'OpenAI', chefSlug: 'openai', providers: ['openai', 'azure'] },
     { id: 'google/gemini-2.0-flash-exp', name: 'Gemini 2.0 Flash', chef: 'Google', chefSlug: 'google', providers: ['google'] },
   ])
+  const [titleGenerating, setTitleGenerating] = useState(false)
   const { messages: uiMessages, sendMessage: sendChatMessage, status, regenerate, addToolApprovalResponse, setMessages: setUIMessages } = useChat({
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
   })
@@ -168,6 +169,7 @@ export default function ChatPage() {
     const isIdle = status !== 'streaming' && status !== 'submitted'
     if (!lastAssistant || !isIdle) return
     if (lastUpdatedAssistantIdRef.current === lastAssistant.id) return
+    lastUpdatedAssistantIdRef.current = lastAssistant.id
     const finalAssistantText = lastAssistant.parts
       .filter((p: any) => p.type === 'text')
       .map((p: any) => String(p.text || ''))
@@ -203,43 +205,77 @@ export default function ChatPage() {
 
     const mappedMessages = mapUIMessagesToSessionMessages()
 
-    setSessions((prev) => {
-      const updated = prev.map((s) => {
-        if (!currentSession || s.id !== currentSession.id) return s
-        const needsTitle = !s.title || s.title === 'New Chat'
-        const newTitleBase = String(lastUserText || '').substring(0, 50)
-        const newTitle = needsTitle
-          ? newTitleBase + (String(lastUserText || '').length > 50 ? '...' : '')
-          : s.title
-        return {
-          ...s,
-          title: newTitle,
-          messages: mappedMessages,
-          lastMessage: now,
-          updated_at: now,
+      ; (async () => {
+        let generatedTitle: string | null = null
+        const needsTitle = !currentSession?.title || currentSession?.title === 'New Chat'
+        if (needsTitle) {
+          try {
+            setTitleGenerating(true)
+            const res = await fetch('/api/session-title', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                messages: uiMessages,
+                provider_id: activeProvider?.id,
+                model: selectedModel,
+                model_override: activeProvider?.provider_name === 'openrouter' ? selectedModel : undefined,
+              }),
+            })
+            if (res.ok) {
+              const data = await res.json()
+              const title = typeof data?.title === 'string' ? data.title.trim() : ''
+              if (title) generatedTitle = title
+            }
+          } catch (e) {
+            console.error('Failed to generate session title', e)
+          } finally {
+            setTitleGenerating(false)
+          }
         }
-      })
-      return updated.sort((a, b) => b.lastMessage.getTime() - a.lastMessage.getTime())
-    })
 
-    setCurrentSession((prev) => {
-      if (!prev) return prev
-      const needsTitle = !prev.title || prev.title === 'New Chat'
-      const newTitleBase = String(lastUserText || '').substring(0, 50)
-      const newTitle = needsTitle
-        ? newTitleBase + (String(lastUserText || '').length > 50 ? '...' : '')
-        : prev.title
-      return {
-        ...prev,
-        title: newTitle,
-        messages: mappedMessages,
-        lastMessage: now,
-        updated_at: now,
-      }
-    })
+        const fallbackTitleBase = String(lastUserText || '').substring(0, 50)
+        const fallbackTitle = fallbackTitleBase + (String(lastUserText || '').length > 50 ? '...' : '')
+        const finalTitle = generatedTitle || fallbackTitle
 
-    lastUpdatedAssistantIdRef.current = lastAssistant.id
-  }, [uiMessages, status, currentSession])
+        setSessions((prev) => {
+          const updated = prev.map((s) => {
+            if (!currentSession || s.id !== currentSession.id) return s
+            return {
+              ...s,
+              title: finalTitle,
+              messages: mappedMessages,
+              lastMessage: now,
+              updated_at: now,
+            }
+          })
+          return updated.sort((a, b) => b.lastMessage.getTime() - a.lastMessage.getTime())
+        })
+
+        setCurrentSession((prev) => {
+          if (!prev) return prev
+          return {
+            ...prev,
+            title: finalTitle,
+            messages: mappedMessages,
+            lastMessage: now,
+            updated_at: now,
+          }
+        })
+
+        try {
+          const id = currentSession?.id
+          if (id && supabase) {
+            await supabase
+              .from('chat_sessions')
+              .update({ title: finalTitle })
+              .eq('id', id)
+          }
+        } catch (e) {
+          console.error('Failed to persist session title', e)
+        }
+
+      })()
+  }, [uiMessages, status, selectedModel, activeProvider])
 
   const getToolPartId = (tp: ToolUIPart): string | undefined => {
     const anyTp = tp as any
@@ -549,6 +585,12 @@ export default function ChatPage() {
       setMessages(loadedMessages)
       const uiHistory = loadedMessages.map((m: any) => ({ id: m.id, role: m.role, parts: [{ type: 'text', text: m.content }] }))
       setUIMessages(uiHistory as any)
+      try {
+        const lastAssistantInHistory = [...uiHistory].reverse().find((m: any) => m.role === 'assistant')
+        if (lastAssistantInHistory?.id) {
+          lastUpdatedAssistantIdRef.current = String(lastAssistantInHistory.id)
+        }
+      } catch { }
       setCurrentSession({
         ...session,
         messages: loadedMessages
@@ -643,6 +685,7 @@ export default function ChatPage() {
           onSessionDelete={handleSessionDelete}
           onSessionRename={handleSessionRename}
           status={status}
+          titleGenerating={titleGenerating}
         />
       </div>
 
@@ -669,6 +712,7 @@ export default function ChatPage() {
               onSessionDelete={handleSessionDelete}
               onSessionRename={handleSessionRename}
               status={status}
+              titleGenerating={titleGenerating}
             />
           </div>
         </div>
@@ -730,7 +774,7 @@ export default function ChatPage() {
                           ))}
                         </MessageAttachments>
                       )}
-                      <AIMessageContent className="w-full max-w-full min-w-0">
+                      <AIMessageContent className="w-fit max-w-[85%] min-w-0">
                         {(() => {
                           type Segment =
                             | { kind: 'text'; content: string }
@@ -876,7 +920,7 @@ export default function ChatPage() {
 
 
 
-        <div className="grid shrink-0 gap-2">
+        <div className="grid shrink-0 gap-2 border-t border-slate-200">
           <PromptInputProvider>
             <Suggestions className="px-4 pt-2">
               <Tooltip>
