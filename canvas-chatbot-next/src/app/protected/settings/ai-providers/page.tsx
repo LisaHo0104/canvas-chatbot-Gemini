@@ -14,8 +14,6 @@ interface ProviderFormData {
   config?: Record<string, any>
 }
 
- 
-
 const DEFAULT_OPENROUTER_MODELS = [
   { value: 'anthropic/claude-3.5-sonnet', label: 'Claude 3.5 Sonnet' },
   { value: 'openai/gpt-4', label: 'GPT-4' },
@@ -39,7 +37,6 @@ export default function AIProvidersSettings({ compact = false }: AIProvidersSett
   const [fetchingModels, setFetchingModels] = useState(false)
 
   useEffect(() => {
-    // Load models from OpenRouter and initialize preferred model
     const init = async () => {
       setLoading(true)
       try {
@@ -55,7 +52,6 @@ export default function AIProvidersSettings({ compact = false }: AIProvidersSett
     }
     init()
   }, [])
-
 
   const fetchOpenRouterModels = async () => {
     try {
@@ -80,7 +76,6 @@ export default function AIProvidersSettings({ compact = false }: AIProvidersSett
     }
   }
 
-
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -94,9 +89,7 @@ export default function AIProvidersSettings({ compact = false }: AIProvidersSett
       {!compact && (
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-foreground mb-2">AI Provider Settings</h1>
-          <p className="text-muted-foreground">
-            Configure and manage your AI providers for chat functionality.
-          </p>
+          <p className="text-muted-foreground">Configure and manage your AI providers for chat functionality.</p>
         </div>
       )}
 
@@ -111,10 +104,7 @@ export default function AIProvidersSettings({ compact = false }: AIProvidersSett
         <div>
           <Label htmlFor="model">OpenRouter Model</Label>
           <div className="flex space-x-2 mt-2">
-            <Select value={formData.model} onValueChange={(value) => {
-              setFormData({ ...formData, model: value })
-              try { localStorage.setItem('preferredModel', value) } catch {}
-            }}>
+            <Select value={formData.model} onValueChange={(value) => { setFormData({ ...formData, model: value }); try { localStorage.setItem('preferredModel', value) } catch {} }}>
               <SelectTrigger id="model" disabled={fetchingModels} className="flex-1">
                 <SelectValue placeholder={fetchingModels ? 'Loading models…' : 'Select a model'} />
               </SelectTrigger>
@@ -144,10 +134,7 @@ export default function AIProvidersSettings({ compact = false }: AIProvidersSett
             <div>
               <Label htmlFor="model">OpenRouter Model</Label>
               <div className="flex space-x-2 mt-2">
-                <Select value={formData.model} onValueChange={(value) => {
-                  setFormData({ ...formData, model: value })
-                  try { localStorage.setItem('preferredModel', value) } catch {}
-                }}>
+                <Select value={formData.model} onValueChange={(value) => { setFormData({ ...formData, model: value }); try { localStorage.setItem('preferredModel', value) } catch {} }}>
                   <SelectTrigger id="model" disabled={fetchingModels} className="flex-1">
                     <SelectValue placeholder={fetchingModels ? 'Loading models…' : 'Select a model'} />
                   </SelectTrigger>

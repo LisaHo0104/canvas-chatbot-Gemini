@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { createBrowserClient } from '@supabase/ssr'
+import { createClient as createSupabaseClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -17,16 +17,13 @@ export function UpdatePasswordForm({ className, ...props }: React.ComponentProps
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault()
-    const supabase = createBrowserClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
+    const supabase = createSupabaseClient()
     setIsLoading(true)
     setError(null)
     try {
       const { error } = await supabase.auth.updateUser({ password })
       if (error) throw error
-      router.push('/chat')
+      router.push('/protected/chat')
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : 'An error occurred')
     } finally {

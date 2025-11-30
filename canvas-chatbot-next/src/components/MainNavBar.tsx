@@ -4,11 +4,12 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { LogoutButton } from '@/components/logout-button'
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { Menu } from 'lucide-react'
 import { NavigationMenu, NavigationMenuList, NavigationMenuItem, NavigationMenuLink } from '@/components/ui/navigation-menu'
 import { cn } from '@/lib/utils'
-import { createBrowserClient } from '@supabase/ssr'
+import { createClient as createSupabaseClient } from '@/lib/supabase/client'
 
 
 
@@ -19,11 +20,7 @@ export default function MainNavBar() {
     const unsubs: (() => void)[] = []
     let supabase: any = null
     try {
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-      if (supabaseUrl && supabaseAnonKey) {
-        supabase = createBrowserClient(supabaseUrl, supabaseAnonKey)
-      }
+      supabase = createSupabaseClient()
     } catch { }
     ; (async () => {
       try {
@@ -56,10 +53,11 @@ export default function MainNavBar() {
   }, [])
   return (
     <header className="sticky top-0 z-40 bg-background border-b border-border" role="navigation" aria-label="Main">
-      <div className="max-w-7xl px-4 h-12 flex items-center justify-start">
-        <div className="flex items-center gap-2">
-          <Link href="/" aria-label="Home" className="flex items-center">
-            <img src="/logo.png" alt="Logo" className="h-12 w-auto" />
+      <div className="max-w-lvw px-4 h-12 flex items-center justify-start">
+        <div className="flex items-center gap-4">
+          <Link href="/" aria-label="Lulu Home" className="flex items-center">
+            <img src="/dog_logo.png" alt="Lulu logo" className="h-12 w-auto" />
+            <span className="ml-2 text-lg font-semibold">Lulu</span>
           </Link>
           {authUser ? (
             <>
@@ -70,22 +68,22 @@ export default function MainNavBar() {
                       <NavigationMenuLink
                         asChild
                         className={cn(
-                          pathname === '/chat' ? 'bg-accent text-accent-foreground' : ''
+                          pathname === '/protected/chat' ? 'bg-accent text-accent-foreground' : ''
                         )}
-                        aria-current={pathname === '/chat' ? 'page' : undefined}
+                        aria-current={pathname === '/protected/chat' ? 'page' : undefined}
                       >
-                        <Link href="/chat">Chat</Link>
+                        <Link href="/protected/chat">Chat</Link>
                       </NavigationMenuLink>
                     </NavigationMenuItem>
                     <NavigationMenuItem>
                       <NavigationMenuLink
                         asChild
                         className={cn(
-                          pathname.startsWith('/settings') ? 'bg-accent text-accent-foreground' : ''
+                          pathname.startsWith('/protected/settings') ? 'bg-accent text-accent-foreground' : ''
                         )}
-                        aria-current={pathname.startsWith('/settings') ? 'page' : undefined}
+                        aria-current={pathname.startsWith('/protected/settings') ? 'page' : undefined}
                       >
-                        <Link href="/settings">Settings</Link>
+                        <Link href="/protected/settings">Settings</Link>
                       </NavigationMenuLink>
                     </NavigationMenuItem>
                     <NavigationMenuItem>
@@ -111,26 +109,33 @@ export default function MainNavBar() {
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start">
                     <DropdownMenuItem asChild>
-                      <Link href="/chat">Chat</Link>
+                      <Link href="/protected/chat">Chat</Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
-                      <Link href="/settings">Settings</Link>
+                      <Link href="/protected/settings">Settings</Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
                       <Link href="/help">Help</Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <LogoutButton />
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
             </>
+          ) : null}
+        </div>
+        <div className="ml-auto">
+          {authUser ? (
+            <LogoutButton />
           ) : (
             <div className="flex items-center gap-2">
-              <Link href="/login"><Button variant="ghost" size="sm">Sign In</Button></Link>
-              <Link href="/login"><Button size="sm">Get Started</Button></Link>
+              <Link href="/auth/login"><Button variant="ghost" size="sm">Sign In</Button></Link>
+              <Link href="/auth/login"><Button size="sm">Get Started</Button></Link>
             </div>
           )}
         </div>
-        {null}
       </div>
     </header>
   )

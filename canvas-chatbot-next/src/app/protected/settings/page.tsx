@@ -2,16 +2,15 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import Image from 'next/image'
 import { Settings } from 'lucide-react'
-import { createBrowserClient } from '@supabase/ssr'
-import AIProvidersSettings from '@/app/settings/ai-providers/page'
+import { createClient as createSupabaseClient } from '@/lib/supabase/client'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Spinner } from '@/components/ui/spinner'
-import { Separator } from '@/components/ui/separator'
 
 interface User {
   id: string
@@ -33,13 +32,7 @@ export default function SettingsPage() {
   let supabase: any = null
 
   try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-    if (supabaseUrl && supabaseAnonKey) {
-      supabase = createBrowserClient(supabaseUrl, supabaseAnonKey)
-    } else {
-      console.warn('Supabase configuration missing. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY environment variables.')
-    }
+    supabase = createSupabaseClient()
   } catch (error) {
     console.error('Error creating Supabase client:', error)
   }
@@ -64,18 +57,18 @@ export default function SettingsPage() {
   const checkUser = async () => {
     try {
       if (!supabase) {
-        router.push('/login')
+        router.push('/auth/login')
         return
       }
       const { data: { session }, error } = await supabase.auth.getSession()
       if (error || !session) {
-        router.push('/login')
+        router.push('/auth/login')
         return
       }
       setUser({ id: session.user.id, email: session.user.email || '' })
     } catch (error) {
       console.error('Error checking user:', error)
-      router.push('/login')
+      router.push('/auth/login')
     } finally {
       setLoading(false)
     }
@@ -107,10 +100,6 @@ export default function SettingsPage() {
     }
   }
 
-  const handleSessionSelect = (session: any) => {
-    setCurrentSession(session)
-  }
-
   const loadCanvasStatus = async () => {
     try {
       if (!supabase || !user) return
@@ -125,7 +114,7 @@ export default function SettingsPage() {
           const base = String(data.canvas_api_url).replace(/\/?api\/v1$/, '')
           setCanvasInstitution(base)
           setCanvasUrl(base)
-        } catch {}
+        } catch { }
       } else {
         setCanvasStatus('missing')
       }
@@ -166,17 +155,7 @@ export default function SettingsPage() {
     }
   }
 
-  
 
-  const handleSignOut = async () => {
-    try {
-      const { error } = await supabase?.auth.signOut()
-      if (error) throw error
-      router.push('/login')
-    } catch (error) {
-      console.error('Error signing out:', error)
-    }
-  }
 
   if (loading) {
     return (
@@ -193,22 +172,23 @@ export default function SettingsPage() {
     return null
   }
 
-
   return (
-    <div className="flex min-h-screen bg-slate-50">
+    <div className="flex min-h-screen">
       <div className="flex-1 flex flex-col">
-        <div className="bg-background border-b border-border px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Settings className="w-5 h-5 text-muted-foreground" aria-hidden="true" />
-              <h1 className="text-xl font-semibold text-foreground">Settings</h1>
-            </div>
+        <div className="w-full max-w-3xl mx-auto p-6 space-y-6">
+          <div className="flex items-center gap-3">
+            <Image
+              src='/dog_laptop.png'
+              alt='Illustration'
+              width={64}
+              height={64}
+              priority
+            />
+            <h1 className="text-2xl font-semibold text-foreground">Settings</h1>
           </div>
-        </div>
-        <div className="w-full max-w-4xl mx-auto p-6">
 
-          <div id="general" className="space-y-4">
-            <Card className="mb-6">
+          <div id="general" className="space-y-6">
+            <Card>
               <CardHeader>
                 <CardTitle>Canvas Configuration</CardTitle>
               </CardHeader>
@@ -229,26 +209,14 @@ export default function SettingsPage() {
                     {canvasInstitution === 'custom' && (
                       <div className="mt-3">
                         <Label htmlFor="canvasUrl">Canvas URL</Label>
-                        <Input
-                          id="canvasUrl"
-                          value={canvasUrl}
-                          onChange={(e) => setCanvasUrl(e.target.value)}
-                          placeholder="your-school.instructure.com"
-                        />
+                        <Input id="canvasUrl" value={canvasUrl} onChange={(e) => setCanvasUrl(e.target.value)} placeholder="your-school.instructure.com" />
                       </div>
                     )}
                   </div>
 
                   <div>
                     <Label htmlFor="canvasToken">Canvas API Token</Label>
-                    <Input
-                      id="canvasToken"
-                      type="password"
-                      value={canvasToken}
-                      onChange={(e) => setCanvasToken(e.target.value)}
-                      placeholder="Canvas API Token"
-                      aria-describedby="canvasTokenHelp"
-                    />
+                    <Input id="canvasToken" type="password" value={canvasToken} onChange={(e) => setCanvasToken(e.target.value)} placeholder="Canvas API Token" aria-describedby="canvasTokenHelp" />
                     <p id="canvasTokenHelp" className="mt-2 text-xs text-muted-foreground">Token is sent securely to the server and stored encrypted. It is not saved in your browser.</p>
                   </div>
 
@@ -271,17 +239,6 @@ export default function SettingsPage() {
                     )}
                   </div>
                 </form>
-              </CardContent>
-            </Card>
-          </div>
-
-          <div id="providers" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>AI Providers Configuration</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <AIProvidersSettings compact />
               </CardContent>
             </Card>
           </div>

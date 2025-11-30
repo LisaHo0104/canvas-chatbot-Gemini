@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { createBrowserClient } from '@supabase/ssr'
+import { createClient as createSupabaseClient } from '@/lib/supabase/client'
 import { X, CopyIcon, RefreshCcwIcon, GlobeIcon, CheckIcon, SparklesIcon } from 'lucide-react'
 import { useChat } from '@ai-sdk/react'
 import { lastAssistantMessageIsCompleteWithApprovalResponses } from 'ai'
@@ -27,14 +27,7 @@ import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip
 let supabase: any = null
 
 try {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-
-  if (supabaseUrl && supabaseAnonKey) {
-    supabase = createBrowserClient(supabaseUrl, supabaseAnonKey)
-  } else {
-    console.warn('Supabase configuration missing. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY environment variables.')
-  }
+  supabase = createSupabaseClient()
 } catch (error) {
   console.error('Error creating Supabase client:', error)
 }
@@ -86,7 +79,6 @@ export default function ChatPage() {
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
   })
 
-
   const staticSuggestions = useMemo(() => [
     'Show my current courses',
     'List upcoming deadlines',
@@ -135,7 +127,6 @@ export default function ChatPage() {
         }
       })()
   }, [uiMessages, status, selectedModel, activeProvider])
-
 
   const regenerateAllSuggestions = async () => {
     setLoadingSuggestions(true)
@@ -294,28 +285,25 @@ export default function ChatPage() {
       ; (addToolApprovalResponse as any)({ id, response: 'denied', reason: 'User denied' })
   }
 
-
   // Check authentication and load data
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        // Check if Supabase is properly configured
         if (!supabase) {
           console.error('Supabase client not available')
-          router.push('/login')
+          router.push('/auth/login')
           return
         }
 
         const { data: { session }, error } = await supabase.auth.getSession()
 
         if (error || !session) {
-          router.push('/login')
+          router.push('/auth/login')
           return
         }
 
         setUser(session.user)
 
-        // Load user data from profiles table
         const { data: userData } = await supabase
           .from('profiles')
           .select('full_name, canvas_institution, canvas_api_url')
@@ -325,17 +313,14 @@ export default function ChatPage() {
         if (userData) {
           setUser((prev: any) => ({ ...prev, user_name: userData.full_name }))
 
-          // Prioritize database credentials over localStorage
           if (userData.canvas_api_url) {
             setCanvasStatus('connected')
             try {
               const base = String(userData.canvas_api_url).replace(/\/?api\/v1$/, '')
               setCanvasInstitution(base)
               setCanvasUrl(base)
-              // Don't set token here since it's encrypted in database
             } catch { }
           } else {
-            // Fallback to localStorage if no database credentials
             const savedToken = typeof window !== 'undefined' ? localStorage.getItem('canvasToken') : null
             const savedUrl = typeof window !== 'undefined' ? localStorage.getItem('canvasUrl') : null
             if (savedToken && savedUrl) {
@@ -354,8 +339,6 @@ export default function ChatPage() {
           setCanvasStatus('missing')
         }
 
-        // Gemini removed
-
         await loadAIProviders()
         try {
           const savedModel = typeof window !== 'undefined' ? localStorage.getItem('preferredModel') : null
@@ -363,11 +346,10 @@ export default function ChatPage() {
             setSelectedModel(savedModel)
           }
         } catch { }
-        // Load chat sessions
         await loadChatSessions(session.user.id)
       } catch (error) {
         console.error('Auth check error:', error)
-        router.push('/login')
+        router.push('/auth/login')
       } finally {
         setLoading(false)
       }
@@ -419,8 +401,6 @@ export default function ChatPage() {
     initModels()
   }, [])
 
-
-
   const loadAIProviders = async () => {
     try {
       const response = await fetch('/api/ai-providers', { credentials: 'include' })
@@ -459,8 +439,6 @@ export default function ChatPage() {
     }
   }
 
-
-
   useEffect(() => {
     try {
       const id = currentSession?.id
@@ -475,13 +453,9 @@ export default function ChatPage() {
     if (!user) return null
 
     try {
-      // Save to database and let it generate the UUID
       const { data, error } = await supabase
         .from('chat_sessions')
-        .insert([{
-          user_id: user.id,
-          title: 'New Chat',
-        }])
+        .insert([{ user_id: user.id, title: 'New Chat' }])
         .select()
         .single()
 
@@ -559,13 +533,11 @@ export default function ChatPage() {
     )
   }
 
-
   const handleSessionSelect = async (session: ChatSession) => {
     setMobileMenuOpen(false)
     suppressAutoSuggestionsRef.current = true
     setSuggestionsVisible(false)
     setDynamicSuggestions([])
-    // Load messages for the selected session
     const { data, error } = await supabase
       .from('chat_messages')
       .select('*')
@@ -591,10 +563,7 @@ export default function ChatPage() {
           lastUpdatedAssistantIdRef.current = String(lastAssistantInHistory.id)
         }
       } catch { }
-      setCurrentSession({
-        ...session,
-        messages: loadedMessages
-      })
+      setCurrentSession({ ...session, messages: loadedMessages })
       try {
         if (typeof window !== 'undefined') {
           ; (window as any).__currentSessionId = session.id
@@ -639,9 +608,6 @@ export default function ChatPage() {
     }
   }
 
-
-
-  // Gemini key persistence removed
   useEffect(() => {
     try {
       if (canvasToken && canvasToken.trim()) {
@@ -655,17 +621,11 @@ export default function ChatPage() {
     } catch { }
   }, [canvasToken, canvasInstitution, canvasUrl])
 
-
-
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="flex flex-col items-center">
-          <img
-            src="/logo.png"
-            alt="App logo"
-            className="w-64 h-auto mb-4"
-          />
+          <img src="/dog_logo.png" alt="Lulu logo" className="w-64 h-auto mb-4" />
           <Shimmer duration={1}>Loading workspace</Shimmer>
         </div>
       </div>
@@ -674,7 +634,6 @@ export default function ChatPage() {
 
   return (
     <div className="flex h-full overflow-x-hidden">
-      {/* Enhanced Sidebar */}
       <div className="hidden md:block flex-shrink-0">
         <EnhancedSidebar
           user={user}
@@ -689,17 +648,10 @@ export default function ChatPage() {
         />
       </div>
 
-      {/* Mobile Sidebar Overlay */}
       {mobileMenuOpen && (
         <div className="fixed inset-0 z-50 md:hidden">
           <div className="absolute inset-0 bg-black bg-opacity-50" onClick={() => setMobileMenuOpen(false)} />
-          <Button
-            onClick={() => setMobileMenuOpen(false)}
-            aria-label="Close menu"
-            variant="ghost"
-            size="icon"
-            className="absolute right-3 top-3 z-50"
-          >
+          <Button onClick={() => setMobileMenuOpen(false)} aria-label="Close menu" variant="ghost" size="icon" className="absolute right-3 top-3 z-50">
             <X className="w-4 h-4" />
           </Button>
           <div className="absolute left-0 top-0 h-full w-80">
@@ -718,7 +670,6 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* Main Chat Area */}
       <div className="flex-1 flex flex-col min-h-0 overflow-x-hidden">
         <Conversation className="h-full relative">
           <ConversationContent className="chat-content relative">
@@ -731,39 +682,31 @@ export default function ChatPage() {
             {uiMessages.length === 0 ? (
               <div className="max-w-3xl mx-auto text-center py-16">
                 <div className="mx-auto w-full max-w-md">
-                  <img
-                    src="/illustration_chat.png"
-                    alt="Chat assistant illustration"
-                    className="w-full h-auto"
-                  />
+                  <img src="/dog_chat.png" alt="Lulu chat assistant illustration" className="w-full h-auto" />
                 </div>
                 <h2 className="text-2xl font-semibold text-slate-900 mb-2">Start a conversation</h2>
                 <p className="text-slate-600 mb-8">Ask about your courses, assignments, modules, or Canvas announcements. I’ll guide you.</p>
               </div>
             ) : (
               uiMessages.map((message) => {
-                const fileParts = message.parts.filter((p) => p.type === 'file') as any[];
-                const textParts = message.parts.filter((p) => p.type === 'text') as any[];
-                const textDeltaParts = message.parts.filter((p) => (p as any).type === 'text-delta') as any[];
-                const toolParts = message.parts.filter((p) => typeof (p as any).type === 'string' && (p as any).type.startsWith('tool-')) as ToolUIPart[];
-                const reasoningParts = message.parts.filter((p) => (p as any).type === 'reasoning') as any[];
-                const reasoningDeltaParts = message.parts.filter((p) => (p as any).type === 'reasoning-delta') as any[];
+                const fileParts = message.parts.filter((p) => p.type === 'file') as any[]
+                const textParts = message.parts.filter((p) => p.type === 'text') as any[]
+                const textDeltaParts = message.parts.filter((p) => (p as any).type === 'text-delta') as any[]
+                const toolParts = message.parts.filter((p) => typeof (p as any).type === 'string' && (p as any).type.startsWith('tool-')) as ToolUIPart[]
+                const reasoningParts = message.parts.filter((p) => (p as any).type === 'reasoning') as any[]
+                const reasoningDeltaParts = message.parts.filter((p) => (p as any).type === 'reasoning-delta') as any[]
 
-
-
-                const isMessageStreaming = message.role === 'assistant' && (textDeltaParts.length > 0 || reasoningDeltaParts.length > 0);
+                const isMessageStreaming = message.role === 'assistant' && (textDeltaParts.length > 0 || reasoningDeltaParts.length > 0)
                 return (
                   <div key={message.id}>
                     {message.role === 'assistant' && message.parts.filter((p) => p.type === 'source-url').length > 0 && (
                       <Sources>
                         <SourcesTrigger count={message.parts.filter((p) => p.type === 'source-url').length} />
-                        {message.parts
-                          .filter((p) => p.type === 'source-url')
-                          .map((part, i) => (
-                            <SourcesContent key={`${message.id}-${i}`}>
-                              <Source href={(part as any).url} title={(part as any).url} />
-                            </SourcesContent>
-                          ))}
+                        {message.parts.filter((p) => p.type === 'source-url').map((part, i) => (
+                          <SourcesContent key={`${message.id}-${i}`}>
+                            <Source href={(part as any).url} title={(part as any).url} />
+                          </SourcesContent>
+                        ))}
                       </Sources>
                     )}
                     <AIMessage from={message.role}>
@@ -779,7 +722,7 @@ export default function ChatPage() {
                           type Segment =
                             | { kind: 'text'; content: string }
                             | { kind: 'reasoning'; content: string; streaming: boolean }
-                            | { kind: 'tool'; part: ToolUIPart };
+                            | { kind: 'tool'; part: ToolUIPart }
 
                           const segments: Segment[] = []
                           let current: Segment | null = null
@@ -835,10 +778,7 @@ export default function ChatPage() {
                               const tp = seg.part
                               return (
                                 <div className="mt-2 w-full max-w-full min-w-0 overflow-x-auto break-words" key={`${message.id}-tool-${idx}`}>
-                                  <Tool
-                                    key={`${message.id}-tool-${idx}-${(message.role === 'assistant' && (textDeltaParts.length > 0 || reasoningDeltaParts.length > 0 || textParts.length > 0)) ? 'collapsed' : 'open'}`}
-                                    defaultOpen={!(message.role === 'assistant' && (textDeltaParts.length > 0 || reasoningDeltaParts.length > 0 || textParts.length > 0))}
-                                  >
+                                  <Tool key={`${message.id}-tool-${idx}-${(message.role === 'assistant' && (textDeltaParts.length > 0 || reasoningDeltaParts.length > 0 || textParts.length > 0)) ? 'collapsed' : 'open'}`} defaultOpen={!(message.role === 'assistant' && (textDeltaParts.length > 0 || reasoningDeltaParts.length > 0 || textParts.length > 0))}>
                                     <ToolHeader type={tp.type} state={tp.state} />
                                     <ToolContent>
                                       <ToolInput input={tp.input} />
@@ -883,13 +823,7 @@ export default function ChatPage() {
                         {message.role === 'assistant' && !isMessageStreaming && status !== 'streaming' && status !== 'submitted' && (
                           <div className="mt-1">
                             <MessageActions>
-                              <MessageAction
-                                tooltip="Copy"
-                                onClick={() => {
-                                  const text = textParts.map((p: any) => String(p.text || '')).join('');
-                                  navigator.clipboard.writeText(text);
-                                }}
-                              >
+                              <MessageAction tooltip="Copy" onClick={() => { const text = textParts.map((p: any) => String(p.text || '')).join(''); navigator.clipboard.writeText(text); }}>
                                 <CopyIcon className="size-4" />
                               </MessageAction>
                               <MessageAction tooltip="Regenerate" onClick={() => regenerate()}>
@@ -901,16 +835,12 @@ export default function ChatPage() {
                       </AIMessageContent>
                     </AIMessage>
                   </div>
-                );
+                )
               })
             )}
             {(status === 'streaming' || status === 'submitted') && (
               <div className="flex flex-col items-start gap-2 p-2 rounded-md">
-                <img
-                  src="/illustration_thinking.png"
-                  alt="Thinking"
-                  className="w-24 h-auto rounded"
-                />
+                <img src="/dog_thinking.png" alt="Lulu thinking" className="w-24 h-auto rounded" />
                 <Shimmer duration={1}>Thinking...</Shimmer>
               </div>
             )}
@@ -918,27 +848,16 @@ export default function ChatPage() {
           <ConversationScrollButton />
         </Conversation>
 
-
-
         <div className="grid shrink-0 gap-2 border-t border-slate-200">
           <PromptInputProvider>
             <Suggestions className="px-4 pt-2">
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button
-                    aria-label="Generate suggestions"
-                    variant="outline"
-                    size="icon"
-                    type="button"
-                    onClick={regenerateAllSuggestions}
-                    disabled={status !== 'ready' || loadingSuggestions}
-                  >
+                  <Button aria-label="Generate suggestions" variant="outline" size="icon" type="button" onClick={regenerateAllSuggestions} disabled={status !== 'ready' || loadingSuggestions}>
                     <SparklesIcon className="size-4" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>
-                  Generate suggestions
-                </TooltipContent>
+                <TooltipContent>Generate suggestions</TooltipContent>
               </Tooltip>
               {suggestionsVisible && (
                 loadingSuggestions ? (
@@ -950,14 +869,7 @@ export default function ChatPage() {
                   </div>
                 ) : (
                   (dynamicSuggestions.length > 0 ? dynamicSuggestions : staticSuggestions).map((s, i) => (
-                    <Suggestion
-                      key={`${s}-${i}`}
-                      suggestion={s}
-                      disabled={status !== 'ready'}
-                      onClick={() => {
-                        onSubmitAI({ text: s })
-                      }}
-                    />
+                    <Suggestion key={`${s}-${i}`} suggestion={s} disabled={status !== 'ready'} onClick={() => { onSubmitAI({ text: s }) }} />
                   ))
                 )
               )}

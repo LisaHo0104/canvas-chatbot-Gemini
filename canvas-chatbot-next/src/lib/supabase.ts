@@ -1,9 +1,13 @@
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+const supabasePublishableOrAnonKey =
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_OR_ANON_KEY!
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+export const supabase = createClient(
+  supabaseUrl,
+  supabasePublishableOrAnonKey
+)
 
 // Types for our database tables
 export interface User {

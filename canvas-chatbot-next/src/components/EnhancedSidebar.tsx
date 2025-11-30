@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Image from 'next/image'
 import { Search, Plus, ChevronLeft, ChevronRight, MoreHorizontalIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -13,19 +14,14 @@ import {
   DialogClose,
 } from '@/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { createBrowserClient } from '@supabase/ssr'
+import { createClient as createSupabaseClient } from '@/lib/supabase/client'
 import { Shimmer } from '@/components/ai-elements/shimmer'
 import { Skeleton } from '@/components/ui/skeleton'
 
 let supabase: any = null
 
 try {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-
-  if (supabaseUrl && supabaseAnonKey) {
-    supabase = createBrowserClient(supabaseUrl, supabaseAnonKey)
-  }
+  supabase = createSupabaseClient()
 } catch (error) {
   console.error('Error creating Supabase client:', error)
 }
@@ -47,7 +43,6 @@ interface ChatSession {
 }
 
 interface EnhancedSidebarProps {
-  user: any
   sessions: ChatSession[]
   currentSession: ChatSession | null
   onSessionSelect: (session: ChatSession) => void
@@ -59,7 +54,6 @@ interface EnhancedSidebarProps {
 }
 
 export default function EnhancedSidebar({
-  user,
   sessions,
   currentSession,
   onSessionSelect,
@@ -260,7 +254,14 @@ export default function EnhancedSidebar({
                   <p className="text-xs text-slate-400">Try adjusting your search terms</p>
                 </div>
               ) : (
-                <div>
+                <div className="flex flex-col items-center justify-center">
+                  <Image
+                    src="/dog_ghost.png"
+                    alt="No conversations illustration"
+                    width={160}
+                    height={160}
+                    className="mb-2 opacity-80"
+                  />
                   <p className="mb-2">No conversations yet</p>
                   <p className="text-xs text-slate-400">Start a new chat to get started</p>
                 </div>
