@@ -1,45 +1,36 @@
 {
-  "buildCommand": "npm run build",
-  "outputDirectory": ".next",
-  "framework": "nextjs",
-  "regions": ["iad1"],
-  "env": {
-    "NEXT_PUBLIC_SUPABASE_URL": "@next_public_supabase_url",
-    "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_OR_ANON_KEY": "@next_public_supabase_publishable_or_anon_key",
-    "SUPABASE_SERVICE_ROLE_KEY": "@supabase_service_role_key",
-    "ENCRYPTION_KEY": "@encryption_key",
-    "GEMINI_API_KEY": "@gemini_api_key",
-    "RATE_LIMIT_WINDOW_MS": "@rate_limit_window_ms",
-    "RATE_LIMIT_MAX_REQUESTS": "@rate_limit_max_requests"
-  },
-  "functions": {
-    "app/api/**/*.ts": {
-      "maxDuration": 30
-    }
-  },
-  "rewrites": [
-    {
-      "source": "/api/(.*)",
-      "destination": "/api/$1"
-    }
-  ],
-  "headers": [
-    {
-      "source": "/api/(.*)",
-      "headers": [
-        {
-          "key": "X-Content-Type-Options",
-          "value": "nosniff"
-        },
-        {
-          "key": "X-Frame-Options",
-          "value": "DENY"
-        },
-        {
-          "key": "X-XSS-Protection",
-          "value": "1; mode=block"
-        }
-      ]
-    }
-  ]
+	"buildCommand": "npm run build",
+	"outputDirectory": ".next",
+	"framework": "nextjs",
+	"regions": ["iad1"],
+	"functions": {
+		"app/api/**/*.ts": {
+			"maxDuration": 30
+		}
+	},
+	"rewrites": [
+		{
+			"source": "/api/(.*)",
+			"destination": "/api/$1"
+		}
+	],
+	"headers": [
+		{
+			"source": "/api/(.*)",
+			"headers": [
+				{
+					"key": "X-Content-Type-Options",
+					"value": "nosniff"
+				},
+				{
+					"key": "X-Frame-Options",
+					"value": "DENY"
+				},
+				{
+					"key": "X-XSS-Protection",
+					"value": "1; mode=block"
+				}
+			]
+		}
+	]
 }
