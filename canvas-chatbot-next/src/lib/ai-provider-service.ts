@@ -2,6 +2,7 @@ import { ConversationMessage, AIResponse } from './openrouter-service';
 import { OpenRouterService } from './openrouter-service';
 import { encrypt, decrypt } from './crypto';
 import { createServerClient } from '@supabase/ssr';
+import { getDefaultModelId } from './ai-sdk/openrouter';
 
 export interface AIProvider {
 	id: string;
@@ -230,9 +231,9 @@ export class AIProviderService {
 					'No active AI provider configured and no system API key available',
 				);
 			}
-			providerName = 'openrouter';
-			modelName = 'anthropic/claude-3.5-sonnet'; // Default model
-			apiKey = systemApiKey;
+            providerName = 'openrouter';
+            modelName = await getDefaultModelId();
+            apiKey = systemApiKey;
 		}
 
 		usedModelName =

@@ -48,10 +48,10 @@ export class OpenRouterService {
 	private baseURL = 'https://openrouter.ai/api/v1';
 	private model: string;
 
-	constructor(apiKey: string, model: string = 'anthropic/claude-3.5-sonnet') {
-		this.apiKey = apiKey;
-		this.model = model;
-	}
+    constructor(apiKey: string, model?: string) {
+        this.apiKey = apiKey;
+        this.model = model || '';
+    }
 
 	async generateResponse(
 		userQuery: string,

@@ -131,9 +131,9 @@ async function chatHandler(request: NextRequest) {
 				{ status: 500 },
 			);
 		}
-		let selectedModel = getDefaultModelId(
-			typeof model === 'string' ? model : undefined,
-		);
+        let selectedModel = await getDefaultModelId(
+            typeof model === 'string' ? model : undefined,
+        );
 		if (provider_id) {
 			const providerService = new AIProviderService();
 			try {
