@@ -98,7 +98,7 @@ function ChatShowcase() {
     <div className="mt-8 rounded-xl border border-slate-200 p-0">
       <Conversation className="relative size-full">
         <ConversationContent className="p-6">
-          <div ref={(el) => refs.current[0] = el} className={stepClass(0)}>
+          <div ref={(el) => { refs.current[0] = el }} className={stepClass(0)}>
             <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr] gap-4 items-start">
               <div className="min-w-0 space-y-3 md:order-1">
                 <AIMessage from="user">
@@ -116,7 +116,7 @@ function ChatShowcase() {
             </div>
           </div>
 
-          <div ref={(el) => refs.current[1] = el} className={stepClass(1)}>
+          <div ref={(el) => { refs.current[1] = el }} className={stepClass(1)}>
             <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr] gap-4 items-start">
               <div className="min-w-0 md:order-1">
                 <AIMessage from="assistant">
@@ -143,13 +143,13 @@ function ChatShowcase() {
             </div>
           </div>
 
-          <div ref={(el) => refs.current[2] = el} className={stepClass(2)}>
+          <div ref={(el) => { refs.current[2] = el }} className={stepClass(2)}>
             <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr] gap-4 items-start">
               <div className="min-w-0 overflow-x-auto md:order-1">
                 <AIMessage from="assistant">
                   <AIMessageContent className="w-fit max-w-[85%] min-w-0">
                     <Tool defaultOpen>
-                      <ToolHeader type="tool-canvas-fetch" state="completed" />
+                      <ToolHeader type="tool-canvas-fetch" state="output-available" />
                       <ToolContent>
                         <ToolInput input={{ action: 'fetch_course_context', course: 'Intro to Data Science', courseId: 'DS101', endpoints: ['modules', 'assignments', 'announcements'] }} />
                         <ToolOutput output={{
@@ -206,7 +206,7 @@ function ChatShowcase() {
             </div>
           </div>
 
-          <div ref={(el) => refs.current[3] = el} className={stepClass(3)}>
+          <div ref={(el) => { refs.current[3] = el }} className={stepClass(3)}>
             <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr] gap-4 items-start">
               <div className="min-w-0 md:order-1">
                 <AIMessage from="assistant">
@@ -282,7 +282,7 @@ function ChatShowcase() {
             </div>
           </div>
 
-          <div ref={(el) => refs.current[4] = el} className={stepClass(4)}>
+          <div ref={(el) => { refs.current[4] = el }} className={stepClass(4)}>
             <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr] gap-4 items-start">
               <div className="min-w-0 space-y-3 md:order-1">
                 <AIMessage from="assistant">
