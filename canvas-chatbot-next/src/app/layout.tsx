@@ -16,6 +16,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Lulu",
   description: "Lulu — Canvas chatbot and study assistant",
+  formatDetection: { telephone: false, email: false, address: false },
 };
 
 export default function RootLayout({
@@ -24,9 +25,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="h-full">
+    <html lang="en" className="h-full" suppressHydrationWarning>
       <body
         className={`h-full flex flex-col ${geistSans.variable} ${geistMono.variable} antialiased`}
+        suppressHydrationWarning
       >
         <MainNavBar />
         <div className="flex-1 min-h-0 overflow-x-hidden">{children}</div>
