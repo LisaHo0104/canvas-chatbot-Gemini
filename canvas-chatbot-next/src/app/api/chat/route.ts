@@ -20,8 +20,9 @@ import {
   SUMMARY_UPDATE_EVERY,
   SUMMARY_MAX_TOKENS,
 } from '@/lib/context-config';
+import { SEND_REASONING } from '@/lib/context-config';
 import { getDefaultModelId } from '@/lib/ai-sdk/openrouter';
-
+        
 async function chatHandler(request: NextRequest) {
 	try {
 		const body = await request.json();
@@ -35,7 +36,7 @@ async function chatHandler(request: NextRequest) {
 			model_override,
 			messages: incomingMessages,
 		} = body;
-
+        
 		const lastUserTextFromMessages = Array.isArray(incomingMessages)
 			? String(
 					(incomingMessages as UIMessage[])
@@ -47,19 +48,19 @@ async function chatHandler(request: NextRequest) {
 						.join('') || '',
 			  )
 			: '';
-
+        
 		const effectiveQuery =
 			typeof query === 'string' && query.trim().length > 0
 				? query
 				: lastUserTextFromMessages;
-
+        
 		if (!incomingMessages && !effectiveQuery) {
 			return new Response(
 				JSON.stringify({ error: 'Missing messages or query in request body' }),
 				{ status: 400 },
 			);
 		}
-
+        
 		const supabase = createServerClient(
 			process.env.NEXT_PUBLIC_SUPABASE_URL!,
 			process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_OR_ANON_KEY!,
@@ -76,7 +77,7 @@ async function chatHandler(request: NextRequest) {
 				},
 			},
 		);
-
+        
 		// Get current user
 		const {
 			data: { user },
@@ -87,7 +88,7 @@ async function chatHandler(request: NextRequest) {
 				status: 401,
 			});
 		}
-
+        
 		let canvasApiKey: string | undefined;
 		let canvasApiUrl: string | undefined;
 		if (canvas_token && canvas_url) {
@@ -115,12 +116,12 @@ async function chatHandler(request: NextRequest) {
 				}
 			}
 		}
-
+        
 		const tools =
 			canvasApiKey && canvasApiUrl
 				? createCanvasTools(canvasApiKey, canvasApiUrl)
 				: {};
-
+        
 		// Generate AI response
 		let aiResponse;
 		const sessionIdHeader = request.headers.get('x-session-id') || '';
@@ -130,7 +131,7 @@ async function chatHandler(request: NextRequest) {
 				: typeof (body as any)?.session_id === 'string'
 				? (body as any).session_id
 				: 'default';
-
+        
 		let apiKey =
 			process.env.OPENROUTER_API_KEY_OWNER || process.env.OPENROUTER_API_KEY;
 		if (!apiKey) {
@@ -307,7 +308,7 @@ async function chatHandler(request: NextRequest) {
 			},
 		});
 
-		return result.toUIMessageStreamResponse({ sendReasoning: true });
+		return result.toUIMessageStreamResponse({ sendReasoning: SEND_REASONING });
 	} catch (error) {
 		console.error('Chat API error:', error);
 		return new Response(
