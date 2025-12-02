@@ -12,6 +12,14 @@ import {
 } from 'ai';
 import { createOpenRouterProvider } from '@/lib/ai-sdk/openrouter';
 import { SYSTEM_PROMPT } from '@/lib/system-prompt';
+import { assembleContext, trimParts } from '@/lib/context-assembly';
+import {
+  MAX_CONTEXT_TOKENS,
+  MAX_HISTORY_TURNS,
+  MAX_PART_CHARS,
+  SUMMARY_UPDATE_EVERY,
+  SUMMARY_MAX_TOKENS,
+} from '@/lib/context-config';
 import { getDefaultModelId } from '@/lib/ai-sdk/openrouter';
 
 async function chatHandler(request: NextRequest) {
@@ -152,43 +160,49 @@ async function chatHandler(request: NextRequest) {
 
 		const openrouter = createOpenRouterProvider(apiKey);
 
-		const sanitizedIncoming: any[] = Array.isArray(incomingMessages)
-			? (incomingMessages as UIMessage[]).map((m: any) => ({
-					role: m.role,
-					parts: Array.isArray(m.parts)
-						? m.parts.filter(
-								(p: any) =>
-									p?.type === 'text' ||
-									p?.type === 'file' ||
-									p?.type === 'reasoning',
-						  )
-						: [],
-			  }))
-			: [];
+        const sanitizedIncoming: any[] = Array.isArray(incomingMessages)
+            ? (incomingMessages as UIMessage[]).map((m: any) => ({
+                    role: m.role,
+                    parts: trimParts(m.parts, MAX_PART_CHARS),
+              }))
+            : [];
 
-		const uiMessages: any[] =
-			sanitizedIncoming.length > 0
-				? [
-						{
-							role: 'system',
-							parts: [{ type: 'text', text: `${SYSTEM_PROMPT}` }],
-						},
-						...sanitizedIncoming,
-				  ]
-				: [
-						{
-							role: 'system',
-							parts: [{ type: 'text', text: `${SYSTEM_PROMPT}` }],
-						},
-						...history.map((m: any) => ({
-							role: m.role,
-							parts: [{ type: 'text', text: String(m.parts ?? '') }],
-						})),
-						{
-							role: 'user',
-							parts: [{ type: 'text', text: String(effectiveQuery) }],
-						},
-				  ];
+        let sessionSummary: string | undefined = undefined;
+        if (sessionId && sessionId !== 'default') {
+            try {
+                const { data: summaryRows } = await supabase
+                    .from('chat_messages')
+                    .select('content, metadata')
+                    .eq('session_id', sessionId)
+                    .eq('role', 'system')
+                    .order('created_at', { ascending: false })
+                    .limit(10);
+                const summaryMsg = (summaryRows || []).find((r: any) => r?.metadata?.type === 'summary');
+                sessionSummary = summaryMsg?.content || undefined;
+            } catch {}
+        }
+
+        const baseMessages: any[] =
+            sanitizedIncoming.length > 0
+                ? sanitizedIncoming
+                : [
+                        ...history.map((m: any) => ({
+                            role: m.role,
+                            parts: [{ type: 'text', text: String(m.parts ?? '') }],
+                        })),
+                        {
+                            role: 'user',
+                            parts: [{ type: 'text', text: String(effectiveQuery) }],
+                        },
+                  ];
+
+        const uiMessages: any[] = assembleContext({
+            systemPrompt: `${SYSTEM_PROMPT}`,
+            summaryText: sessionSummary,
+            messages: baseMessages as any,
+            maxTokens: MAX_CONTEXT_TOKENS,
+            maxTurns: MAX_HISTORY_TURNS,
+        });
 
 		const messages = convertToModelMessages(uiMessages);
 
@@ -233,15 +247,53 @@ async function chatHandler(request: NextRequest) {
 								.single();
 
 							const currentTitle = String(sessionRow?.title || '');
-							if (!currentTitle || currentTitle === 'New Chat') {
-								const newTitleBase = userText.substring(0, 50);
-								const newTitle =
-									newTitleBase + (userText.length > 50 ? '...' : '');
-								await supabase
-									.from('chat_sessions')
-									.update({ title: newTitle })
-									.eq('id', sessionId);
-							}
+                            if (!currentTitle || currentTitle === 'New Chat') {
+                                const newTitleBase = userText.substring(0, 50);
+                                const newTitle =
+                                    newTitleBase + (userText.length > 50 ? '...' : '');
+                                await supabase
+                                    .from('chat_sessions')
+                                    .update({ title: newTitle })
+                                    .eq('id', sessionId);
+                            }
+                            try {
+                                const { data: turnCountRows } = await supabase
+                                    .from('chat_messages')
+                                    .select('id')
+                                    .eq('session_id', sessionId);
+                                const turnCount = (turnCountRows || []).length;
+                                if (turnCount % SUMMARY_UPDATE_EVERY === 0) {
+                                    const summaryPrompt = `Summarize the key facts, goals, decisions, preferences, IDs and constraints from this conversation so far. Write concise bullet points that will help future answers without repeating chit-chat. Avoid restating the full dialogue.`;
+                                    const summaryContext = assembleContext({
+                                        systemPrompt: `${SYSTEM_PROMPT}`,
+                                        summaryText: sessionSummary,
+                                        messages: [
+                                            { role: 'user', parts: [{ type: 'text', text: userText }] },
+                                            { role: 'assistant', parts: [{ type: 'text', text: assistantText }] },
+                                            { role: 'user', parts: [{ type: 'text', text: summaryPrompt }] },
+                                        ] as any,
+                                        maxTokens: SUMMARY_MAX_TOKENS,
+                                        maxTurns: 8,
+                                    });
+                                    const summaryMessages = convertToModelMessages(summaryContext);
+                                    const summaryResult = await streamText({
+                                        model: openrouter.chat(selectedModel),
+                                        messages: summaryMessages,
+                                        toolChoice: 'none',
+                                        stopWhen: stepCountIs(4),
+                                    });
+                                    const summaryTextOut = await summaryResult.text();
+                                    await supabase.from('chat_messages').insert({
+                                        user_id: user.id,
+                                        session_id: sessionId,
+                                        role: 'system',
+                                        content: summaryTextOut,
+                                        metadata: { type: 'summary' },
+                                    });
+                                }
+                            } catch (summaryErr) {
+                                console.error('Summary update error:', summaryErr);
+                            }
 						} else {
 							console.error('Persist messages error:', insertError);
 						}
