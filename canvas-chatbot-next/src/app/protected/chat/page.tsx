@@ -23,6 +23,7 @@ import { AIProvider } from '@/lib/ai-provider-service'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
+import { MAX_DISPLAY_MESSAGES } from '@/lib/context-config'
 
 let supabase: any = null
 
@@ -78,6 +79,12 @@ export default function ChatPage() {
   const { messages: uiMessages, sendMessage: sendChatMessage, status, regenerate, addToolApprovalResponse, setMessages: setUIMessages } = useChat({
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
   })
+  const [showAllMessages, setShowAllMessages] = useState(false)
+  const visibleMessages = useMemo(() => {
+    if (showAllMessages) return uiMessages
+    const start = Math.max(0, uiMessages.length - MAX_DISPLAY_MESSAGES)
+    return uiMessages.slice(start)
+  }, [uiMessages, showAllMessages])
 
   const staticSuggestions = useMemo(() => [
     'Show my current courses',
@@ -697,7 +704,15 @@ export default function ChatPage() {
                 <p className="text-slate-600 mb-8">Ask about your courses, assignments, modules, or Canvas announcements. I’ll guide you.</p>
               </div>
             ) : (
-              uiMessages.map((message) => {
+              <>
+                {!showAllMessages && uiMessages.length > MAX_DISPLAY_MESSAGES && (
+                  <div className="max-w-3xl mx-auto mb-2 flex justify-center">
+                    <Button variant="outline" type="button" onClick={() => setShowAllMessages(true)}>
+                      Show earlier messages ({uiMessages.length - MAX_DISPLAY_MESSAGES})
+                    </Button>
+                  </div>
+                )}
+                {visibleMessages.map((message) => {
                 const fileParts = message.parts.filter((p) => p.type === 'file') as any[]
                 const textParts = message.parts.filter((p) => p.type === 'text') as any[]
                 const textDeltaParts = message.parts.filter((p) => (p as any).type === 'text-delta') as any[]
@@ -845,7 +860,8 @@ export default function ChatPage() {
                     </AIMessage>
                   </div>
                 )
-              })
+              })}
+              </>
             )}
             {(status === 'streaming' || status === 'submitted') && (
               <div className="flex flex-col items-start gap-2 p-2 rounded-md">
