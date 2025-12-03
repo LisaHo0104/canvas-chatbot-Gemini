@@ -9,7 +9,7 @@ import { AuthShell } from '@/components/auth/AuthShell'
 
 export default function Page() {
   return (
-    <AuthShell>
+    <AuthShell imageSrc="/dog_mail.png" imageAlt="Confirmation email illustration">
       <div className="flex flex-col gap-6">
         <Card>
           <CardHeader>
