@@ -108,10 +108,12 @@ async function chatHandler(request: NextRequest) {
 			}
 		}
 
-		const tools =
+		const tools: ReturnType<typeof createCanvasTools> | undefined =
 			canvasApiKey && canvasApiUrl
 				? createCanvasTools(canvasApiKey, canvasApiUrl)
-				: {};
+				: undefined;
+
+		const shouldUseCanvasTools = Boolean(canvasApiKey && canvasApiUrl);
 
 		// Generate AI response
 		let aiResponse;
@@ -199,6 +201,19 @@ async function chatHandler(request: NextRequest) {
 			tools,
 			toolChoice: 'auto',
 			stopWhen: stepCountIs(60),
+			prepareStep: async ({ stepNumber, steps }) => {
+				if (!shouldUseCanvasTools || !tools) return;
+				if (stepNumber === 0) return;
+				const prev = steps?.[stepNumber - 1] as any;
+				const prevCalls = Array.isArray(prev?.toolCalls) ? prev.toolCalls : [];
+				const names = prevCalls.map((c: any) => String(c.toolName || ''));
+				if (names.includes('list_courses')) {
+					return { toolChoice: 'required', activeTools: ['get_modules'] as any } as any;
+				}
+				if (names.includes('get_modules')) {
+					return { toolChoice: 'required', activeTools: ['get_page_content'] as any } as any;
+				}
+			},
 			onStepFinish: (step: any) => {
 				try {
 					stepsLog.push({
