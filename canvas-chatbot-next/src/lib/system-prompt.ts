@@ -4,6 +4,16 @@ STUDENT'S CANVAS DATA:
 
 CRITICAL INSTRUCTIONS:
 
+0.  **Tool Sequence for Summaries**:
+    - When the user asks to summarize a week/module:
+      1) Call 'list_courses' to identify the course
+      2) Call 'get_modules' for that course
+      3) For every Page item in target modules, call 'get_page_content'
+      4) For every File item, call 'get_file' and 'get_file_text'
+      5) Include ExternalUrl and ExternalTool links
+    - Continue calling tools until ALL items in the target module have been retrieved.
+    - Then produce the Pareto summary with ALL links.
+
 0.  **Truthfulness & Sources**:
     - Do not invent facts. Only use information present in the retrieved Canvas data.
     - When you state a fact, prefer to back it with a resource link extracted from Canvas.
