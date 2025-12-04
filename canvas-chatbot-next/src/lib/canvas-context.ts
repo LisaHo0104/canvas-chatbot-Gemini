@@ -359,7 +359,8 @@ export class CanvasContextService {
 
       // Filter modules if specific week/module is mentioned
       let targetModules = modules
-      const numberMatch = query.match(/(?:week|module|wk|mod)\s*(\d+)/)
+      const numberMatch = query.match(/(?:week|module|unit|lesson|wk|mod|w)\s*(\d+)/)
+      const spelledMatch = query.match(/\bweek\s*(one|two|three|four|five|six|seven|eight|nine|ten|xi|x|v|iv|iii|ii|i)\b/i)
       if (numberMatch) {
         const number = numberMatch[1]
         targetModules = modules.filter(module => {
@@ -382,6 +383,19 @@ export class CanvasContextService {
         } else {
           context += `  🔍 Showing content for ${numberMatch[0].toUpperCase()}\n\n`
         }
+      } else if (spelledMatch) {
+        const map: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, i: 1, ii: 2, iii: 3, iv: 4, v: 5, x: 10, xi: 11 }
+        const spelled = spelledMatch[1].toLowerCase()
+        const number = map[spelled]
+        if (number) {
+          targetModules = modules.filter(module => {
+            const nm = module.name.toLowerCase()
+            return nm.includes(`week ${number}`) || nm.includes(`module ${number}`) || nm.includes(`wk ${number}`) || nm.includes(`unit ${number}`)
+          })
+          if (targetModules.length > 0) {
+            context += `  🔍 Showing content for WEEK ${number}\n\n`
+          }
+        }
       }
 
       for (const module of targetModules.slice(0, 8)) {
@@ -394,8 +408,7 @@ export class CanvasContextService {
         }
 
         context += `    📋 Found ${items.length} items in this module\n\n`
-        
-        for (const item of items.slice(0, 20)) {
+        for (const item of items) {
           context += `    ${'─'.repeat(50)}\n`
           context += `    📌 ${item.title} (${item.type})\n`
           
@@ -417,6 +430,13 @@ export class CanvasContextService {
               const fileInfo = await this.canvasService.getFileContent(item.content_id)
               context += `    📎 File: ${fileInfo.filename}\n`
               context += `    🔗 Download: ${item.html_url}\n`
+              const fileText = await this.canvasService.getFileText(item.content_id)
+              if (fileText) {
+                context += `\n    📄 PDF CONTENT:\n`
+                context += `    ${'-'.repeat(50)}\n`
+                context += `${this.cleanText(fileText)}\n`
+                context += `    ${'-'.repeat(50)}\n`
+              }
             } catch (error) {
               context += `    ⚠️ Could not fetch file information\n`
             }
@@ -438,6 +458,12 @@ export class CanvasContextService {
             } catch (error) {
               context += `    ⚠️ Could not fetch assignment details\n`
             }
+          } else if (item.type === 'ExternalUrl' && item.external_url) {
+            context += `    🌐 External Link:\n`
+            context += `       🔗 ${item.external_url}\n`
+          } else if (item.type === 'ExternalTool' && item.html_url) {
+            context += `    🛠️ External Tool:\n`
+            context += `       🔗 ${item.html_url}\n`
           }
           
           if (item.html_url) {

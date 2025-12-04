@@ -159,5 +159,15 @@ export function createCanvasTools(token: string, url: string) {
 				return api.getFileContent(fileId);
 			},
 		}),
+
+		get_file_text: tool({
+			description: 'Extract text content from a Canvas file (PDF only)',
+			inputSchema: z.object({
+				fileId: z.number(),
+			}),
+			execute: async ({ fileId }: { fileId: number }) => {
+				return api.getFileText(fileId);
+			},
+		}),
 	};
 }

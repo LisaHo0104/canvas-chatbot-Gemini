@@ -1,4 +1,5 @@
 import axios from 'axios';
+// pdf-parse is loaded dynamically inside getFileText to avoid ESM/CJS default export issues
 
 export interface CanvasCourse {
 	id: number;
@@ -264,32 +265,35 @@ export class CanvasAPIService {
 
 	async getPageContent(courseId: number, pageUrl: string) {
 		try {
+			let finalSlug: string | null = null;
 			let response;
-
-			// Try direct URL first
-			if (pageUrl.startsWith('http')) {
-				try {
-					response = await axios.get(pageUrl, {
-						headers: this.getHeaders(),
-						timeout: 15000,
-					});
-				} catch (error) {
-					// If direct URL fails, try API endpoint
-					response = null;
+			const trimmed = String(pageUrl || '').trim();
+			if (trimmed.startsWith('http')) {
+				const mApi = trimmed.match(/\/courses\/(\d+)\/pages\/([a-z0-9\-_%]+)/i);
+				if (mApi && Number(mApi[1]) === Number(courseId)) {
+					finalSlug = mApi[2];
 				}
 			}
-
-			// If no response or failed, try API endpoint
-			if (!response) {
-				const apiPageUrl = `${this.baseURL}/courses/${courseId}/pages/${pageUrl}`;
+			if (finalSlug) {
+				const apiPageUrl = `${this.baseURL}/courses/${courseId}/pages/${finalSlug}`;
+				response = await axios.get(apiPageUrl, {
+					headers: this.getHeaders(),
+					timeout: 15000,
+				});
+			} else if (trimmed.startsWith('http')) {
+				response = await axios.get(trimmed, {
+					headers: this.getHeaders(),
+					timeout: 15000,
+				});
+			} else {
+				const apiPageUrl = `${this.baseURL}/courses/${courseId}/pages/${trimmed}`;
 				response = await axios.get(apiPageUrl, {
 					headers: this.getHeaders(),
 					timeout: 15000,
 				});
 			}
-
 			return response.data as CanvasPage;
-		} catch (error) {
+		} catch {
 			throw new Error('Failed to fetch page content');
 		}
 	}
@@ -381,6 +385,27 @@ export class CanvasAPIService {
 			return response.data;
 		} catch (error) {
 			throw new Error('Failed to download file');
+		}
+	}
+
+	async getFileText(fileId: number) {
+		try {
+			const meta = await this.getFileContent(fileId);
+			const url = meta.url;
+			const contentType = String((meta as any)['content-type'] || '').toLowerCase();
+			if (!url) return '';
+			const data = await this.downloadFile(url);
+			if (contentType.includes('pdf')) {
+				const buf = Buffer.from(data);
+				const mod: any = await import('pdf-parse');
+				const parser = typeof mod === 'function' ? mod : mod.default || mod.pdf || mod.parse;
+				if (!parser) return '';
+				const res = await parser(buf);
+				return String(res.text || '').trim();
+			}
+			return '';
+		} catch {
+			return '';
 		}
 	}
 }
