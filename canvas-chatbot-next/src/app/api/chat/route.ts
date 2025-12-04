@@ -113,9 +113,7 @@ async function chatHandler(request: NextRequest) {
 				? createCanvasTools(canvasApiKey, canvasApiUrl)
 				: undefined;
 
-		const { force_canvas_sequence } = body as any;
-		const shouldEnforceCanvasSequence =
-			Boolean(canvasApiKey && canvasApiUrl) && Boolean(force_canvas_sequence);
+		const shouldUseCanvasTools = Boolean(canvasApiKey && canvasApiUrl);
 
 		// Generate AI response
 		let aiResponse;
@@ -203,26 +201,17 @@ async function chatHandler(request: NextRequest) {
 			tools,
 			toolChoice: 'auto',
 			stopWhen: stepCountIs(60),
-			prepareStep: async ({ stepNumber }) => {
-				if (shouldEnforceCanvasSequence) {
-					if (stepNumber === 0) {
-						return {
-							toolChoice: { type: 'tool', toolName: 'list_courses' },
-							activeTools: ['list_courses'],
-						};
-					}
-					if (stepNumber === 1) {
-						return {
-							toolChoice: { type: 'tool', toolName: 'get_modules' },
-							activeTools: ['get_modules'],
-						};
-					}
-					if (stepNumber === 2) {
-						return {
-							toolChoice: { type: 'tool', toolName: 'get_page_content' },
-							activeTools: ['get_page_content'],
-						};
-					}
+			prepareStep: async ({ stepNumber, steps }) => {
+				if (!shouldUseCanvasTools || !tools) return;
+				if (stepNumber === 0) return;
+				const prev = steps?.[stepNumber - 1] as any;
+				const prevCalls = Array.isArray(prev?.toolCalls) ? prev.toolCalls : [];
+				const names = prevCalls.map((c: any) => String(c.toolName || ''));
+				if (names.includes('list_courses')) {
+					return { toolChoice: 'required', activeTools: ['get_modules'] as any } as any;
+				}
+				if (names.includes('get_modules')) {
+					return { toolChoice: 'required', activeTools: ['get_page_content'] as any } as any;
 				}
 			},
 			onStepFinish: (step: any) => {
