@@ -9,7 +9,7 @@ import { lastAssistantMessageIsCompleteWithApprovalResponses } from 'ai'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Conversation, ConversationContent, ConversationScrollButton } from '@/components/ai-elements/conversation'
 import { Message as AIMessage, MessageContent as AIMessageContent, MessageAction, MessageActions, MessageResponse, MessageAttachments, MessageAttachment } from '@/components/ai-elements/message'
-import { PromptInput, PromptInputActionMenu, PromptInputActionMenuContent, PromptInputActionMenuTrigger, PromptInputActionMenuItem, PromptInputActionAddAttachments, PromptInputBody, PromptInputFooter, PromptInputProvider, PromptInputSubmit, PromptInputTextarea, PromptInputTools, PromptInputButton, PromptInputSpeechButton } from '@/components/ai-elements/prompt-input'
+import { PromptInput, PromptInputActionMenu, PromptInputActionMenuContent, PromptInputActionMenuTrigger, PromptInputActionMenuItem, PromptInputActionAddAttachments, PromptInputBody, PromptInputFooter, PromptInputProvider, PromptInputSubmit, PromptInputTextarea, PromptInputTools, PromptInputButton, PromptInputSpeechButton, PromptInputAttachments, PromptInputAttachment } from '@/components/ai-elements/prompt-input'
 import { ModelSelector, ModelSelectorContent, ModelSelectorEmpty, ModelSelectorGroup, ModelSelectorInput, ModelSelectorItem, ModelSelectorList, ModelSelectorLogo, ModelSelectorLogoGroup, ModelSelectorName, ModelSelectorTrigger } from '@/components/ai-elements/model-selector'
 import { Sources, SourcesContent, SourcesTrigger, Source } from '@/components/ai-elements/sources'
 import { Suggestions, Suggestion } from '@/components/ai-elements/suggestion'
@@ -528,7 +528,7 @@ export default function ChatPage() {
       sessionForSend = created
     }
     await sendChatMessage(
-      { text: message.text },
+      { role: 'user', parts: [{ type: 'text', text: message.text }, ...(Array.isArray(message.files) ? message.files : [])] } as any,
       {
         body: {
           model: selectedModel,
@@ -883,7 +883,20 @@ export default function ChatPage() {
                 )
               )}
             </Suggestions>
-            <PromptInput className="px-4 pb-4 w-full" globalDrop multiple onSubmit={onSubmitAI}>
+            <PromptInput
+              className="px-4 pb-4 w-full"
+              globalDrop
+              multiple
+              accept="application/pdf,image/*"
+              maxFiles={4}
+              maxFileSize={10 * 1024 * 1024}
+              onSubmit={onSubmitAI}
+            >
+              <PromptInputAttachments>
+                {(file) => (
+                  <PromptInputAttachment data={file} />
+                )}
+              </PromptInputAttachments>
               <PromptInputBody>
                 <PromptInputTextarea ref={textareaRef} placeholder="Ask about your courses, assignments, modules..." className="w-full" />
               </PromptInputBody>
@@ -892,7 +905,7 @@ export default function ChatPage() {
                   <PromptInputActionMenu>
                     <PromptInputActionMenuTrigger />
                     <PromptInputActionMenuContent>
-                      <PromptInputActionAddAttachments disabled />
+                      <PromptInputActionAddAttachments />
                       <PromptInputActionMenuItem onSelect={(e) => { e.preventDefault(); setWebSearch(v => !v) }}>
                         {webSearch ? 'Disable Web Search' : 'Enable Web Search'}
                       </PromptInputActionMenuItem>
