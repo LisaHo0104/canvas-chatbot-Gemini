@@ -13,7 +13,6 @@ import {
 import { createOpenRouterProvider } from '@/lib/ai-sdk/openrouter';
 import { SYSTEM_PROMPT } from '@/lib/system-prompt';
 import { getDefaultModelId } from '@/lib/ai-sdk/openrouter';
-import { CanvasContextService } from '@/lib/canvas-context';
 
 async function chatHandler(request: NextRequest) {
 	try {
@@ -114,17 +113,6 @@ async function chatHandler(request: NextRequest) {
 				? createCanvasTools(canvasApiKey, canvasApiUrl)
 				: {};
 
-		// Prefetch Canvas context so the model has full page/file content and links
-		let canvasContext = '';
-		if (canvasApiKey && canvasApiUrl) {
-			try {
-				const ctxSvc = new CanvasContextService(canvasApiKey, canvasApiUrl);
-				canvasContext = await ctxSvc.buildContext(String(effectiveQuery || ''), user.id);
-			} catch (e) {
-				console.error('Canvas context prefetch error:', e);
-			}
-		}
-
 		// Generate AI response
 		let aiResponse;
 		const sessionIdHeader = request.headers.get('x-session-id') || '';
@@ -185,19 +173,13 @@ async function chatHandler(request: NextRequest) {
 							role: 'system',
 							parts: [{ type: 'text', text: `${SYSTEM_PROMPT}` }],
 						},
-						canvasContext
-							? { role: 'system', parts: [{ type: 'text', text: `STUDENT'S CANVAS DATA:\n${canvasContext}` }] }
-							: undefined,
 						...sanitizedIncoming,
-				  ].filter(Boolean)
+				  ]
 				: [
 						{
 							role: 'system',
 							parts: [{ type: 'text', text: `${SYSTEM_PROMPT}` }],
 						},
-						canvasContext
-							? { role: 'system', parts: [{ type: 'text', text: `STUDENT'S CANVAS DATA:\n${canvasContext}` }] }
-							: undefined,
 						...history.map((m: any) => ({
 							role: m.role,
 							parts: [{ type: 'text', text: String(m.parts ?? '') }],
@@ -206,7 +188,7 @@ async function chatHandler(request: NextRequest) {
 							role: 'user',
 							parts: [{ type: 'text', text: String(effectiveQuery) }],
 						},
-				  ].filter(Boolean);
+				  ];
 
 		const messages = convertToModelMessages(uiMessages);
 
@@ -215,7 +197,7 @@ async function chatHandler(request: NextRequest) {
 			messages,
 			tools,
 			toolChoice: 'auto',
-			stopWhen: stepCountIs(60),
+			stopWhen: stepCountIs(20),
 			onFinish: async ({ text }: any) => {
 				try {
 					const userText = String(effectiveQuery || '');

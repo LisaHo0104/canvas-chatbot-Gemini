@@ -1,5 +1,4 @@
 import axios from 'axios';
-// pdf-parse is loaded dynamically inside getFileText to avoid ESM/CJS default export issues
 
 export interface CanvasCourse {
 	id: number;
@@ -397,11 +396,16 @@ export class CanvasAPIService {
 			const data = await this.downloadFile(url);
 			if (contentType.includes('pdf')) {
 				const buf = Buffer.from(data);
-				const mod: any = await import('pdf-parse');
-				const parser = typeof mod === 'function' ? mod : mod.default || mod.pdf || mod.parse;
-				if (!parser) return '';
-				const res = await parser(buf);
-				return String(res.text || '').trim();
+				let pdfParseFn: any = null;
+				try {
+					const mod: any = await import('pdf-parse');
+					pdfParseFn = mod?.default || mod?.pdf || mod;
+				} catch {}
+				if (typeof pdfParseFn === 'function') {
+					const res = await pdfParseFn(buf);
+					return String(res?.text || '').trim();
+				}
+				return '';
 			}
 			return '';
 		} catch {
