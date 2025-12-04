@@ -14,6 +14,8 @@ import { createOpenRouterProvider } from '@/lib/ai-sdk/openrouter';
 import { SYSTEM_PROMPT } from '@/lib/system-prompt';
 import { getDefaultModelId } from '@/lib/ai-sdk/openrouter';
 
+export const maxDuration = 30;
+
 async function chatHandler(request: NextRequest) {
 	try {
 		const body = await request.json();
