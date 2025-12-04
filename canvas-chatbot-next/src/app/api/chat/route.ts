@@ -192,12 +192,22 @@ async function chatHandler(request: NextRequest) {
 
 		const messages = convertToModelMessages(uiMessages);
 
+		const stepsLog: any[] = [];
 		const result = streamText({
 			model: openrouter.chat(selectedModel),
 			messages,
 			tools,
 			toolChoice: 'auto',
-			stopWhen: stepCountIs(20),
+			stopWhen: stepCountIs(60),
+			onStepFinish: (step: any) => {
+				try {
+					stepsLog.push({
+						toolCalls: step?.toolCalls ?? [],
+						toolResults: step?.toolResults ?? [],
+						text: step?.text ?? '',
+					});
+				} catch {}
+			},
 			onFinish: async ({ text }: any) => {
 				try {
 					const userText = String(effectiveQuery || '');
@@ -221,6 +231,7 @@ async function chatHandler(request: NextRequest) {
 									metadata: {
 										provider_id: provider_id || null,
 										provider_type: 'configured',
+										steps_log: stepsLog,
 									},
 								},
 							]);
