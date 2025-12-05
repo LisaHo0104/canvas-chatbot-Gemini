@@ -230,34 +230,54 @@ export function createCanvasTools(token: string, url: string) {
 					: [];
 				const assessment = (submission as any).rubric_assessment || {};
 				const merged = rubric.map((c: any) => {
-					const a = assessment?.[c?.id] || assessment?.[String(c?.id)] || null;
+					const cid = c?.id ?? c?.criterion_id;
+					const a = assessment?.[cid as any] || assessment?.[String(cid)] || null;
+					const ratingsArr = Array.isArray(c?.ratings) ? c.ratings : [];
+					const computedPointsPossible =
+						typeof c?.points === 'number'
+							? c.points
+							: ratingsArr.length
+							? Math.max(
+								...ratingsArr.map((r: any) =>
+									typeof r?.points === 'number' ? r.points : 0,
+								),
+							)
+							: null;
+					let assessedPoints = typeof a?.points === 'number' ? a.points : null;
+					if (assessedPoints === null && a?.rating_id && ratingsArr.length) {
+						const match = ratingsArr.find(
+							(r: any) => String(r?.id ?? r?.rating_id ?? '') === String(a.rating_id),
+						);
+						const ratingPts = typeof match?.points === 'number' ? match.points : null;
+						if (typeof ratingPts === 'number') assessedPoints = ratingPts;
+					}
 					return {
-						id: String(c?.id || ''),
+						id: String(cid ?? ''),
 						description: c?.description ?? null,
 						long_description: c?.long_description ?? null,
-						points_possible: typeof c?.points === 'number' ? c.points : null,
-						ratings: Array.isArray(c?.ratings)
-							? c.ratings.map((r: any) => ({
-								description: r?.description ?? null,
-								points: typeof r?.points === 'number' ? r.points : null,
-							}))
-							: undefined,
-						assessed_points: typeof a?.points === 'number' ? a.points : null,
+						points_possible: computedPointsPossible,
+						ratings: ratingsArr.map((r: any) => ({
+							description: r?.description ?? null,
+							points: typeof r?.points === 'number' ? r.points : null,
+						})),
+						assessed_points: assessedPoints,
 						assessed_comments: a?.comments ?? null,
 					};
 				});
-				const pointsPossible = rubric.reduce(
-					(sum: number, c: any) => sum + (typeof c?.points === 'number' ? c.points : 0),
+				const pointsPossible = merged.reduce(
+					(sum: number, c: any) => sum + (typeof c?.points_possible === 'number' ? c.points_possible : 0),
 					0,
 				);
-				const pointsEarned = Object.values(assessment).reduce(
-					(sum: number, v: any) => sum + (typeof (v as any)?.points === 'number' ? (v as any).points : 0),
+				const pointsEarned = merged.reduce(
+					(sum: number, c: any) => sum + (typeof c?.assessed_points === 'number' ? c.assessed_points : 0),
 					0,
 				);
 				const percentage = pointsPossible > 0 ? (pointsEarned / pointsPossible) * 100 : null;
 				return {
 					rubric: merged,
-					submissionComments: (submission as any).submission_comments,
+					submissionComments: Array.isArray((submission as any).submission_comments)
+						? (submission as any).submission_comments
+						: [],
 					grade: (submission as any).grade ?? null,
 					score: submission?.score ?? null,
 					totals: {
