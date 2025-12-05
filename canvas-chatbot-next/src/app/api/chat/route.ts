@@ -16,6 +16,7 @@ import { SYSTEM_PROMPT } from '@/lib/system-prompt';
 import { getDefaultModelId } from '@/lib/ai-sdk/openrouter';
 
 export const maxDuration = 30;
+export const runtime = 'nodejs';
 
 async function chatHandler(request: NextRequest) {
 	try {
@@ -229,20 +230,20 @@ async function chatHandler(request: NextRequest) {
 				: typeof (body as any)?.smooth_stream_delay_ms === 'number'
 				? (body as any).smooth_stream_delay_ms
 				: 20;
-		const result = streamText({
-			model: openrouter.chat(selectedModel),
-			messages,
-			tools,
-			toolChoice: shouldUseCanvasTools ? 'auto' : 'none',
-			experimental_transform: smoothStream({
-				delayInMs: 20, // optional: defaults to 10ms
-    			chunking: 'word', // optional: defaults to 'word'
-			}),
-			stopWhen: stepCountIs(80),
-			prepareStep: async ({ stepNumber, steps }) => {
-				if (!shouldUseCanvasTools || !tools) return;
-				if (stepNumber === 0) return;
-				const prev = steps?.[stepNumber - 1] as any;
+        const result = streamText({
+            model: openrouter.chat(selectedModel),
+            messages,
+            tools,
+            toolChoice: shouldUseCanvasTools ? 'auto' : 'none',
+            experimental_transform: smoothStream({
+                delayInMs: delayInMs ?? 20,
+                chunking,
+            }),
+            stopWhen: stepCountIs(80),
+            prepareStep: async ({ stepNumber, steps }) => {
+                if (!shouldUseCanvasTools || !tools) return;
+                if (stepNumber === 0) return;
+                const prev = steps?.[stepNumber - 1] as any;
 				const prevCalls = Array.isArray(prev?.toolCalls) ? prev.toolCalls : [];
 				const names = prevCalls.map((c: any) => String(c.toolName || ''));
 				const prevResults = Array.isArray(prev?.toolResults) ? prev.toolResults : [];
