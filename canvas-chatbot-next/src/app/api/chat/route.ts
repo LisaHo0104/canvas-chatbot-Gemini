@@ -9,6 +9,7 @@ import {
 	convertToModelMessages,
 	stepCountIs,
 	type UIMessage,
+    smoothStream,
 } from 'ai';
 import { createOpenRouterProvider } from '@/lib/ai-sdk/openrouter';
 import { SYSTEM_PROMPT } from '@/lib/system-prompt';
@@ -197,11 +198,46 @@ async function chatHandler(request: NextRequest) {
 		const messages = convertToModelMessages(uiMessages);
 
 		const stepsLog: any[] = [];
+
+		const preferredChunking =
+			typeof (body as any)?.smooth_stream_chunking === 'string'
+				? (body as any).smooth_stream_chunking
+				: undefined;
+		const cjkRegex = /[\u4E00-\u9FFF]/;
+		const jpRegex = /[\u3040-\u309F\u30A0-\u30FF]/;
+		let chunking: 'word' | 'line' | RegExp = 'word';
+		if (preferredChunking === 'line') {
+			chunking = 'line';
+		} else if (preferredChunking === 'japanese') {
+			chunking = /[\u3040-\u309F\u30A0-\u30FF]|\S+\s+/;
+		} else if (
+			preferredChunking === 'cjk' ||
+			preferredChunking === 'chinese'
+		) {
+			chunking = /[\u4E00-\u9FFF]|\S+\s+/;
+		} else {
+			const eq = String(effectiveQuery || '');
+			if (jpRegex.test(eq)) {
+				chunking = /[\u3040-\u309F\u30A0-\u30FF]|\S+\s+/;
+			} else if (cjkRegex.test(eq)) {
+				chunking = /[\u4E00-\u9FFF]|\S+\s+/;
+			}
+		}
+		const delayInMs: number | null =
+			(body as any)?.smooth_stream_delay_ms === null
+				? null
+				: typeof (body as any)?.smooth_stream_delay_ms === 'number'
+				? (body as any).smooth_stream_delay_ms
+				: 20;
 		const result = streamText({
 			model: openrouter.chat(selectedModel),
 			messages,
 			tools,
 			toolChoice: shouldUseCanvasTools ? 'auto' : 'none',
+			experimental_transform: smoothStream({
+				delayInMs: 20, // optional: defaults to 10ms
+    			chunking: 'word', // optional: defaults to 'word'
+			}),
 			stopWhen: stepCountIs(80),
 			prepareStep: async ({ stepNumber, steps }) => {
 				if (!shouldUseCanvasTools || !tools) return;
