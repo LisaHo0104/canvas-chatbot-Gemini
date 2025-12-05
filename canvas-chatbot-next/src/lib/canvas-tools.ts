@@ -230,8 +230,22 @@ export function createCanvasTools(token: string, url: string) {
 					: [];
 				const assessment = (submission as any).rubric_assessment || {};
 				const merged = rubric.map((c: any) => {
-					const cid = c?.id ?? c?.criterion_id;
-					const a = assessment?.[cid as any] || assessment?.[String(cid)] || null;
+					const primaryId = c?.id ?? c?.criterion_id;
+					const keys = [
+						primaryId,
+						String(primaryId),
+						c?.criterion_id,
+						String(c?.criterion_id),
+						primaryId != null ? `criterion_${String(primaryId)}` : null,
+						c?.criterion_id != null ? `criterion_${String(c?.criterion_id)}` : null,
+					].filter((k) => typeof k === 'string' && k.length > 0);
+					let a: any = null;
+					for (const k of keys as any[]) {
+						if (assessment && Object.prototype.hasOwnProperty.call(assessment, k)) {
+							a = (assessment as any)[k];
+							break;
+						}
+					}
 					const ratingsArr = Array.isArray(c?.ratings) ? c.ratings : [];
 					const computedPointsPossible =
 						typeof c?.points === 'number'
@@ -252,7 +266,7 @@ export function createCanvasTools(token: string, url: string) {
 						if (typeof ratingPts === 'number') assessedPoints = ratingPts;
 					}
 					return {
-						id: String(cid ?? ''),
+						id: String(primaryId ?? c?.criterion_id ?? ''),
 						description: c?.description ?? null,
 						long_description: c?.long_description ?? null,
 						points_possible: computedPointsPossible,
@@ -261,6 +275,7 @@ export function createCanvasTools(token: string, url: string) {
 							points: typeof r?.points === 'number' ? r.points : null,
 						})),
 						assessed_points: assessedPoints,
+						your_score: assessedPoints,
 						assessed_comments: a?.comments ?? null,
 					};
 				});

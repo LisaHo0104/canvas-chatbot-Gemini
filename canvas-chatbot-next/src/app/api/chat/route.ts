@@ -201,8 +201,8 @@ async function chatHandler(request: NextRequest) {
 			model: openrouter.chat(selectedModel),
 			messages,
 			tools,
-			toolChoice: 'auto',
-			stopWhen: stepCountIs(30),
+			toolChoice: shouldUseCanvasTools ? 'auto' : 'none',
+			stopWhen: stepCountIs(80),
 			prepareStep: async ({ stepNumber, steps }) => {
 				if (!shouldUseCanvasTools || !tools) return;
 				if (stepNumber === 0) return;
