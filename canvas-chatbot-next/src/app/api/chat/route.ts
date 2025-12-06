@@ -2,7 +2,6 @@ import { NextRequest } from 'next/server';
 import { createRouteHandlerClient } from '@/lib/supabase/server';
 import { decrypt } from '@/lib/crypto';
 import { createCanvasTools } from '@/lib/canvas-tools';
-import { AIProviderService } from '@/lib/ai-provider-service';
 import { rateLimitMiddleware } from '@/lib/rate-limit';
 import { randomUUID } from 'crypto';
 import {
@@ -27,9 +26,8 @@ async function chatHandler(request: NextRequest) {
 			history = [],
 			canvas_token,
 			canvas_url,
-			provider_id,
-			model,
-			model_override,
+            model,
+            model_override,
 			messages: incomingMessages,
 		} = body;
 
@@ -137,21 +135,9 @@ async function chatHandler(request: NextRequest) {
 		let selectedModel = await getDefaultModelId(
 			typeof model === 'string' ? model : undefined,
 		);
-		if (provider_id) {
-			const providerService = new AIProviderService();
-			try {
-				const providers = await providerService.getUserProviders(user.id);
-				const picked = providers.find((p: any) => p.id === provider_id);
-				if (picked) {
-					apiKey = decrypt(picked.api_key_encrypted);
-					selectedModel =
-						typeof model_override === 'string' &&
-						model_override.trim().length > 0
-							? model_override
-							: picked.model_name;
-				}
-			} catch {}
-		}
+        if (typeof model_override === 'string' && model_override.trim().length > 0) {
+            selectedModel = model_override;
+        }
 
 		const openrouter = createOpenRouterProvider(apiKey);
 
@@ -299,7 +285,8 @@ async function chatHandler(request: NextRequest) {
 			},
 		});
 
-		const response = result.toUIMessageStreamResponse({
+        console.log('[DEBUG] Using model', selectedModel);
+        const response = result.toUIMessageStreamResponse({
 			originalMessages: uiMessages,
 			sendReasoning: true,
 			onFinish: async ({ messages }) => {
@@ -348,10 +335,9 @@ async function chatHandler(request: NextRequest) {
 									session_id: sessionId,
 									role: 'assistant',
 									ui_parts: lastAssistantMessage.parts,
-									metadata: {
-										provider_id: provider_id || null,
-										provider_type: 'configured',
-									},
+                                metadata: {
+                                        provider_type: 'system',
+                                },
 								},
 							];
 

@@ -1,7 +1,6 @@
 import { NextRequest } from 'next/server';
 import { createRouteHandlerClient } from '@/lib/supabase/server';
 import { decrypt } from '@/lib/crypto';
-import { AIProviderService } from '@/lib/ai-provider-service';
 import { rateLimitMiddleware } from '@/lib/rate-limit';
 import {
 	generateObject,
@@ -20,9 +19,8 @@ async function suggestionsHandler(request: NextRequest) {
 		const body = await request.json();
 		const {
 			messages: incomingMessages,
-			provider_id,
-			model,
-			model_override,
+            model,
+            model_override,
 			max_suggestions = 4,
 		} = body;
 
@@ -50,21 +48,9 @@ async function suggestionsHandler(request: NextRequest) {
 		let selectedModel = await getDefaultModelId(
 			typeof model === 'string' ? model : undefined,
 		);
-		if (provider_id) {
-			const providerService = new AIProviderService();
-			try {
-				const providers = await providerService.getUserProviders(user.id);
-				const picked = providers.find((p: any) => p.id === provider_id);
-				if (picked) {
-					apiKey = decrypt(picked.api_key_encrypted);
-					selectedModel =
-						typeof model_override === 'string' &&
-						model_override.trim().length > 0
-							? model_override
-							: picked.model_name;
-				}
-			} catch {}
-		}
+        if (typeof model_override === 'string' && model_override.trim().length > 0) {
+            selectedModel = model_override;
+        }
 
 		const openrouter = createOpenRouterProvider(apiKey);
 
@@ -101,7 +87,8 @@ async function suggestionsHandler(request: NextRequest) {
 
 		const messages = convertToModelMessages(uiMessages);
 
-		const { object } = await generateObject({
+        console.log('[DEBUG] Suggestions model', selectedModel);
+        const { object } = await generateObject({
 			model: openrouter.chat(selectedModel),
 			schema: jsonSchema<{ suggestions: string[] }>({
 				type: 'object',

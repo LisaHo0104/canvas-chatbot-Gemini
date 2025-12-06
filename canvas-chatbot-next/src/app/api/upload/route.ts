@@ -55,25 +55,8 @@ export async function POST(request: NextRequest) {
 				content.substring(0, 50000) + '\n\n[Content truncated due to length]';
 		}
 
-		// Save file upload record to database (optional)
-		try {
-			const { error: fileError } = await supabase.from('file_uploads').insert([
-				{
-					user_id: user.id,
-					filename: filename,
-					file_size: file.size,
-					content_preview: content.substring(0, 500),
-					created_at: new Date().toISOString(),
-				},
-			]);
-
-			if (fileError) {
-				console.error('Error saving file upload record:', fileError);
-			}
-		} catch (error) {
-			console.error('Error saving file upload to database:', error);
-			// Don't fail the request if database save fails
-		}
+		// File upload record saving was removed as part of database cleanup
+		// The file_uploads table has been dropped
 
 		return NextResponse.json({
 			success: true,

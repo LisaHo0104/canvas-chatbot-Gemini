@@ -19,7 +19,7 @@ import { ToolRenderer } from '@/components/canvas-tools/tool-renderer'
 import type { ToolUIPart } from 'ai'
 import { Shimmer } from '@/components/ai-elements/shimmer'
 import EnhancedSidebar from '@/components/EnhancedSidebar'
-import { AIProvider } from '@/lib/ai-provider-service'
+import { AIProvider } from '@/types/ai-providers'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
@@ -427,13 +427,9 @@ export default function ChatPage() {
 
   const loadAIProviders = async () => {
     try {
-      const response = await fetch('/api/ai-providers', { credentials: 'include' })
-      if (response.ok) {
-        const data = await response.json()
-        setAiProviders(data.providers)
-        const active = data.providers.find((p: AIProvider) => p.is_active)
-        setActiveProvider(active || null)
-      }
+      console.log('[DEBUG] loadAIProviders disabled; returning empty providers')
+      setAiProviders([])
+      setActiveProvider(null)
     } catch (error) {
       console.error('Error loading AI providers:', error)
     }
@@ -484,6 +480,7 @@ export default function ChatPage() {
         .single()
 
       if (error) {
+        // eslint-disable-next-line no-console
         console.error('Error creating session:', error)
         return null
       }
@@ -512,6 +509,7 @@ export default function ChatPage() {
         return newSession
       }
     } catch (error) {
+      // eslint-disable-next-line no-console
       console.error('Error creating session:', error)
     }
     return null
@@ -543,15 +541,12 @@ export default function ChatPage() {
     await sendChatMessage(
       { role: 'user', parts: [{ type: 'text', text: message.text }, ...(Array.isArray(message.files) ? message.files : [])] } as any,
       {
-        body: {
-          model: selectedModel,
-          webSearch,
-          canvas_token: canvasStatus === 'connected' ? canvasToken : undefined,
-          canvas_url: canvasStatus === 'connected' ? canvasUrl : undefined,
-          provider_id: activeProvider?.id,
-          model_override:
-            activeProvider?.provider_name === 'openrouter' ? selectedModel : undefined,
-        },
+          body: {
+            model: selectedModel,
+            webSearch,
+            canvas_token: canvasStatus === 'connected' ? canvasToken : undefined,
+            canvas_url: canvasStatus === 'connected' ? canvasUrl : undefined,
+          },
         headers: { 'X-Session-ID': sessionForSend.id },
       },
     )
