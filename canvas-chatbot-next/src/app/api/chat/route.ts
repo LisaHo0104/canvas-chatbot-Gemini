@@ -5,14 +5,12 @@ import { createCanvasTools } from '@/lib/canvas-tools';
 import { rateLimitMiddleware } from '@/lib/rate-limit';
 import { randomUUID } from 'crypto';
 import {
-	streamText,
 	convertToModelMessages,
-	stepCountIs,
 	type UIMessage,
 	smoothStream,
+	ToolLoopAgent,
 } from 'ai';
 import { createOpenRouterProvider } from '@/lib/ai-sdk/openrouter';
-import { SYSTEM_PROMPT } from '@/lib/system-prompt';
 import { getDefaultModelId } from '@/lib/ai-sdk/openrouter';
 
 export const maxDuration = 300;
@@ -21,39 +19,29 @@ export const runtime = 'nodejs';
 async function chatHandler(request: NextRequest) {
 	try {
 		const body = await request.json();
-		const {
-			query,
-			history = [],
-			canvas_token,
-			canvas_url,
-            model,
-            model_override,
-			messages: incomingMessages,
-		} = body;
+		const { model, messages: incomingMessages } = body;
 
-		const lastUserTextFromMessages = Array.isArray(incomingMessages)
-			? String(
-					(incomingMessages as UIMessage[])
-						.slice()
-						.reverse()
-						.find((m) => m.role === 'user')
-						?.parts.filter((p: any) => p.type === 'text')
-						.map((p: any) => String(p.text || ''))
-						.join('') || '',
-			  )
-			: '';
-
-		const effectiveQuery =
-			typeof query === 'string' && query.trim().length > 0
-				? query
-				: lastUserTextFromMessages;
-
-		if (!incomingMessages && !effectiveQuery) {
+		if (
+			!incomingMessages ||
+			!Array.isArray(incomingMessages) ||
+			incomingMessages.length === 0
+		) {
 			return new Response(
-				JSON.stringify({ error: 'Missing messages or query in request body' }),
+				JSON.stringify({ error: 'Missing messages in request body' }),
 				{ status: 400 },
 			);
 		}
+
+		// Extract the text content of the last user message for processing
+		const currentMessageContent = String(
+			(incomingMessages as UIMessage[])
+				.slice()
+				.reverse()
+				.find((m) => m.role === 'user')
+				?.parts.filter((p: any) => p.type === 'text')
+				.map((p: any) => String(p.text || ''))
+				.join('') || '',
+		);
 
 		const supabase = createRouteHandlerClient(request);
 
@@ -70,29 +58,25 @@ async function chatHandler(request: NextRequest) {
 
 		let canvasApiKey: string | undefined;
 		let canvasApiUrl: string | undefined;
-		if (canvas_token && canvas_url) {
-			canvasApiKey = canvas_token;
-			canvasApiUrl = canvas_url;
-		} else {
-			const { data: userData, error: userError } = await supabase
-				.from('profiles')
-				.select('canvas_api_key_encrypted, canvas_api_url')
-				.eq('id', user.id)
-				.single();
-			if (
-				!userError &&
-				userData?.canvas_api_key_encrypted &&
-				userData?.canvas_api_url
-			) {
-				try {
-					canvasApiKey = decrypt(userData.canvas_api_key_encrypted);
-					canvasApiUrl = userData.canvas_api_url;
-				} catch (error) {
-					return new Response(
-						JSON.stringify({ error: 'Failed to decrypt Canvas API key' }),
-						{ status: 500 },
-					);
-				}
+
+		const { data: userData, error: userError } = await supabase
+			.from('profiles')
+			.select('canvas_api_key_encrypted, canvas_api_url')
+			.eq('id', user.id)
+			.single();
+		if (
+			!userError &&
+			userData?.canvas_api_key_encrypted &&
+			userData?.canvas_api_url
+		) {
+			try {
+				canvasApiKey = decrypt(userData.canvas_api_key_encrypted);
+				canvasApiUrl = userData.canvas_api_url;
+			} catch {
+				return new Response(
+					JSON.stringify({ error: 'Failed to decrypt Canvas API key' }),
+					{ status: 500 },
+				);
 			}
 		}
 
@@ -104,7 +88,6 @@ async function chatHandler(request: NextRequest) {
 		const shouldUseCanvasTools = Boolean(canvasApiKey && canvasApiUrl);
 
 		// Generate AI response
-		let aiResponse;
 		const sessionIdHeader = request.headers.get('x-session-id') || '';
 		let sessionId =
 			sessionIdHeader && sessionIdHeader !== 'default'
@@ -124,7 +107,7 @@ async function chatHandler(request: NextRequest) {
 			}
 		}
 
-		let apiKey =
+		const apiKey =
 			process.env.OPENROUTER_API_KEY_OWNER || process.env.OPENROUTER_API_KEY;
 		if (!apiKey) {
 			return new Response(
@@ -132,161 +115,120 @@ async function chatHandler(request: NextRequest) {
 				{ status: 500 },
 			);
 		}
-		let selectedModel = await getDefaultModelId(
+		const selectedModel = await getDefaultModelId(
 			typeof model === 'string' ? model : undefined,
 		);
-        if (typeof model_override === 'string' && model_override.trim().length > 0) {
-            selectedModel = model_override;
-        }
 
 		const openrouter = createOpenRouterProvider(apiKey);
 
-		const sanitizedIncoming: any[] = Array.isArray(incomingMessages)
-			? (incomingMessages as UIMessage[]).map((m: any) => ({
-					role: m.role,
-					parts: Array.isArray(m.parts)
-						? m.parts.filter(
-								(p: any) =>
-									p?.type === 'text' ||
-									p?.type === 'file' ||
-									p?.type === 'reasoning',
-						  )
-						: [],
-			  }))
-			: [];
+		// We pass the incoming messages directly to convertToModelMessages.
+		// The AI SDK's convertToModelMessages function handles the conversion of UI messages
+		// (including tool invocations, text, files, etc.) into the format required by the model.
+		// Manual filtering is unnecessary and can cause issues (e.g. missing tool contexts).
+		const uiMessages = incomingMessages;
 
-		const uiMessages: any[] =
-			sanitizedIncoming.length > 0
-				? [
-						{
-							role: 'system',
-							parts: [{ type: 'text', text: `${SYSTEM_PROMPT}` }],
-						},
-						...sanitizedIncoming,
-				  ]
-				: [
-						{
-							role: 'system',
-							parts: [{ type: 'text', text: `${SYSTEM_PROMPT}` }],
-						},
-						...history.map((m: any) => ({
-							role: m.role,
-							parts: [{ type: 'text', text: String(m.parts ?? '') }],
-						})),
-						{
-							role: 'user',
-							parts: [{ type: 'text', text: String(effectiveQuery) }],
-						},
-				  ];
-
-		const messages = convertToModelMessages(uiMessages);
+		const messages = convertToModelMessages(uiMessages as UIMessage[]);
 
 		const cjkRegex = /[\u4E00-\u9FFF]/;
 		const jpRegex = /[\u3040-\u309F\u30A0-\u30FF]/;
 		let chunking: 'word' | 'line' | RegExp = 'word';
-		const eq = String(effectiveQuery || '');
+		const eq = String(currentMessageContent || '');
 		if (jpRegex.test(eq)) {
 			chunking = /[\u3040-\u309F\u30A0-\u30FF]|\S+\s+/;
 		} else if (cjkRegex.test(eq)) {
 			chunking = /[\u4E00-\u9FFF]|\S+\s+/;
 		}
 		const delayInMs = 10;
-		const result = streamText({
+		const agent = new ToolLoopAgent({
 			model: openrouter.chat(selectedModel),
-			messages,
 			tools,
-			toolChoice: shouldUseCanvasTools ? 'auto' : 'none',
+			prepareStep: async ({ messages, stepNumber, steps }) => {
+				console.log(
+					`[DEBUG] Step ${stepNumber}: Input messages count: ${messages.length}`,
+				);
+				const contextUpdate =
+					messages.length > 20
+						? { messages: [messages[0], ...messages.slice(-10)] }
+						: {};
+
+				const simplifyContent = (content: any) => {
+					if (typeof content === 'string') {
+						return '[String Content]';
+					}
+					if (Array.isArray(content)) {
+						return content.map((part: any) => {
+							if (part.type === 'text') {
+								return {
+									type: 'text',
+									meta: `Length: ${part.text.length}`,
+								};
+							}
+							if (part.type === 'tool-call') {
+								return {
+									type: 'tool-call',
+									toolName: part.toolName,
+									callId: part.toolCallId,
+								};
+							}
+							if (part.type === 'tool-result') {
+								return {
+									type: 'tool-result',
+									toolName: part.toolName,
+									callId: part.toolCallId,
+									isError: !!part.isError,
+								};
+							}
+							return { type: part.type };
+						});
+					}
+					return '[Unknown Content Type]';
+				};
+
+				if (contextUpdate.messages) {
+					console.log(
+						`[DEBUG] Step ${stepNumber}: Context truncated. Keeping system message + last 10 messages.`,
+					);
+					console.log(
+						'[DEBUG] Truncated Context Messages:',
+						JSON.stringify(
+							contextUpdate.messages.map((m: any) => ({
+								role: m.role,
+								content: simplifyContent(m.content),
+							})),
+							null,
+							2,
+						),
+					);
+				} else {
+					console.log(
+						'[DEBUG] Full Context Messages (No Truncation):',
+						JSON.stringify(
+							messages.map((m: any) => ({
+								role: m.role,
+								content: simplifyContent(m.content),
+							})),
+							null,
+							2,
+						),
+					);
+				}
+
+				if (!shouldUseCanvasTools || !tools) return contextUpdate;
+
+				return contextUpdate;
+			},
+		});
+
+		const result = await agent.stream({
+			messages,
 			experimental_transform: smoothStream({
 				delayInMs,
 				chunking,
 			}),
-			stopWhen: stepCountIs(80),
-			prepareStep: async ({ stepNumber, steps }) => {
-				if (!shouldUseCanvasTools || !tools) return;
-				if (stepNumber === 0) return;
-				const prev = steps?.[stepNumber - 1] as any;
-				const prevCalls = Array.isArray(prev?.toolCalls) ? prev.toolCalls : [];
-				const names = prevCalls.map((c: any) => String(c.toolName || ''));
-				const prevResults = Array.isArray(prev?.toolResults)
-					? prev.toolResults
-					: [];
-				const q = String(effectiveQuery || '').toLowerCase();
-				const needAssignments = /assignments?/.test(q);
-				const needGrade = /(grade|score|points|graded)/.test(q);
-				const needFeedback = /(feedback|rubric|comments?)/.test(q);
-				const needModules = /modules?/.test(q);
-				const needPage = /(page|content)/.test(q);
-				const hasGrade = prevResults.some(
-					(r: any) =>
-						r?.result && (r.result.grade != null || r.result.score != null),
-				);
-				const hasFeedback = prevResults.some(
-					(r: any) =>
-						r?.result &&
-						(Array.isArray(r.result?.rubric) ||
-							Array.isArray(r.result?.submissionComments)),
-				);
-				if (names.includes('list_courses')) {
-					if (needGrade || needFeedback || needAssignments) {
-						return {
-							toolChoice: 'required',
-							activeTools: ['get_assignments'] as any,
-						} as any;
-					}
-					if (needModules || needPage) {
-						return {
-							toolChoice: 'required',
-							activeTools: ['get_modules'] as any,
-						} as any;
-					}
-					return;
-				}
-				if (names.includes('get_assignments')) {
-					if (needGrade || needFeedback) {
-						return {
-							toolChoice: 'required',
-							activeTools: ['get_assignment_grade'] as any,
-						} as any;
-					}
-					return;
-				}
-				if (names.includes('get_assignment_grade')) {
-					if (hasGrade && !needFeedback) return;
-					if (needFeedback) {
-						return {
-							toolChoice: 'required',
-							activeTools: ['get_assignment_feedback_and_rubric'] as any,
-						} as any;
-					}
-					return;
-				}
-				if (names.includes('get_assignment_feedback_and_rubric')) {
-					if (hasFeedback) return;
-					if (needModules || needPage) {
-						return {
-							toolChoice: 'required',
-							activeTools: ['get_modules'] as any,
-						} as any;
-					}
-					return;
-				}
-				if (names.includes('get_modules')) {
-					if (needPage) {
-						return {
-							toolChoice: 'required',
-							activeTools: ['get_page_content'] as any,
-						} as any;
-					}
-					return;
-				}
-			},
-			onError: (err: any) => {
-				console.error('Stream error:', err);
-			},
 		});
 
-        console.log('[DEBUG] Using model', selectedModel);
-        const response = result.toUIMessageStreamResponse({
+		console.log('[DEBUG] Using model', selectedModel);
+		const response = result.toUIMessageStreamResponse({
 			originalMessages: uiMessages,
 			sendReasoning: true,
 			onFinish: async ({ messages }) => {
@@ -315,10 +257,7 @@ async function chatHandler(request: NextRequest) {
 								.filter((p: any) => p.type === 'text')
 								.map((p: any) => (p as any).text || '')
 								.join('');
-							const assistantText = lastAssistantMessage.parts
-								.filter((p: any) => p.type === 'text')
-								.map((p: any) => (p as any).text || '')
-								.join('');
+							// assistantText variable removed as it was unused
 
 							const messagesToInsert = [
 								{
@@ -335,15 +274,30 @@ async function chatHandler(request: NextRequest) {
 									session_id: sessionId,
 									role: 'assistant',
 									ui_parts: lastAssistantMessage.parts,
-                                metadata: {
-                                        provider_type: 'system',
-                                },
+									metadata: {
+										provider_type: 'system',
+									},
 								},
 							];
 
 							console.log(
 								'[DEBUG] Attempting to insert messages:',
-								JSON.stringify(messagesToInsert, null, 2),
+								JSON.stringify(
+									messagesToInsert.map((m) => ({
+										id: m.id,
+										role: m.role,
+										session_id: m.session_id,
+										parts_count: m.ui_parts.length,
+										parts_summary: m.ui_parts.map((p: any) => {
+											if (p.type === 'text') return `text(${p.text.length})`;
+											if (p.type === 'tool-invocation')
+												return `tool(${p.toolName})`;
+											return p.type;
+										}),
+									})),
+									null,
+									2,
+								),
 							);
 
 							const { error: insertError } = await supabase
