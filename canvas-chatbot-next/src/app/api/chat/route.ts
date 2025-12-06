@@ -14,6 +14,7 @@ import {
 import { createOpenRouterProvider } from '@/lib/ai-sdk/openrouter';
 import { SYSTEM_PROMPT } from '@/lib/system-prompt';
 import { getDefaultModelId } from '@/lib/ai-sdk/openrouter';
+import { createWebTools } from '@/lib/web-tools';
 
 export const maxDuration = 300;
 export const runtime = 'nodejs';
@@ -30,6 +31,7 @@ async function chatHandler(request: NextRequest) {
 			model,
 			model_override,
 			messages: incomingMessages,
+			webSearch,
 		} = body;
 
 		const lastUserTextFromMessages = Array.isArray(incomingMessages)
@@ -112,12 +114,21 @@ async function chatHandler(request: NextRequest) {
 			}
 		}
 
-		const tools: ReturnType<typeof createCanvasTools> | undefined =
+		const canvasTools: ReturnType<typeof createCanvasTools> | undefined =
 			canvasApiKey && canvasApiUrl
 				? createCanvasTools(canvasApiKey, canvasApiUrl)
 				: undefined;
 
+		const webTools = createWebTools();
 		const shouldUseCanvasTools = Boolean(canvasApiKey && canvasApiUrl);
+		const shouldUseWebTools = Boolean(webSearch === true);
+		const hasSearchProvider = Boolean(
+			process.env.TAVILY_API_KEY || process.env.BRAVE_API_KEY,
+		);
+		const combinedTools = {
+			...(shouldUseCanvasTools && canvasTools ? canvasTools : {}),
+			...(shouldUseWebTools ? webTools : {}),
+		};
 
 		// Generate AI response
 		let aiResponse;
@@ -183,19 +194,27 @@ async function chatHandler(request: NextRequest) {
 			  }))
 			: [];
 
+		const systemText = shouldUseWebTools
+			? `${SYSTEM_PROMPT}\n\nWhen web search is enabled, you must ground every factual statement in fetched website content. Use the available tools (search_web, fetch_page) to retrieve information. Include inline citations like [1], [2] and a Sources section with full https:// links. If no reliable source is found, say so and do not speculate.${
+				hasSearchProvider
+					? ''
+					: '\n\nIf no web search provider is configured, do not attempt web search. You may still read a pasted URL with fetch_page. Inform the user to configure TAVILY_API_KEY or BRAVE_API_KEY.'
+			}`
+			: `${SYSTEM_PROMPT}`;
+
 		const uiMessages: any[] =
 			sanitizedIncoming.length > 0
 				? [
 						{
 							role: 'system',
-							parts: [{ type: 'text', text: `${SYSTEM_PROMPT}` }],
+							parts: [{ type: 'text', text: systemText }],
 						},
 						...sanitizedIncoming,
 				  ]
 				: [
 						{
 							role: 'system',
-							parts: [{ type: 'text', text: `${SYSTEM_PROMPT}` }],
+							parts: [{ type: 'text', text: systemText }],
 						},
 						...history.map((m: any) => ({
 							role: m.role,
@@ -222,23 +241,39 @@ async function chatHandler(request: NextRequest) {
 		const result = streamText({
 			model: openrouter.chat(selectedModel),
 			messages,
-			tools,
-			toolChoice: shouldUseCanvasTools ? 'auto' : 'none',
+			tools: combinedTools,
+			toolChoice: shouldUseCanvasTools || shouldUseWebTools ? 'auto' : 'none',
 			experimental_transform: smoothStream({
 				delayInMs,
 				chunking,
 			}),
 			stopWhen: stepCountIs(80),
 			prepareStep: async ({ stepNumber, steps }) => {
-				if (!shouldUseCanvasTools || !tools) return;
 				if (stepNumber === 0) return;
 				const prev = steps?.[stepNumber - 1] as any;
 				const prevCalls = Array.isArray(prev?.toolCalls) ? prev.toolCalls : [];
 				const names = prevCalls.map((c: any) => String(c.toolName || ''));
-				const prevResults = Array.isArray(prev?.toolResults)
-					? prev.toolResults
+				const prevResults = Array.isArray(prev?.toolResults) ? prev.toolResults : [];
+				const allResults = Array.isArray(steps)
+					? (steps as any[])
+							.flatMap((s: any) => (Array.isArray(s?.toolResults) ? s.toolResults : []))
 					: [];
 				const q = String(effectiveQuery || '').toLowerCase();
+
+				if (shouldUseWebTools) {
+					const urlPattern = /^(https?:\/\/)?([\w.-]+)\.[a-z]{2,}(\/[^\s]*)?$/i;
+					const looksLikeUrl = /https?:\/\//.test(q) || urlPattern.test(q);
+					const hasFetchedAnyPage = allResults.some((r: any) => r?.toolName === 'fetch_page' && r?.result?.content);
+					if (looksLikeUrl && !hasFetchedAnyPage) {
+						return { toolChoice: 'required', activeTools: ['fetch_page'] } as any;
+					}
+					const hasSearchedAny = allResults.some((r: any) => r?.toolName === 'search_web');
+					if (!looksLikeUrl && hasSearchProvider && !hasSearchedAny) {
+						return { toolChoice: 'required', activeTools: ['search_web'] } as any;
+					}
+				}
+
+				if (!shouldUseCanvasTools || !canvasTools) return;
 				const needAssignments = /assignments?/.test(q);
 				const needGrade = /(grade|score|points|graded)/.test(q);
 				const needFeedback = /(feedback|rubric|comments?)/.test(q);
