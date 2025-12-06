@@ -9,13 +9,13 @@ import {
 	convertToModelMessages,
 	stepCountIs,
 	type UIMessage,
-    smoothStream,
+	smoothStream,
 } from 'ai';
 import { createOpenRouterProvider } from '@/lib/ai-sdk/openrouter';
 import { SYSTEM_PROMPT } from '@/lib/system-prompt';
 import { getDefaultModelId } from '@/lib/ai-sdk/openrouter';
 
-export const maxDuration = 30;
+export const maxDuration = 300;
 export const runtime = 'nodejs';
 
 async function chatHandler(request: NextRequest) {
@@ -137,9 +137,9 @@ async function chatHandler(request: NextRequest) {
 				{ status: 500 },
 			);
 		}
-        let selectedModel = await getDefaultModelId(
-            typeof model === 'string' ? model : undefined,
-        );
+		let selectedModel = await getDefaultModelId(
+			typeof model === 'string' ? model : undefined,
+		);
 		if (provider_id) {
 			const providerService = new AIProviderService();
 			try {
@@ -211,10 +211,7 @@ async function chatHandler(request: NextRequest) {
 			chunking = 'line';
 		} else if (preferredChunking === 'japanese') {
 			chunking = /[\u3040-\u309F\u30A0-\u30FF]|\S+\s+/;
-		} else if (
-			preferredChunking === 'cjk' ||
-			preferredChunking === 'chinese'
-		) {
+		} else if (preferredChunking === 'cjk' || preferredChunking === 'chinese') {
 			chunking = /[\u4E00-\u9FFF]|\S+\s+/;
 		} else {
 			const eq = String(effectiveQuery || '');
@@ -230,63 +227,91 @@ async function chatHandler(request: NextRequest) {
 				: typeof (body as any)?.smooth_stream_delay_ms === 'number'
 				? (body as any).smooth_stream_delay_ms
 				: 20;
-        const result = streamText({
-            model: openrouter.chat(selectedModel),
-            messages,
-            tools,
-            toolChoice: shouldUseCanvasTools ? 'auto' : 'none',
-            experimental_transform: smoothStream({
-                delayInMs: delayInMs ?? 20,
-                chunking,
-            }),
-            stopWhen: stepCountIs(80),
-            prepareStep: async ({ stepNumber, steps }) => {
-                if (!shouldUseCanvasTools || !tools) return;
-                if (stepNumber === 0) return;
-                const prev = steps?.[stepNumber - 1] as any;
+		const result = streamText({
+			model: openrouter.chat(selectedModel),
+			messages,
+			tools,
+			toolChoice: shouldUseCanvasTools ? 'auto' : 'none',
+			experimental_transform: smoothStream({
+				delayInMs: delayInMs ?? 20,
+				chunking,
+			}),
+			stopWhen: stepCountIs(80),
+			prepareStep: async ({ stepNumber, steps }) => {
+				if (!shouldUseCanvasTools || !tools) return;
+				if (stepNumber === 0) return;
+				const prev = steps?.[stepNumber - 1] as any;
 				const prevCalls = Array.isArray(prev?.toolCalls) ? prev.toolCalls : [];
 				const names = prevCalls.map((c: any) => String(c.toolName || ''));
-				const prevResults = Array.isArray(prev?.toolResults) ? prev.toolResults : [];
+				const prevResults = Array.isArray(prev?.toolResults)
+					? prev.toolResults
+					: [];
 				const q = String(effectiveQuery || '').toLowerCase();
 				const needAssignments = /assignments?/.test(q);
 				const needGrade = /(grade|score|points|graded)/.test(q);
 				const needFeedback = /(feedback|rubric|comments?)/.test(q);
 				const needModules = /modules?/.test(q);
 				const needPage = /(page|content)/.test(q);
-				const hasGrade = prevResults.some((r: any) => r?.result && (r.result.grade != null || r.result.score != null));
-				const hasFeedback = prevResults.some((r: any) => r?.result && (Array.isArray(r.result?.rubric) || Array.isArray(r.result?.submissionComments)));
+				const hasGrade = prevResults.some(
+					(r: any) =>
+						r?.result && (r.result.grade != null || r.result.score != null),
+				);
+				const hasFeedback = prevResults.some(
+					(r: any) =>
+						r?.result &&
+						(Array.isArray(r.result?.rubric) ||
+							Array.isArray(r.result?.submissionComments)),
+				);
 				if (names.includes('list_courses')) {
 					if (needGrade || needFeedback || needAssignments) {
-						return { toolChoice: 'required', activeTools: ['get_assignments'] as any } as any;
+						return {
+							toolChoice: 'required',
+							activeTools: ['get_assignments'] as any,
+						} as any;
 					}
 					if (needModules || needPage) {
-						return { toolChoice: 'required', activeTools: ['get_modules'] as any } as any;
+						return {
+							toolChoice: 'required',
+							activeTools: ['get_modules'] as any,
+						} as any;
 					}
 					return;
 				}
 				if (names.includes('get_assignments')) {
 					if (needGrade || needFeedback) {
-						return { toolChoice: 'required', activeTools: ['get_assignment_grade'] as any } as any;
+						return {
+							toolChoice: 'required',
+							activeTools: ['get_assignment_grade'] as any,
+						} as any;
 					}
 					return;
 				}
 				if (names.includes('get_assignment_grade')) {
 					if (hasGrade && !needFeedback) return;
 					if (needFeedback) {
-						return { toolChoice: 'required', activeTools: ['get_assignment_feedback_and_rubric'] as any } as any;
+						return {
+							toolChoice: 'required',
+							activeTools: ['get_assignment_feedback_and_rubric'] as any,
+						} as any;
 					}
 					return;
 				}
 				if (names.includes('get_assignment_feedback_and_rubric')) {
 					if (hasFeedback) return;
 					if (needModules || needPage) {
-						return { toolChoice: 'required', activeTools: ['get_modules'] as any } as any;
+						return {
+							toolChoice: 'required',
+							activeTools: ['get_modules'] as any,
+						} as any;
 					}
 					return;
 				}
 				if (names.includes('get_modules')) {
 					if (needPage) {
-						return { toolChoice: 'required', activeTools: ['get_page_content'] as any } as any;
+						return {
+							toolChoice: 'required',
+							activeTools: ['get_page_content'] as any,
+						} as any;
 					}
 					return;
 				}
