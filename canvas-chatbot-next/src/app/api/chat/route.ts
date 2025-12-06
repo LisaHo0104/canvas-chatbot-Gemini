@@ -200,40 +200,23 @@ async function chatHandler(request: NextRequest) {
 
 		const stepsLog: any[] = [];
 
-		const preferredChunking =
-			typeof (body as any)?.smooth_stream_chunking === 'string'
-				? (body as any).smooth_stream_chunking
-				: undefined;
 		const cjkRegex = /[\u4E00-\u9FFF]/;
 		const jpRegex = /[\u3040-\u309F\u30A0-\u30FF]/;
 		let chunking: 'word' | 'line' | RegExp = 'word';
-		if (preferredChunking === 'line') {
-			chunking = 'line';
-		} else if (preferredChunking === 'japanese') {
+		const eq = String(effectiveQuery || '');
+		if (jpRegex.test(eq)) {
 			chunking = /[\u3040-\u309F\u30A0-\u30FF]|\S+\s+/;
-		} else if (preferredChunking === 'cjk' || preferredChunking === 'chinese') {
+		} else if (cjkRegex.test(eq)) {
 			chunking = /[\u4E00-\u9FFF]|\S+\s+/;
-		} else {
-			const eq = String(effectiveQuery || '');
-			if (jpRegex.test(eq)) {
-				chunking = /[\u3040-\u309F\u30A0-\u30FF]|\S+\s+/;
-			} else if (cjkRegex.test(eq)) {
-				chunking = /[\u4E00-\u9FFF]|\S+\s+/;
-			}
 		}
-		const delayInMs: number | null =
-			(body as any)?.smooth_stream_delay_ms === null
-				? null
-				: typeof (body as any)?.smooth_stream_delay_ms === 'number'
-				? (body as any).smooth_stream_delay_ms
-				: 20;
+		const delayInMs = 10;
 		const result = streamText({
 			model: openrouter.chat(selectedModel),
 			messages,
 			tools,
 			toolChoice: shouldUseCanvasTools ? 'auto' : 'none',
 			experimental_transform: smoothStream({
-				delayInMs: delayInMs ?? 20,
+				delayInMs,
 				chunking,
 			}),
 			stopWhen: stepCountIs(80),
