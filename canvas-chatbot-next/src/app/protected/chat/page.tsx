@@ -551,7 +551,7 @@ export default function ChatPage() {
     setDynamicSuggestions([])
     const { data, error } = await supabase
       .from('chat_messages')
-      .select('*')
+      .select('id, role, ui_parts, metadata, created_at')
       .eq('session_id', session.id)
       .order('created_at', { ascending: true })
 
@@ -559,14 +559,19 @@ export default function ChatPage() {
       const loadedMessages = data.map((msg: any) => ({
         id: msg.id,
         role: msg.role,
-        content: msg.content,
+        content: Array.isArray(msg.ui_parts)
+          ? msg.ui_parts
+              .filter((p: any) => p?.type === 'text')
+              .map((p: any) => String(p.text || ''))
+              .join('')
+          : '',
         timestamp: new Date(msg.created_at),
         provider_type: msg.metadata?.provider_type,
         provider_id: msg.metadata?.provider_id,
       }))
 
       setMessages(loadedMessages)
-      const uiHistory = loadedMessages.map((m: any) => ({ id: m.id, role: m.role, parts: [{ type: 'text', text: m.content }] }))
+      const uiHistory = data.map((msg: any) => ({ id: msg.id, role: msg.role, parts: Array.isArray(msg.ui_parts) ? msg.ui_parts : [] }))
       setUIMessages(uiHistory as any)
       try {
         const lastAssistantInHistory = [...uiHistory].reverse().find((m: any) => m.role === 'assistant')

@@ -198,8 +198,6 @@ async function chatHandler(request: NextRequest) {
 
 		const messages = convertToModelMessages(uiMessages);
 
-		const stepsLog: any[] = [];
-
 		const cjkRegex = /[\u4E00-\u9FFF]/;
 		const jpRegex = /[\u3040-\u309F\u30A0-\u30FF]/;
 		let chunking: 'word' | 'line' | RegExp = 'word';
@@ -299,74 +297,84 @@ async function chatHandler(request: NextRequest) {
 					return;
 				}
 			},
-			onStepFinish: (step: any) => {
-				try {
-					stepsLog.push({
-						toolCalls: step?.toolCalls ?? [],
-						toolResults: step?.toolResults ?? [],
-						text: step?.text ?? '',
-					});
-				} catch {}
+			onError: (err: any) => {
+				console.error('Stream error:', err);
 			},
-			onFinish: async ({ text }: any) => {
+		});
+
+		return result.toUIMessageStreamResponse({
+			sendReasoning: true,
+			onFinish: async ({ messages }) => {
 				try {
-					const userText = String(effectiveQuery || '');
-					const assistantText = String(text || '');
-					if (sessionId && sessionId !== 'default' && userText) {
-						const { error: insertError } = await supabase
-							.from('chat_messages')
-							.insert([
-								{
-									user_id: user.id,
-									session_id: sessionId,
-									role: 'user',
-									content: userText,
-									metadata: null,
-								},
-								{
-									user_id: user.id,
-									session_id: sessionId,
-									role: 'assistant',
-									content: assistantText,
-									metadata: {
-										provider_id: provider_id || null,
-										provider_type: 'configured',
-										steps_log: stepsLog,
+					if (sessionId && sessionId !== 'default') {
+						// Find the last user message and the generated assistant message
+						// We iterate from the end to find the latest interaction
+						const lastUserMessage = [...messages]
+							.reverse()
+							.find((m) => m.role === 'user');
+						const lastAssistantMessage = [...messages]
+							.reverse()
+							.find((m) => m.role === 'assistant');
+
+						if (lastUserMessage && lastAssistantMessage) {
+							const userText = lastUserMessage.parts
+								.filter((p) => p.type === 'text')
+								.map((p) => (p as any).text || '')
+								.join('');
+							const assistantText = lastAssistantMessage.parts
+								.filter((p) => p.type === 'text')
+								.map((p) => (p as any).text || '')
+								.join('');
+
+							const { error: insertError } = await supabase
+								.from('chat_messages')
+								.insert([
+									{
+										user_id: user.id,
+										session_id: sessionId,
+										role: 'user',
+										ui_parts: lastUserMessage.parts,
+										metadata: null,
 									},
-								},
-							]);
+									{
+										user_id: user.id,
+										session_id: sessionId,
+										role: 'assistant',
+										ui_parts: lastAssistantMessage.parts,
+										metadata: {
+											provider_id: provider_id || null,
+											provider_type: 'configured',
+										},
+									},
+								]);
 
-						if (!insertError) {
-							const { data: sessionRow } = await supabase
-								.from('chat_sessions')
-								.select('title')
-								.eq('id', sessionId)
-								.single();
-
-							const currentTitle = String(sessionRow?.title || '');
-							if (!currentTitle || currentTitle === 'New Chat') {
-								const newTitleBase = userText.substring(0, 50);
-								const newTitle =
-									newTitleBase + (userText.length > 50 ? '...' : '');
-								await supabase
+							if (!insertError) {
+								const { data: sessionRow } = await supabase
 									.from('chat_sessions')
-									.update({ title: newTitle })
-									.eq('id', sessionId);
+									.select('title')
+									.eq('id', sessionId)
+									.single();
+
+								const currentTitle = String(sessionRow?.title || '');
+								if (!currentTitle || currentTitle === 'New Chat') {
+									const newTitleBase = userText.substring(0, 50);
+									const newTitle =
+										newTitleBase + (userText.length > 50 ? '...' : '');
+									await supabase
+										.from('chat_sessions')
+										.update({ title: newTitle })
+										.eq('id', sessionId);
+								}
+							} else {
+								console.error('Persist messages error:', insertError);
 							}
-						} else {
-							console.error('Persist messages error:', insertError);
 						}
 					}
 				} catch (persistError) {
 					console.error('Server-side persistence error:', persistError);
 				}
 			},
-			onError: (err: any) => {
-				console.error('Stream error:', err);
-			},
 		});
-
-		return result.toUIMessageStreamResponse({ sendReasoning: true });
 	} catch (error) {
 		console.error('Chat API error:', error);
 		return new Response(
