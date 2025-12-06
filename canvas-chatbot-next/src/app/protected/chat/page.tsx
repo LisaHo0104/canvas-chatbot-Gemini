@@ -12,6 +12,7 @@ import { Message as AIMessage, MessageContent as AIMessageContent, MessageAction
 import { PromptInput, PromptInputActionMenu, PromptInputActionMenuContent, PromptInputActionMenuTrigger, PromptInputActionMenuItem, PromptInputActionAddAttachments, PromptInputBody, PromptInputFooter, PromptInputProvider, PromptInputSubmit, PromptInputTextarea, PromptInputTools, PromptInputButton, PromptInputSpeechButton, PromptInputAttachments, PromptInputAttachment } from '@/components/ai-elements/prompt-input'
 import { ModelSelector, ModelSelectorContent, ModelSelectorEmpty, ModelSelectorGroup, ModelSelectorInput, ModelSelectorItem, ModelSelectorList, ModelSelectorLogo, ModelSelectorLogoGroup, ModelSelectorName, ModelSelectorTrigger } from '@/components/ai-elements/model-selector'
 import { Sources, SourcesContent, SourcesTrigger, Source } from '@/components/ai-elements/sources'
+import { InlineCitationRenderer } from '@/components/ai-elements/inline-citation-renderer'
 import { Suggestions, Suggestion } from '@/components/ai-elements/suggestion'
 import { Reasoning, ReasoningContent, ReasoningTrigger } from '@/components/ai-elements/reasoning'
 import { Tool, ToolHeader, ToolContent, ToolInput, ToolOutput } from '@/components/ai-elements/tool'
@@ -719,6 +720,7 @@ export default function ChatPage() {
                 const reasoningDeltaParts = message.parts.filter((p) => (p as any).type === 'reasoning-delta') as any[]
 
                 const isMessageStreaming = message.role === 'assistant' && (textDeltaParts.length > 0 || reasoningDeltaParts.length > 0)
+                const sourceParts = message.parts.filter((p) => p.type === 'source-url') as any[]
                 return (
                   <div key={message.id}>
                     {message.role === 'assistant' && message.parts.filter((p) => p.type === 'source-url').length > 0 && (
@@ -744,6 +746,17 @@ export default function ChatPage() {
                           const type = part.type
 
                           if (type === 'text') {
+                            const useInlineCitations = message.role === 'assistant' && sourceParts.length > 0 && !isMessageStreaming
+                            if (useInlineCitations) {
+                              console.log('[DEBUG] Rendering InlineCitation for assistant message', { count: sourceParts.length })
+                              return (
+                                <InlineCitationRenderer
+                                  key={`${message.id}-text-${idx}`}
+                                  text={(part as any).text || ''}
+                                  sources={sourceParts.map((sp: any, sidx: number) => ({ url: String(sp.url || ''), number: String(sidx + 1) }))}
+                                />
+                              )
+                            }
                             return (
                               <MessageResponse key={`${message.id}-text-${idx}`}>
                                 {part.text}
