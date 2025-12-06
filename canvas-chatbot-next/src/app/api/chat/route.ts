@@ -1,9 +1,9 @@
 import { NextRequest } from 'next/server';
-import { createServerClient } from '@supabase/ssr';
+import { createRouteHandlerClient } from '@/lib/supabase/server';
 import { decrypt } from '@/lib/crypto';
 import { createCanvasTools } from '@/lib/canvas-tools';
-import { AIProviderService } from '@/lib/ai-provider-service';
 import { rateLimitMiddleware } from '@/lib/rate-limit';
+import { randomUUID } from 'crypto';
 import {
 	streamText,
 	convertToModelMessages,
@@ -27,9 +27,8 @@ async function chatHandler(request: NextRequest) {
 			history = [],
 			canvas_token,
 			canvas_url,
-			provider_id,
-			model,
-			model_override,
+            model,
+            model_override,
 			messages: incomingMessages,
 			webSearch,
 		} = body;
@@ -58,22 +57,7 @@ async function chatHandler(request: NextRequest) {
 			);
 		}
 
-		const supabase = createServerClient(
-			process.env.NEXT_PUBLIC_SUPABASE_URL!,
-			process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_OR_ANON_KEY!,
-			{
-				cookies: {
-					getAll() {
-						return request.cookies.getAll();
-					},
-					setAll(cookiesToSet) {
-						cookiesToSet.forEach(({ name, value, options }) => {
-							request.cookies.set(name, value);
-						});
-					},
-				},
-			},
-		);
+		const supabase = createRouteHandlerClient(request);
 
 		// Get current user
 		const {
@@ -162,21 +146,9 @@ async function chatHandler(request: NextRequest) {
 		let selectedModel = await getDefaultModelId(
 			typeof model === 'string' ? model : undefined,
 		);
-		if (provider_id) {
-			const providerService = new AIProviderService();
-			try {
-				const providers = await providerService.getUserProviders(user.id);
-				const picked = providers.find((p: any) => p.id === provider_id);
-				if (picked) {
-					apiKey = decrypt(picked.api_key_encrypted);
-					selectedModel =
-						typeof model_override === 'string' &&
-						model_override.trim().length > 0
-							? model_override
-							: picked.model_name;
-				}
-			} catch {}
-		}
+        if (typeof model_override === 'string' && model_override.trim().length > 0) {
+            selectedModel = model_override;
+        }
 
 		const openrouter = createOpenRouterProvider(apiKey);
 
@@ -348,9 +320,15 @@ async function chatHandler(request: NextRequest) {
 			},
 		});
 
-		const response = result.toUIMessageStreamResponse({
+        console.log('[DEBUG] Using model', selectedModel);
+        const response = result.toUIMessageStreamResponse({
+			originalMessages: uiMessages,
 			sendReasoning: true,
 			onFinish: async ({ messages }) => {
+				console.log('[DEBUG] onFinish triggered', {
+					sessionId,
+					messageCount: messages.length,
+				});
 				try {
 					if (sessionId && sessionId !== 'default') {
 						// Find the last user message and the generated assistant message
@@ -362,39 +340,53 @@ async function chatHandler(request: NextRequest) {
 							.reverse()
 							.find((m) => m.role === 'assistant');
 
+						console.log('[DEBUG] Messages found:', {
+							hasUserMessage: !!lastUserMessage,
+							hasAssistantMessage: !!lastAssistantMessage,
+						});
+
 						if (lastUserMessage && lastAssistantMessage) {
 							const userText = lastUserMessage.parts
-								.filter((p) => p.type === 'text')
-								.map((p) => (p as any).text || '')
+								.filter((p: any) => p.type === 'text')
+								.map((p: any) => (p as any).text || '')
 								.join('');
 							const assistantText = lastAssistantMessage.parts
-								.filter((p) => p.type === 'text')
-								.map((p) => (p as any).text || '')
+								.filter((p: any) => p.type === 'text')
+								.map((p: any) => (p as any).text || '')
 								.join('');
+
+							const messagesToInsert = [
+								{
+									id: randomUUID(),
+									user_id: user.id,
+									session_id: sessionId,
+									role: 'user',
+									ui_parts: lastUserMessage.parts,
+									metadata: {},
+								},
+								{
+									id: randomUUID(),
+									user_id: user.id,
+									session_id: sessionId,
+									role: 'assistant',
+									ui_parts: lastAssistantMessage.parts,
+                                metadata: {
+                                        provider_type: 'system',
+                                },
+								},
+							];
+
+							console.log(
+								'[DEBUG] Attempting to insert messages:',
+								JSON.stringify(messagesToInsert, null, 2),
+							);
 
 							const { error: insertError } = await supabase
 								.from('chat_messages')
-								.insert([
-									{
-										user_id: user.id,
-										session_id: sessionId,
-										role: 'user',
-										ui_parts: lastUserMessage.parts,
-										metadata: null,
-									},
-									{
-										user_id: user.id,
-										session_id: sessionId,
-										role: 'assistant',
-										ui_parts: lastAssistantMessage.parts,
-										metadata: {
-											provider_id: provider_id || null,
-											provider_type: 'configured',
-										},
-									},
-								]);
+								.insert(messagesToInsert);
 
 							if (!insertError) {
+								console.log('[DEBUG] Messages persisted successfully');
 								const { data: sessionRow } = await supabase
 									.from('chat_sessions')
 									.select('title')
@@ -412,12 +404,17 @@ async function chatHandler(request: NextRequest) {
 										.eq('id', sessionId);
 								}
 							} else {
-								console.error('Persist messages error:', insertError);
+								console.error('[DEBUG] Persist messages error:', insertError);
 							}
 						}
+					} else {
+						console.log(
+							'[DEBUG] Skipping persistence: Invalid session ID',
+							sessionId,
+						);
 					}
 				} catch (persistError) {
-					console.error('Server-side persistence error:', persistError);
+					console.error('[DEBUG] Server-side persistence error:', persistError);
 				}
 			},
 		});

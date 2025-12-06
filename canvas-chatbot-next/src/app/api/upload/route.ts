@@ -1,24 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@supabase/ssr';
+import { createRouteHandlerClient } from '@/lib/supabase/server';
 
 export async function POST(request: NextRequest) {
 	try {
-		const supabase = createServerClient(
-			process.env.NEXT_PUBLIC_SUPABASE_URL!,
-			process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_OR_ANON_KEY!,
-			{
-				cookies: {
-					getAll() {
-						return request.cookies.getAll();
-					},
-					setAll(cookiesToSet) {
-						cookiesToSet.forEach(({ name, value, options }) => {
-							request.cookies.set(name, value);
-						});
-					},
-				},
-			},
-		);
+		const supabase = createRouteHandlerClient(request);
 
 		// Get current user
 		const {
@@ -70,25 +55,8 @@ export async function POST(request: NextRequest) {
 				content.substring(0, 50000) + '\n\n[Content truncated due to length]';
 		}
 
-		// Save file upload record to database (optional)
-		try {
-			const { error: fileError } = await supabase.from('file_uploads').insert([
-				{
-					user_id: user.id,
-					filename: filename,
-					file_size: file.size,
-					content_preview: content.substring(0, 500),
-					created_at: new Date().toISOString(),
-				},
-			]);
-
-			if (fileError) {
-				console.error('Error saving file upload record:', fileError);
-			}
-		} catch (error) {
-			console.error('Error saving file upload to database:', error);
-			// Don't fail the request if database save fails
-		}
+		// File upload record saving was removed as part of database cleanup
+		// The file_uploads table has been dropped
 
 		return NextResponse.json({
 			success: true,

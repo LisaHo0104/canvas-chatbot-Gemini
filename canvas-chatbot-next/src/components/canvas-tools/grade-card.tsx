@@ -25,7 +25,7 @@ export function GradeCard({ data }: GradeCardProps) {
       : 0
 
   return (
-    <Card className="w-full max-w-sm border-l-4 border-l-green-500/50">
+    <Card className="w-full max-w-sm">
       <CardHeader className="p-4 pb-2">
         <div className="flex justify-between items-center">
           <CardTitle className="text-base">Assignment Grade</CardTitle>
