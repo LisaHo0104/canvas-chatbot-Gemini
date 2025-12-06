@@ -1,26 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@supabase/ssr'
+import { createRouteHandlerClient } from '@/lib/supabase/server'
 import { AIProviderService } from '@/lib/ai-provider-service'
 import { rateLimitMiddleware } from '@/lib/rate-limit'
 
 async function getUsageStatsHandler(request: NextRequest) {
   try {
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_OR_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return request.cookies.getAll()
-          },
-          setAll(cookiesToSet) {
-            cookiesToSet.forEach(({ name, value, options }) => {
-              request.cookies.set(name, value)
-            })
-          },
-        },
-      }
-    )
+    const supabase = createRouteHandlerClient(request)
 
     // Get current user
     const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -43,7 +28,7 @@ async function getUsageStatsHandler(request: NextRequest) {
       )
     }
 
-    const providerService = new AIProviderService()
+    const providerService = new AIProviderService(supabase)
     const stats = await providerService.getProviderUsageStats(user.id, providerId, days)
 
     return NextResponse.json({ stats })

@@ -43,22 +43,26 @@ export interface ProviderConfig {
 export class AIProviderService {
 	private supabase: any;
 
-	constructor(cookieAdapter?: {
-		getAll: () => any;
-		setAll: (cookiesToSet: any[]) => void;
-	}) {
-		this.supabase = createServerClient(
-			process.env.NEXT_PUBLIC_SUPABASE_URL!,
-			process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_OR_ANON_KEY!,
-			{
-				cookies: cookieAdapter || {
-					getAll() {
-						return []
+	constructor(supabaseClient?: any) {
+		if (supabaseClient) {
+			this.supabase = supabaseClient;
+		} else {
+			this.supabase = createServerClient(
+				process.env.NEXT_PUBLIC_SUPABASE_URL!,
+				process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_OR_ANON_KEY!,
+				{
+					db: {
+						schema: process.env.NEXT_PUBLIC_SUPABASE_SCHEMA || 'public',
 					},
-					setAll() {},
+					cookies: {
+						getAll() {
+							return [];
+						},
+						setAll() {},
+					},
 				},
-			},
-		);
+			);
+		}
 	}
 
 	async getUserProviders(userId: string): Promise<AIProvider[]> {
@@ -231,9 +235,9 @@ export class AIProviderService {
 					'No active AI provider configured and no system API key available',
 				);
 			}
-            providerName = 'openrouter';
-            modelName = await getDefaultModelId();
-            apiKey = systemApiKey;
+			providerName = 'openrouter';
+			modelName = await getDefaultModelId();
+			apiKey = systemApiKey;
 		}
 
 		usedModelName =
