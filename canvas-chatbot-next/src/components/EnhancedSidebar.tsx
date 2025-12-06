@@ -18,7 +18,7 @@ import { createClient as createSupabaseClient } from '@/lib/supabase/client'
 import { Shimmer } from '@/components/ai-elements/shimmer'
 import { Skeleton } from '@/components/ui/skeleton'
 
-let supabase: any = null
+let supabase: ReturnType<typeof createSupabaseClient> | null = null
 
 try {
   supabase = createSupabaseClient()
@@ -135,10 +135,27 @@ export default function EnhancedSidebar({
     if (!actionSessionId) return
     try {
       if (supabase) {
-        await supabase
+        // Delete messages first to ensure clean removal
+        const { error: messagesError } = await supabase
+          .from('chat_messages')
+          .delete()
+          .eq('session_id', actionSessionId)
+
+        if (messagesError) {
+          console.error('Error deleting messages:', messagesError)
+          throw messagesError
+        }
+
+        // Then delete the session
+        const { error: sessionError } = await supabase
           .from('chat_sessions')
           .delete()
           .eq('id', actionSessionId)
+
+        if (sessionError) {
+          console.error('Error deleting session:', sessionError)
+          throw sessionError
+        }
       }
 
       onSessionDelete?.(actionSessionId)

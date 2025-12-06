@@ -6,7 +6,12 @@ const supabasePublishableOrAnonKey =
 
 export const supabase = createClient(
   supabaseUrl,
-  supabasePublishableOrAnonKey
+  supabasePublishableOrAnonKey,
+  {
+    db: {
+      schema: process.env.NEXT_PUBLIC_SUPABASE_SCHEMA || 'public',
+    },
+  }
 )
 
 // Types for our database tables
