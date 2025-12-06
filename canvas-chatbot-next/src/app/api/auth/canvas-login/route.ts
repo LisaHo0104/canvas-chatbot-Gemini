@@ -40,6 +40,9 @@ export async function POST(request: NextRequest) {
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_OR_ANON_KEY!,
       {
+        db: {
+          schema: process.env.NEXT_PUBLIC_SUPABASE_SCHEMA || 'public',
+        },
         cookies: {
           get(name: string) {
             return request.cookies.get(name)?.value
@@ -67,19 +70,19 @@ export async function POST(request: NextRequest) {
     // Encrypt Canvas API key
     const encryptedToken = encrypt(canvas_token)
 
-    // Update user profile with Canvas credentials
-    const { error: updateError } = await supabase
+    const { error: upsertError } = await supabase
       .from('profiles')
-      .update({
+      .upsert({
+        id: user.id,
+        email: user.email || '',
         canvas_institution: finalCanvasUrl.replace('/api/v1', ''),
         canvas_api_key_encrypted: encryptedToken,
         canvas_api_url: finalCanvasUrl,
         updated_at: new Date().toISOString()
-      })
-      .eq('id', user.id)
+      }, { onConflict: 'id' })
 
-    if (updateError) {
-      console.error('Failed to update Canvas credentials:', updateError)
+    if (upsertError) {
+      console.error('Failed to update Canvas credentials:', upsertError)
       return NextResponse.json(
         { error: 'Failed to save Canvas credentials' },
         { status: 500 }

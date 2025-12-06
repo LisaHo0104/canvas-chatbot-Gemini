@@ -122,12 +122,23 @@ async function chatHandler(request: NextRequest) {
 		// Generate AI response
 		let aiResponse;
 		const sessionIdHeader = request.headers.get('x-session-id') || '';
-		const sessionId =
+		let sessionId =
 			sessionIdHeader && sessionIdHeader !== 'default'
 				? sessionIdHeader
 				: typeof (body as any)?.session_id === 'string'
 				? (body as any).session_id
 				: 'default';
+
+		if (sessionId === 'default') {
+			const { data: newSession } = await supabase
+				.from('chat_sessions')
+				.insert({ user_id: user.id, title: 'New Chat' })
+				.select('id')
+				.single();
+			if (newSession) {
+				sessionId = newSession.id;
+			}
+		}
 
 		let apiKey =
 			process.env.OPENROUTER_API_KEY_OWNER || process.env.OPENROUTER_API_KEY;
@@ -302,7 +313,7 @@ async function chatHandler(request: NextRequest) {
 			},
 		});
 
-		return result.toUIMessageStreamResponse({
+		const response = result.toUIMessageStreamResponse({
 			sendReasoning: true,
 			onFinish: async ({ messages }) => {
 				try {
@@ -375,6 +386,12 @@ async function chatHandler(request: NextRequest) {
 				}
 			},
 		});
+
+		if (sessionId) {
+			response.headers.set('x-session-id', sessionId);
+		}
+
+		return response;
 	} catch (error) {
 		console.error('Chat API error:', error);
 		return new Response(

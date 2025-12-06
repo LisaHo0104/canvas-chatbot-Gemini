@@ -15,7 +15,7 @@ import { Sources, SourcesContent, SourcesTrigger, Source } from '@/components/ai
 import { Suggestions, Suggestion } from '@/components/ai-elements/suggestion'
 import { Reasoning, ReasoningContent, ReasoningTrigger } from '@/components/ai-elements/reasoning'
 import { Tool, ToolHeader, ToolContent, ToolInput, ToolOutput } from '@/components/ai-elements/tool'
-import { Confirmation, ConfirmationTitle, ConfirmationRequest, ConfirmationAccepted, ConfirmationRejected, ConfirmationActions, ConfirmationAction } from '@/components/ai-elements/confirmation'
+import { ToolRenderer } from '@/components/canvas-tools/tool-renderer'
 import type { ToolUIPart } from 'ai'
 import { Shimmer } from '@/components/ai-elements/shimmer'
 import EnhancedSidebar from '@/components/EnhancedSidebar'
@@ -75,9 +75,33 @@ export default function ChatPage() {
     { id: 'google/gemini-2.0-flash-exp', name: 'Gemini 2.0 Flash', chef: 'Google', chefSlug: 'google', providers: ['google'] },
   ])
   const [titleGenerating, setTitleGenerating] = useState(false)
-  const { messages: uiMessages, sendMessage: sendChatMessage, status, regenerate, addToolApprovalResponse, setMessages: setUIMessages } = useChat({
+  const { messages: uiMessages, sendMessage: sendChatMessage, status, regenerate, setMessages: setUIMessages } = useChat({
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
-  })
+    onResponse: (response: Response) => {
+      const sid = response.headers.get('x-session-id')
+      if (sid && sid !== currentSession?.id) {
+        const newSession: ChatSession = {
+          id: sid,
+          title: 'New Chat',
+          messages: [],
+          lastMessage: new Date(),
+          created_at: new Date(),
+          updated_at: new Date()
+        }
+
+        setCurrentSession(newSession)
+        setSessions(prev => {
+          if (prev.some(s => s.id === sid)) return prev
+          return [newSession, ...prev]
+        })
+
+        if (typeof window !== 'undefined') {
+          ; (window as any).__currentSessionId = sid
+          localStorage.setItem('currentSessionId', sid)
+        }
+      }
+    }
+  } as any)
 
   const staticSuggestions = useMemo(() => [
     'Show my current courses',
@@ -93,6 +117,7 @@ export default function ChatPage() {
   const [suggestionsVisible, setSuggestionsVisible] = useState<boolean>(true)
 
   useEffect(() => {
+    /*
     const lastAssistant = [...uiMessages].reverse().find((m) => m.role === 'assistant')
     const isIdle = status !== 'streaming' && status !== 'submitted'
     if (!lastAssistant || !isIdle) return
@@ -126,9 +151,11 @@ export default function ChatPage() {
           setLoadingSuggestions(false)
         }
       })()
+      */
   }, [uiMessages, status, selectedModel, activeProvider])
 
   const regenerateAllSuggestions = async () => {
+    /*
     setLoadingSuggestions(true)
     setSuggestionsVisible(true)
     try {
@@ -153,6 +180,7 @@ export default function ChatPage() {
     } finally {
       setLoadingSuggestions(false)
     }
+      */
   }
 
   useEffect(() => {
@@ -197,7 +225,8 @@ export default function ChatPage() {
     const mappedMessages = mapUIMessagesToSessionMessages()
 
       ; (async () => {
-        let generatedTitle: string | null = null
+        const generatedTitle: string | null = null
+        /*
         const needsTitle = !currentSession?.title || currentSession?.title === 'New Chat'
         if (needsTitle) {
           try {
@@ -223,6 +252,7 @@ export default function ChatPage() {
             setTitleGenerating(false)
           }
         }
+        */
 
         const fallbackTitleBase = String(lastUserText || '').substring(0, 50)
         const fallbackTitle = fallbackTitleBase + (String(lastUserText || '').length > 50 ? '...' : '')
@@ -267,23 +297,6 @@ export default function ChatPage() {
 
       })()
   }, [uiMessages, status, selectedModel, activeProvider])
-
-  const getToolPartId = (tp: ToolUIPart): string | undefined => {
-    const anyTp = tp as any
-    return anyTp.approval?.id
-  }
-
-  const onApproveTool = (tp: ToolUIPart) => {
-    const id = getToolPartId(tp)
-    if (!id || !(addToolApprovalResponse as any)) return
-      ; (addToolApprovalResponse as any)({ id, response: 'approved' })
-  }
-
-  const onDenyTool = (tp: ToolUIPart) => {
-    const id = getToolPartId(tp)
-    if (!id || !(addToolApprovalResponse as any)) return
-      ; (addToolApprovalResponse as any)({ id, response: 'denied', reason: 'User denied' })
-  }
 
   // Check authentication and load data
   useEffect(() => {
@@ -561,9 +574,9 @@ export default function ChatPage() {
         role: msg.role,
         content: Array.isArray(msg.ui_parts)
           ? msg.ui_parts
-              .filter((p: any) => p?.type === 'text')
-              .map((p: any) => String(p.text || ''))
-              .join('')
+            .filter((p: any) => p?.type === 'text')
+            .map((p: any) => String(p.text || ''))
+            .join('')
           : '',
         timestamp: new Date(msg.created_at),
         provider_type: msg.metadata?.provider_type,
@@ -732,108 +745,75 @@ export default function ChatPage() {
                         </MessageAttachments>
                       )}
                       <AIMessageContent className="w-fit max-w-[85%] min-w-0">
-                        {(() => {
-                          type Segment =
-                            | { kind: 'text'; content: string }
-                            | { kind: 'reasoning'; content: string; streaming: boolean }
-                            | { kind: 'tool'; part: ToolUIPart }
+                        {message.parts.map((part, idx) => {
+                          const type = part.type
 
-                          const segments: Segment[] = []
-                          let current: Segment | null = null
-
-                          const finalizeCurrent = () => {
-                            if (current) {
-                              segments.push(current)
-                              current = null
-                            }
+                          if (type === 'text') {
+                            return (
+                              <MessageResponse key={`${message.id}-text-${idx}`}>
+                                {part.text}
+                              </MessageResponse>
+                            )
                           }
 
-                          const partsInOrder = message.parts as any[]
-                          for (let i = 0; i < partsInOrder.length; i++) {
-                            const part: any = partsInOrder[i]
-                            const type: string = String(part.type || '')
-
-                            if (type.startsWith('tool-') && message.role === 'assistant') {
-                              finalizeCurrent()
-                              const tp = part as unknown as ToolUIPart
-                              segments.push({ kind: 'tool', part: tp })
-                              continue
-                            }
-
-                            if (type === 'text' || type === 'text-delta') {
-                              if (!current || current.kind !== 'text') {
-                                finalizeCurrent()
-                                current = { kind: 'text', content: '' }
-                              }
-                              const chunk = String(part.textDelta ?? part.text ?? '')
-                              current.content = (current.content || '') + chunk
-                              continue
-                            }
-
-                            if (type === 'reasoning' || type === 'reasoning-delta') {
-                              if (!current || current.kind !== 'reasoning') {
-                                finalizeCurrent()
-                                current = { kind: 'reasoning', content: '', streaming: false }
-                              }
-                              const chunk = String(part.textDelta ?? part.text ?? '')
-                              current.content = (current.content || '') + chunk
-                              if (type === 'reasoning-delta') {
-                                ; (current as any).streaming = true
-                              } else {
-                                ; (current as any).streaming = false
-                              }
-                              continue
-                            }
+                          if (type === 'reasoning') {
+                            return (
+                              <Reasoning
+                                key={`${message.id}-reasoning-${idx}`}
+                                isStreaming={isMessageStreaming && idx === message.parts.length - 1}
+                                defaultOpen
+                              >
+                                <ReasoningTrigger />
+                                <ReasoningContent>
+                                  {part.text}
+                                </ReasoningContent>
+                              </Reasoning>
+                            )
                           }
-                          finalizeCurrent()
 
-                          return segments.map((seg, idx) => {
-                            if (seg.kind === 'tool') {
-                              const tp = seg.part
+                          if (type.startsWith('tool-')) {
+                            const tp = part as unknown as ToolUIPart
+                            const toolName = tp.type.split('-').slice(1).join('-')
+                            const isUITool = [
+                              'list_courses',
+                              'get_assignments',
+                              'get_modules',
+                              'get_calendar_events',
+                              'get_page_content',
+                              'get_file',
+                              'get_assignment_grade',
+                              'get_assignment_feedback_and_rubric'
+                            ].includes(toolName)
+
+                            if (isUITool && tp.state === 'output-available') {
                               return (
-                                <div className="mt-2 w-full max-w-full min-w-0 overflow-x-auto break-words" key={`${message.id}-tool-${idx}`}>
-                                  <Tool key={`${message.id}-tool-${idx}-${(message.role === 'assistant' && (textDeltaParts.length > 0 || reasoningDeltaParts.length > 0 || textParts.length > 0)) ? 'collapsed' : 'open'}`} defaultOpen={!(message.role === 'assistant' && (textDeltaParts.length > 0 || reasoningDeltaParts.length > 0 || textParts.length > 0))}>
-                                    <ToolHeader type={tp.type} state={tp.state} />
-                                    <ToolContent>
-                                      <ToolInput input={tp.input} />
-                                      <Confirmation approval={(tp as any).approval} state={tp.state}>
-                                        <ConfirmationTitle>
-                                          Execute {tp.type.split('-').slice(1).join('-')}?
-                                        </ConfirmationTitle>
-                                        <ConfirmationRequest>
-                                          <ConfirmationActions>
-                                            <ConfirmationAction onClick={() => onApproveTool(tp)}>Approve</ConfirmationAction>
-                                            <ConfirmationAction variant="outline" onClick={() => onDenyTool(tp)}>Deny</ConfirmationAction>
-                                          </ConfirmationActions>
-                                        </ConfirmationRequest>
-                                        <ConfirmationAccepted>
-                                          <div className="text-sm text-muted-foreground">Approved</div>
-                                        </ConfirmationAccepted>
-                                        <ConfirmationRejected>
-                                          <div className="text-sm text-muted-foreground">Denied</div>
-                                        </ConfirmationRejected>
-                                      </Confirmation>
-                                      <ToolOutput className="min-w-0" output={tp.output} errorText={tp.errorText} />
-                                    </ToolContent>
-                                  </Tool>
+                                <div className="mt-2 w-full max-w-full min-w-0 break-words" key={`${message.id}-tool-${idx}`}>
+                                  <ToolRenderer toolName={toolName} result={tp.output} />
                                 </div>
                               )
                             }
-                            if (seg.kind === 'reasoning') {
-                              return (
-                                <Reasoning isStreaming={seg.streaming && isMessageStreaming} defaultOpen key={`${message.id}-reasoning-${idx}`}>
-                                  <ReasoningTrigger />
-                                  <ReasoningContent>
-                                    {seg.content}
-                                  </ReasoningContent>
-                                </Reasoning>
-                              )
-                            }
+
                             return (
-                              <MessageResponse key={`${message.id}-text-${idx}`}>{seg.content}</MessageResponse>
+                              <div className="mt-2 w-full max-w-full min-w-0 overflow-x-auto break-words" key={`${message.id}-tool-${idx}`}>
+                                <Tool key={`${message.id}-tool-${idx}-${(message.role === 'assistant' && (textDeltaParts.length > 0 || reasoningDeltaParts.length > 0 || textParts.length > 0)) ? 'collapsed' : 'open'}`} defaultOpen={!(message.role === 'assistant' && (textDeltaParts.length > 0 || reasoningDeltaParts.length > 0 || textParts.length > 0))}>
+                                  <ToolHeader type={tp.type} state={tp.state} />
+                                  <ToolContent>
+                                    <ToolInput input={tp.input} />
+                                    {'error' in tp && tp.error ? (
+                                      <ToolOutput className="min-w-0" output={null} errorText={String(tp.error)} />
+                                    ) : (
+                                      <div className="mt-2 min-w-0">
+                                        <ToolRenderer toolName={toolName} result={'output' in tp ? tp.output : undefined} />
+                                      </div>
+                                    )}
+                                  </ToolContent>
+                                </Tool>
+                              </div>
                             )
-                          })
-                        })()}
+                          }
+
+                          return null
+                        })}
                         {message.role === 'assistant' && !isMessageStreaming && status !== 'streaming' && status !== 'submitted' && (
                           <div className="mt-1">
                             <MessageActions>

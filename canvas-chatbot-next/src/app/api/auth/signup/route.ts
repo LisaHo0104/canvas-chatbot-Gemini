@@ -22,6 +22,9 @@ export async function POST(request: NextRequest) {
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_OR_ANON_KEY!,
       {
+        db: {
+          schema: process.env.NEXT_PUBLIC_SUPABASE_SCHEMA || 'public',
+        },
         cookies: {
           getAll() {
             return request.cookies.getAll()
@@ -86,8 +89,7 @@ export async function POST(request: NextRequest) {
 
     const { error: profileError } = await supabase
       .from('profiles')
-      .update(updatePayload)
-      .eq('id', authData.user.id)
+      .upsert({ id: authData.user.id, email, ...updatePayload }, { onConflict: 'id' })
 
     if (profileError) {
       console.error('Error updating user profile:', profileError)
