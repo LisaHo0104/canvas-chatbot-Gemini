@@ -480,7 +480,7 @@ export default function ChatPage() {
         .single()
 
       if (error) {
-        // eslint-disable-next-line no-console
+
         console.error('Error creating session:', error)
         return null
       }
@@ -509,7 +509,7 @@ export default function ChatPage() {
         return newSession
       }
     } catch (error) {
-      // eslint-disable-next-line no-console
+
       console.error('Error creating session:', error)
     }
     return null
@@ -541,12 +541,12 @@ export default function ChatPage() {
     await sendChatMessage(
       { role: 'user', parts: [{ type: 'text', text: message.text }, ...(Array.isArray(message.files) ? message.files : [])] } as any,
       {
-          body: {
-            model: selectedModel,
-            webSearch,
-            canvas_token: canvasStatus === 'connected' ? canvasToken : undefined,
-            canvas_url: canvasStatus === 'connected' ? canvasUrl : undefined,
-          },
+        body: {
+          model: selectedModel,
+          webSearch,
+          canvas_token: canvasStatus === 'connected' ? canvasToken : undefined,
+          canvas_url: canvasStatus === 'connected' ? canvasUrl : undefined,
+        },
         headers: { 'X-Session-ID': sessionForSend.id },
       },
     )
@@ -719,6 +719,7 @@ export default function ChatPage() {
                 const reasoningDeltaParts = message.parts.filter((p) => (p as any).type === 'reasoning-delta') as any[]
 
                 const isMessageStreaming = message.role === 'assistant' && (textDeltaParts.length > 0 || reasoningDeltaParts.length > 0)
+
                 return (
                   <div key={message.id}>
                     {message.role === 'assistant' && message.parts.filter((p) => p.type === 'source-url').length > 0 && (
@@ -777,7 +778,8 @@ export default function ChatPage() {
                               'get_page_content',
                               'get_file',
                               'get_assignment_grade',
-                              'get_assignment_feedback_and_rubric'
+                              'get_assignment_feedback_and_rubric',
+                              'webSearch'
                             ].includes(toolName)
 
                             if (isUITool && tp.state === 'output-available') {
