@@ -55,48 +55,28 @@ export const InlineCitationCard = (props: InlineCitationCardProps) => (
 
 export type InlineCitationCardTriggerProps = ComponentProps<typeof Badge> & {
   sources: string[];
-  href?: string;
 };
 
 export const InlineCitationCardTrigger = ({
   sources,
-  href,
   className,
   ...props
 }: InlineCitationCardTriggerProps) => (
   <HoverCardTrigger asChild>
-    {href ? (
-      <a
-        href={href}
-        target="_blank"
-        rel="noreferrer"
-        className={cn(
-          "ml-1 inline-flex items-center rounded-full bg-secondary px-2 py-0.5 text-xs font-medium",
-          className
-        )}
-        {...props}
-      >
-        {sources[0] ? (
-          <>
-            {new URL(sources[0]).hostname}{" "}
-            {sources.length > 1 && `+${sources.length - 1}`}
-          </>
-        ) : (
-          "unknown"
-        )}
-      </a>
-    ) : (
-      <Badge className={cn("ml-1 rounded-full", className)} variant="secondary" {...props}>
-        {sources[0] ? (
-          <>
-            {new URL(sources[0]).hostname}{" "}
-            {sources.length > 1 && `+${sources.length - 1}`}
-          </>
-        ) : (
-          "unknown"
-        )}
-      </Badge>
-    )}
+    <Badge
+      className={cn("ml-1 rounded-full", className)}
+      variant="secondary"
+      {...props}
+    >
+      {sources[0] ? (
+        <>
+          {new URL(sources[0]).hostname}{" "}
+          {sources.length > 1 && `+${sources.length - 1}`}
+        </>
+      ) : (
+        "unknown"
+      )}
+    </Badge>
   </HoverCardTrigger>
 );
 
