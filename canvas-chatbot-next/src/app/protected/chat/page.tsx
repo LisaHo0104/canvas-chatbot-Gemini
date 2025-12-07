@@ -481,7 +481,7 @@ export default function ChatPage() {
         .single()
 
       if (error) {
-        // eslint-disable-next-line no-console
+
         console.error('Error creating session:', error)
         return null
       }
@@ -510,7 +510,7 @@ export default function ChatPage() {
         return newSession
       }
     } catch (error) {
-      // eslint-disable-next-line no-console
+
       console.error('Error creating session:', error)
     }
     return null
@@ -542,12 +542,12 @@ export default function ChatPage() {
     await sendChatMessage(
       { role: 'user', parts: [{ type: 'text', text: message.text }, ...(Array.isArray(message.files) ? message.files : [])] } as any,
       {
-          body: {
-            model: selectedModel,
-            webSearch,
-            canvas_token: canvasStatus === 'connected' ? canvasToken : undefined,
-            canvas_url: canvasStatus === 'connected' ? canvasUrl : undefined,
-          },
+        body: {
+          model: selectedModel,
+          webSearch,
+          canvas_token: canvasStatus === 'connected' ? canvasToken : undefined,
+          canvas_url: canvasStatus === 'connected' ? canvasUrl : undefined,
+        },
         headers: { 'X-Session-ID': sessionForSend.id },
       },
     )
@@ -746,14 +746,42 @@ export default function ChatPage() {
                           const type = part.type
 
                           if (type === 'text') {
-                            const useInlineCitations = message.role === 'assistant' && sourceParts.length > 0 && !isMessageStreaming
+                            // Extract sources from tool executions in the same message
+                            const searchToolParts = message.parts.filter((p: any) =>
+                              (p.type === 'tool-invocation' || p.type === 'tool_invocation') &&
+                              (p.toolInvocation?.toolName === 'search_web' || p.toolInvocation?.toolName === 'fetch_page') &&
+                              p.toolInvocation?.state === 'result'
+                            );
+
+                            const derivedSources = searchToolParts.flatMap((p: any) => {
+                              const result = p.toolInvocation.result;
+                              if (p.toolInvocation.toolName === 'search_web') {
+                                return result?.results || [];
+                              } else if (p.toolInvocation.toolName === 'fetch_page') {
+                                return result ? [result] : [];
+                              }
+                              return [];
+                            }).map((s: any, idx: number) => ({
+                              number: String(idx + 1),
+                              title: s.title || new URL(s.url).hostname,
+                              url: s.url,
+                              description: s.snippet || s.content?.slice(0, 150) + '...',
+                            }));
+
+                            const combinedSources = [...sourceParts.map((sp: any, sidx: number) => ({
+                              url: String(sp.url || ''),
+                              number: String(sidx + 1),
+                              title: sp.title || new URL(sp.url || '').hostname
+                            })), ...derivedSources];
+
+                            const useInlineCitations = message.role === 'assistant' && combinedSources.length > 0 && !isMessageStreaming
                             if (useInlineCitations) {
-                              console.log('[DEBUG] Rendering InlineCitation for assistant message', { count: sourceParts.length })
+                              // console.log('[DEBUG] Rendering InlineCitation for assistant message', { count: combinedSources.length })
                               return (
                                 <InlineCitationRenderer
                                   key={`${message.id}-text-${idx}`}
                                   text={(part as any).text || ''}
-                                  sources={sourceParts.map((sp: any, sidx: number) => ({ url: String(sp.url || ''), number: String(sidx + 1) }))}
+                                  sources={combinedSources}
                                 />
                               )
                             }
