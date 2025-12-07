@@ -12,6 +12,8 @@ import {
 } from 'ai';
 import { createOpenRouterProvider } from '@/lib/ai-sdk/openrouter';
 import { getDefaultModelId } from '@/lib/ai-sdk/openrouter';
+import { tavilySearch } from '@tavily/ai-sdk';
+import { SYSTEM_PROMPT } from '@/lib/system-prompt';
 
 export const maxDuration = 300;
 export const runtime = 'nodejs';
@@ -80,10 +82,15 @@ async function chatHandler(request: NextRequest) {
 			}
 		}
 
-		const tools: ReturnType<typeof createCanvasTools> | undefined =
+		const canvasTools =
 			canvasApiKey && canvasApiUrl
 				? createCanvasTools(canvasApiKey, canvasApiUrl)
-				: undefined;
+				: {};
+
+		const tools = {
+			...canvasTools,
+			webSearch: tavilySearch(),
+		};
 
 		const shouldUseCanvasTools = Boolean(canvasApiKey && canvasApiUrl);
 
@@ -141,6 +148,7 @@ async function chatHandler(request: NextRequest) {
 		const delayInMs = 10;
 		const agent = new ToolLoopAgent({
 			model: openrouter.chat(selectedModel),
+			system: SYSTEM_PROMPT,
 			tools,
 			prepareStep: async ({ messages, stepNumber, steps }) => {
 				console.log(
@@ -231,6 +239,7 @@ async function chatHandler(request: NextRequest) {
 		const response = result.toUIMessageStreamResponse({
 			originalMessages: uiMessages,
 			sendReasoning: true,
+			sendSources: true,
 			onFinish: async ({ messages }) => {
 				console.log('[DEBUG] onFinish triggered', {
 					sessionId,

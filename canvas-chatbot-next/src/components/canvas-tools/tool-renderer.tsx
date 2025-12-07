@@ -7,6 +7,7 @@ import { PageContent } from './page-content'
 import { FileCard } from './file-card'
 import { GradeCard } from './grade-card'
 import { FeedbackRubric } from './feedback-rubric'
+import { Sources, SourcesContent, SourcesTrigger, Source } from '@/components/ai-elements/sources'
 import { ScrollArea } from '@/components/ui/scroll-area'
 
 interface ToolRendererProps {
@@ -42,6 +43,21 @@ export function ToolRenderer({ toolName, result }: ToolRendererProps) {
 
     case 'get_assignment_feedback_and_rubric':
       return <FeedbackRubric data={result} />
+
+    case 'webSearch':
+      const results = result?.results || (Array.isArray(result) ? result : [])
+      if (!results.length) return <div className="text-sm text-muted-foreground">No results found</div>
+      
+      return (
+        <Sources className="not-prose w-full">
+          <SourcesTrigger count={results.length} className="w-full justify-start" />
+          {results.map((item: any, i: number) => (
+            <SourcesContent key={i}>
+              <Source href={item.url} title={item.title || item.url} />
+            </SourcesContent>
+          ))}
+        </Sources>
+      )
 
     default:
       // Fallback for unknown tools or raw data viewing
