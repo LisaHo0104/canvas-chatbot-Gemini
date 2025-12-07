@@ -148,7 +148,6 @@ async function chatHandler(request: NextRequest) {
 		const delayInMs = 10;
 		const agent = new ToolLoopAgent({
 			model: openrouter.chat(selectedModel),
-			system: SYSTEM_PROMPT,
 			tools,
 			prepareStep: async ({ messages, stepNumber, steps }) => {
 				console.log(
