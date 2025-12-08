@@ -132,9 +132,17 @@ async function chatHandler(request: NextRequest) {
 		// The AI SDK's convertToModelMessages function handles the conversion of UI messages
 		// (including tool invocations, text, files, etc.) into the format required by the model.
 		// Manual filtering is unnecessary and can cause issues (e.g. missing tool contexts).
-		const uiMessages = incomingMessages;
+        const originalUiMessages = incomingMessages as UIMessage[];
+        const uiForModel: any[] = [
+            { role: 'system', parts: [{ type: 'text', text: SYSTEM_PROMPT }] },
+            ...originalUiMessages,
+        ];
+        console.log(
+            '[DEBUG] Injected system prompt into chat messages',
+            { total: uiForModel.length },
+        );
 
-		const messages = convertToModelMessages(uiMessages as UIMessage[]);
+        const messages = convertToModelMessages(uiForModel);
 
 		const cjkRegex = /[\u4E00-\u9FFF]/;
 		const jpRegex = /[\u3040-\u309F\u30A0-\u30FF]/;
@@ -235,11 +243,11 @@ async function chatHandler(request: NextRequest) {
 		});
 
 		console.log('[DEBUG] Using model', selectedModel);
-		const response = result.toUIMessageStreamResponse({
-			originalMessages: uiMessages,
-			sendReasoning: true,
-			sendSources: true,
-			onFinish: async ({ messages }) => {
+        const response = result.toUIMessageStreamResponse({
+            originalMessages: originalUiMessages,
+            sendReasoning: true,
+            sendSources: true,
+            onFinish: async ({ messages }) => {
 				console.log('[DEBUG] onFinish triggered', {
 					sessionId,
 					messageCount: messages.length,
