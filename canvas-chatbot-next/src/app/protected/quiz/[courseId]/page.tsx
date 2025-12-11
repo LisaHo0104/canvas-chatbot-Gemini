@@ -1,9 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import type { CanvasModule } from '@/lib/canvas-api'
-import Link from 'next/link'
+// removed Next.js Link to avoid nested anchor hydration issues
 import { Card } from '@/components/ui/card'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Badge } from '@/components/ui/badge'
@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils'
 
 export default function QuizCourseModulesPage() {
   const params = useParams<{ courseId: string }>()
+  const router = useRouter()
   const courseId = Number(params?.courseId)
   const [modules, setModules] = useState<CanvasModule[]>([])
   const [loading, setLoading] = useState(true)
@@ -91,7 +92,14 @@ export default function QuizCourseModulesPage() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {modules.map((module) => (
-              <Link key={module.id} href={`/protected/quiz/${courseId}/module/${module.id}`} className="block">
+              <div
+                key={module.id}
+                className="block"
+                onClick={(e) => { e.preventDefault(); console.log('[DEBUG] Navigate to module', { courseId, moduleId: module.id }); router.push(`/protected/quiz/${courseId}/module/${module.id}`) }}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { console.log('[DEBUG] Navigate to module (keyboard)', { courseId, moduleId: module.id }); router.push(`/protected/quiz/${courseId}/module/${module.id}`) } }}
+              >
                 <Card 
                   className={cn(
                     "flex flex-col transition-all hover:shadow-md",
@@ -147,7 +155,7 @@ export default function QuizCourseModulesPage() {
                     </CollapsibleContent>
                   </Collapsible>
                 </Card>
-              </Link>
+              </div>
             ))}
           </div>
         )}

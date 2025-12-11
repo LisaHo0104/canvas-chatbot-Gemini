@@ -27,6 +27,7 @@ export default function QuizModuleQnAPage() {
   const courseId = Number(params?.courseId)
   const moduleId = Number(params?.moduleId)
   const [questions, setQuestions] = useState<QnAItem[]>([])
+  const [summary, setSummary] = useState<string>("")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [pageCount, setPageCount] = useState<number>(0)
@@ -61,6 +62,9 @@ export default function QuizModuleQnAPage() {
       const arr: QnAItem[] = Array.isArray(j?.questions) ? j.questions : []
       setQuestions(arr)
       setPageCount(Array.isArray(j?.pages) ? j.pages.length : 0)
+      const sum = typeof j?.summary === 'string' ? j.summary : ''
+      setSummary(sum)
+      console.log('[DEBUG] QnA summary loaded', { hasSummary: !!sum, length: sum?.length || 0 })
       setCurrent(0)
       setSelected(null)
       setChecked(false)
@@ -182,6 +186,7 @@ export default function QuizModuleQnAPage() {
           <div className="text-sm text-muted-foreground italic">No questions generated.</div>
         ) : !showResults ? (
           <div className="w-full max-w-5xl">
+            
             <Carousel className="w-full" setApi={setCarouselApi}>
               <CarouselContent className="-ml-4">
                 {questions.map((q, qIdx) => (

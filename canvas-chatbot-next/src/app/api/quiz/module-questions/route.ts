@@ -55,26 +55,38 @@ async function moduleQuestionsHandler(request: NextRequest) {
     const api = new CanvasAPIService(canvasApiKey, canvasApiUrl)
     console.log('[DEBUG] QnA API: fetch module and pages', { courseId, moduleId })
 
-    const modules = await api.getModules(courseId, { includeItems: true, includeContentDetails: false, perPage: 50 })
+    const modules = await api.getModules(courseId, { includeItems: true, includeContentDetails: true, perPage: 50 })
     const target = modules.find((m: any) => Number(m?.id) === Number(moduleId))
     if (!target) {
       return new Response(JSON.stringify({ error: 'Module not found' }), { status: 404 })
     }
 
     const pageItems = Array.isArray(target.items) ? target.items.filter((it: any) => String(it?.type) === 'Page') : []
-    const pages: Array<{ title: string; body: string; url: string; htmlUrl?: string }> = []
-    for (const it of pageItems) {
-      try {
-        const page = await api.getPageContent(courseId, String(it?.html_url || it?.url || ''))
-        pages.push({
+    const pageFetchResults = await Promise.allSettled(
+      pageItems.map(async (it: any) => {
+        const candidateUrl = String((it as any)?.content_details?.page_url || it?.html_url || it?.url || '')
+        const page = await api.getPageContent(courseId, candidateUrl)
+        return {
           title: String(page?.title || it?.title || ''),
           body: String(page?.body || ''),
-          url: String(page?.url || it?.html_url || ''),
-          htmlUrl: String((page as any)?.html_url || it?.html_url || '')
-        })
-      } catch (e) {
-        console.error('[DEBUG] Failed to get page content', { itemId: it?.id })
+          url: String(page?.url || it?.html_url || candidateUrl || ''),
+          htmlUrl: String((page as any)?.html_url || it?.html_url || candidateUrl || '')
+        }
+      })
+    )
+    const pages: Array<{ title: string; body: string; url: string; htmlUrl?: string }> = []
+    const failures: Array<{ id?: any; title?: any }> = []
+    pageFetchResults.forEach((res, idx) => {
+      const it = pageItems[idx]
+      if (res.status === 'fulfilled') {
+        pages.push(res.value)
+      } else {
+        failures.push({ id: it?.id, title: it?.title })
       }
+    })
+    console.log('[DEBUG] Pages processed summary', { totalItems: pageItems.length, success: pages.length, failures: failures.length })
+    if (failures.length > 0) {
+      return new Response(JSON.stringify({ error: 'Failed to retrieve some Canvas page content', failedItems: failures, processed: pages.length, total: pageItems.length }), { status: 500 })
     }
 
     function cleanText(html: string): string {
@@ -84,7 +96,7 @@ async function moduleQuestionsHandler(request: NextRequest) {
         .replace(/<[^>]+>/g, '')
         .replace(/\s+/g, ' ')
         .trim()
-        .substring(0, 20000)
+        .substring(0, 30000)
     }
 
     const combinedText = pages
@@ -106,6 +118,8 @@ async function moduleQuestionsHandler(request: NextRequest) {
     const openrouter = createOpenRouterProvider(apiKey)
 
     console.log('[DEBUG] QnA model', selectedModel)
+    console.log('[DEBUG] QnA prompt: ignoring Links & Checklist for question generation')
+    console.log('[DEBUG] QnA prompt: in-depth Pareto summary enabled')
     const { object } = await generateObject({
       model: openrouter.chat(selectedModel),
       schema: jsonSchema<{ summary: string; questions: Array<{ question: string; options: string[]; correctIndex: number; explanation: string; sourceUrl?: string; sourceTitle?: string; section?: string }> }>({
@@ -132,10 +146,10 @@ async function moduleQuestionsHandler(request: NextRequest) {
         required: ['summary', 'questions'],
       }),
       schemaName: 'ModuleQnA_MCQs',
-      schemaDescription: 'Week summary and multiple-choice Q&A based on Canvas module page content, grouped by thematic sections, with citations to source pages',
+      schemaDescription: 'Pareto-structured week summary and multiple-choice Q&A based on Canvas module page content, grouped by thematic sections, with citations to source pages',
       messages: [
-        { role: 'system', content: 'You are an expert tutor. First, produce a detailed Week summary based only on the provided Canvas pages. Then create multiple-choice questions strictly based on that content. Avoid hallucinations. Provide 4–5 plausible options, mark the correct option index, and include a short explanation referencing the content. Include sourceUrl and sourceTitle for the specific page the question comes from. Group questions into thematic sections: Core Concepts & Definitions; Differentiating Communication Types; Case Studies & Applications; Tutorial Activities & Theory; Critical Thinking.' },
-        { role: 'user', content: `Context:\nCourse ID: ${courseId}\nModule: ${String(target?.name || '')}\n\nTask A — Week/Module Summary (internal, before quiz):\nCreate a structured summary titled 'Detailed Breakdown of ${String(target?.name || 'Module')}: <Detected Topic>' using this outline:\n- Week/Module Overview: detected focus topic and learning objectives inferred from page titles and content.\n- Core Content & Concepts: define key terms, frameworks, and models that appear in the pages; extract formal definitions verbatim when provided.\n- Activities & Tutorials: list practical tasks, scenarios, video lectures, and readings-in-review with page titles and Source URLs.\n- Connections: link to previous/next weeks if mentioned and summarize progression.\n- Study Tips & Assignment Prep: actionable guidance based on the provided materials.\nCite each Canvas page using its Title and Source URL.\n\nTask B — Quiz Generation:\nUsing the Week/Module Summary and the Canvas content, generate ${questionsCount} multiple-choice questions. Requirements:\n- Prioritize Core Concepts & Definitions; ensure at least 10 questions in this section.\n- For each question: clear stem; 4–5 plausible options; correctIndex (0-based); short explanation (1–3 sentences) referencing the source; include sourceUrl/sourceTitle.\n- Set 'section' to one of: Core Concepts & Definitions; Differentiating Communication Types; Case Studies & Applications; Tutorial Activities & Theory; Critical Thinking.\n- Base each question strictly on the provided pages; avoid external knowledge unless it is explicitly contained in the pages.\n\nCONTENT:\n${combinedText}` },
+        { role: 'system', content: 'You are an expert tutor. Avoid hallucinations. Use ONLY the provided Canvas pages. First, produce an in-depth Pareto-structured Week/Module summary strictly from the pages, then generate multiple-choice questions based on that summary. For each question, provide 4–5 plausible options, mark the correct option index (0-based), and include a concise explanation that cites the specific source page. Include sourceUrl and sourceTitle. Group questions into thematic sections: Core Concepts & Definitions; Differentiating Communication Types; Case Studies & Applications; Tutorial Activities & Theory; Critical Thinking. Do NOT generate questions about the summary sections "🔗 All Resources & Links" or "✅ Quick Action Checklist".' },
+        { role: 'user', content: `Context:\nCourse ID: ${courseId}\nModule: ${String(target?.name || '')}\n\nTask A — In-Depth Pareto Summary (internal, before quiz):\nApply the Pareto Principle (80/20) BUT write with depth and specificity using ONLY the Canvas pages. Keep the Pareto structure, but:\n- Extract formal definitions verbatim (use quotation marks) and cite the page.\n- Enumerate frameworks/models (steps/components) present in pages with brief explanations.\n- Include at least one scenario/example per core concept where available.\n- Call out subtle distinctions and boundary conditions noted in pages.\n\n# 📚 ${String(target?.name || 'Module')} Summary (Pareto Method)\n\n## 🎯 Core Concepts (The 20% You MUST Know)\nThese are the MOST IMPORTANT concepts that will give you 80% of the understanding:\n### 1. [Most Critical Concept]\n**Why it matters:** [Explain real-world importance]\n**Key takeaway:** [One sentence summary]\n**What you need to remember:** [Specific actionable points]\n### 2. [Second Most Critical Concept]\n[Same structure]\n---\n## 📖 Supporting Details (The Other 80%)\n- **Distinctions & Boundaries:** nuanced differences and edge cases noted in pages.\n- **Methods/Processes:** concrete steps, workflows, or checklists from pages.\n- **Examples & Cases:** short summaries of any cases/tutorial scenarios.\n---\n## 🔗 All Resources & Links\nList EVERY Canvas page link you used (make clickable):\n- 📄 [Page Title] - [Source URL]\n- 🎥 [Video Title] - [Source URL]\n- 📁 [PDF Name] - [Source URL]\n---\n## ✅ Quick Action Checklist\n1. ☐ Read/watch the PRIMARY resources above (30 mins)\n2. ☐ Understand the core concepts listed\n3. ☐ Do one practice activity from the pages\n4. ☐ Review supporting details if time permits\n\nTask B — Practice Question Generation (in-depth):\nGenerate ${questionsCount} multiple-choice questions using ONLY the Canvas pages and the in-depth Pareto summary.\n- Make questions specific and challenging but fair.\n- Include scenario-based stems and distinctions between closely related concepts.\n- Require recognition of verbatim definitions and framework steps when present.\n- Each question: clear stem; 4–5 plausible options; correctIndex (0-based); short explanation (1–3 sentences); include sourceUrl and sourceTitle for the specific page.\n- Set 'section' to one of: Core Concepts & Definitions; Differentiating Communication Types; Case Studies & Applications; Tutorial Activities & Theory; Critical Thinking.\n- Base questions strictly on the provided pages.\n- Ignore the Pareto summary sections "🔗 All Resources & Links" and "✅ Quick Action Checklist" when drafting questions. Do not create questions about URLs or action checklists.\n\nCONTENT:\n${combinedText}` },
       ],
     })
 
