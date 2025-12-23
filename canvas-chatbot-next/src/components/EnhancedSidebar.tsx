@@ -135,7 +135,7 @@ export default function EnhancedSidebar({
     if (!actionSessionId) return
     try {
       if (supabase) {
-        // Delete the session; ON DELETE CASCADE will remove messages
+        console.log('[DEBUG] Attempting to delete session', { actionSessionId })
         const { error: sessionError } = await supabase
           .from('chat_sessions')
           .delete()
@@ -143,7 +143,31 @@ export default function EnhancedSidebar({
 
         if (sessionError) {
           console.error('Error deleting session:', sessionError)
-          throw sessionError
+          const isFKViolation =
+            (sessionError as any)?.code === '23503' ||
+            String((sessionError as any)?.message || '').toLowerCase().includes('violates foreign key') ||
+            String((sessionError as any)?.details || '').toLowerCase().includes('foreign key')
+          if (isFKViolation) {
+            console.log('[DEBUG] Foreign key constraint detected; attempting to delete messages first', { actionSessionId })
+            const { error: messagesError } = await supabase
+              .from('chat_messages')
+              .delete()
+              .eq('session_id', actionSessionId)
+            if (messagesError) {
+              console.error('Error deleting messages before session:', messagesError)
+              throw messagesError
+            }
+            const { error: retryError } = await supabase
+              .from('chat_sessions')
+              .delete()
+              .eq('id', actionSessionId)
+            if (retryError) {
+              console.error('Error deleting session after messages removed:', retryError)
+              throw retryError
+            }
+          } else {
+            throw sessionError
+          }
         }
       }
 
@@ -152,7 +176,7 @@ export default function EnhancedSidebar({
       setActionSessionId(null)
     } catch (error) {
       console.error('Error deleting session:', error)
-      alert('Failed to delete conversation')
+      alert(`Failed to delete conversation: ${String((error as any)?.message || 'Unknown error')}`)
     }
   }
 
