@@ -19,6 +19,67 @@ export class CanvasContextService {
     this.canvasService = new CanvasAPIService(apiKey, canvasURL)
   }
 
+  async buildStaticEntityMap(limitPerCourse: number = 30) {
+    console.log('[DEBUG] Prefetch: building static entity map')
+    const courses = await this.canvasService.getCourses({
+      enrollmentState: 'active',
+      enrollmentType: 'student',
+      perPage: 100,
+    })
+    const results: Array<{
+      id: number
+      name: string
+      code: string
+      assignments: Array<{ id: number; name: string }>
+      modules: Array<{ id: number; name: string }>
+    }> = []
+
+    const concurrency = 4
+    let index = 0
+    const runner = async () => {
+      while (index < courses.length) {
+        const i = index++
+        const course = courses[i]
+        try {
+          const [assignments, modules] = await Promise.all([
+            this.canvasService.getAssignments(course.id, {
+              includeSubmission: false,
+              perPage: 100,
+              orderBy: 'position',
+            }),
+            this.canvasService.getModules(course.id, {
+              includeItems: false,
+              includeContentDetails: false,
+              perPage: 100,
+            }),
+          ])
+          results.push({
+            id: course.id,
+            name: course.name,
+            code: course.course_code,
+            assignments: assignments
+              .slice(0, limitPerCourse)
+              .map(a => ({ id: a.id, name: a.name })),
+            modules: modules
+              .slice(0, limitPerCourse)
+              .map(m => ({ id: m.id, name: m.name })),
+          })
+        } catch (err) {
+          console.error(`[DEBUG] Prefetch: failed for course ${course.id}`, err)
+          results.push({
+            id: course.id,
+            name: course.name,
+            code: course.course_code,
+            assignments: [],
+            modules: [],
+          })
+        }
+      }
+    }
+    await Promise.all(new Array(Math.min(concurrency, courses.length)).fill(0).map(() => runner()))
+    return { courses: results }
+  }
+
   async buildContext(query: string, userId: string): Promise<string> {
     try {
       const queryLower = query.toLowerCase()
