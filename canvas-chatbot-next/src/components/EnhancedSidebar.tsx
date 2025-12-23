@@ -135,18 +135,7 @@ export default function EnhancedSidebar({
     if (!actionSessionId) return
     try {
       if (supabase) {
-        // Delete messages first to ensure clean removal
-        const { error: messagesError } = await supabase
-          .from('chat_messages')
-          .delete()
-          .eq('session_id', actionSessionId)
-
-        if (messagesError) {
-          console.error('Error deleting messages:', messagesError)
-          throw messagesError
-        }
-
-        // Then delete the session
+        // Delete the session; ON DELETE CASCADE will remove messages
         const { error: sessionError } = await supabase
           .from('chat_sessions')
           .delete()
@@ -355,15 +344,28 @@ export default function EnhancedSidebar({
                           <DropdownMenuContent className="w-40" align="end" onClick={(e) => e.stopPropagation()}>
                             <DropdownMenuLabel>Conversation Actions</DropdownMenuLabel>
                             <DropdownMenuGroup>
-                              <DropdownMenuItem onSelect={() => { setEditingSession(session.id); setEditTitle(session.title) }}>
-                                Rename
-                              </DropdownMenuItem>
-                              <DropdownMenuItem variant="destructive" onSelect={() => setShowDeleteDialog(true)}>
-                                Delete
-                              </DropdownMenuItem>
-                            </DropdownMenuGroup>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                          <DropdownMenuItem onSelect={() => { setEditingSession(session.id); setEditTitle(session.title) }}>
+                            Rename
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            variant="destructive"
+                            onClick={(e) => {
+                              console.log('[DEBUG] Delete menu item clicked', { actionSessionId })
+                              e.preventDefault()
+                              e.stopPropagation()
+                              setShowDeleteDialog(true)
+                            }}
+                            onSelect={(e) => {
+                              console.log('[DEBUG] Delete menu item selected', { actionSessionId })
+                              e.preventDefault()
+                              setShowDeleteDialog(true)
+                            }}
+                          >
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuGroup>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
 
                       </div>
                     </div>
@@ -380,7 +382,20 @@ export default function EnhancedSidebar({
                     <DialogClose asChild>
                       <Button variant="outline">Cancel</Button>
                     </DialogClose>
-                    <Button onClick={handleSessionDelete} variant="destructive">Delete</Button>
+                    <Button
+                      onClick={() => {
+                        console.log('[DEBUG] handleSessionDelete invoked', { actionSessionId })
+                        if (!actionSessionId) {
+                          console.error('Delete requested with no actionSessionId')
+                          setShowDeleteDialog(false)
+                          return
+                        }
+                        handleSessionDelete()
+                      }}
+                      variant="destructive"
+                    >
+                      Delete
+                    </Button>
                   </div>
                 </DialogContent>
               </Dialog>
