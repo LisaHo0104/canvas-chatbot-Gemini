@@ -87,9 +87,16 @@ async function chatHandler(request: NextRequest) {
 				? createCanvasTools(canvasApiKey, canvasApiUrl)
 				: {};
 
+		const tavilyTool = tavilySearch();
+		console.log('[DEBUG] Initializing tools: webSearch enabled with strict mode');
 		const tools = {
 			...canvasTools,
-			webSearch: tavilySearch(),
+			webSearch: {
+				...tavilyTool,
+				strict: true,
+				description:
+					'Search the web for up-to-date facts and sources when Canvas data is insufficient',
+			},
 		};
 
 		const shouldUseCanvasTools = Boolean(canvasApiKey && canvasApiUrl);
