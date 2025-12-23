@@ -178,13 +178,20 @@ async function chatHandler(request: NextRequest) {
 		const cjkRegex = /[\u4E00-\u9FFF]/;
 		const jpRegex = /[\u3040-\u309F\u30A0-\u30FF]/;
 		let chunking: 'word' | 'line' | RegExp = 'word';
+		const requestedChunking = (body as any)?.smooth_chunking;
+		if (requestedChunking === 'line' || requestedChunking === 'word') {
+			chunking = requestedChunking;
+		}
 		const eq = String(currentMessageContent || '');
 		if (jpRegex.test(eq)) {
 			chunking = /[\u3040-\u309F\u30A0-\u30FF]|\S+\s+/;
 		} else if (cjkRegex.test(eq)) {
 			chunking = /[\u4E00-\u9FFF]|\S+\s+/;
 		}
-		const delayInMs = 10;
+		const delayInMs: number | null =
+			typeof (body as any)?.smooth_delay_ms === 'number'
+				? (body as any).smooth_delay_ms
+				: 20;
 		const agent = new ToolLoopAgent({
 			model: openrouter.chat(selectedModel),
 			tools,
