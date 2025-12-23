@@ -21,7 +21,7 @@ export const runtime = 'nodejs';
 async function chatHandler(request: NextRequest) {
 	try {
 		const body = await request.json();
-		const { model, messages: incomingMessages } = body;
+		const { model, messages: incomingMessages, canvasContext } = body;
 
 		if (
 			!incomingMessages ||
@@ -134,7 +134,46 @@ async function chatHandler(request: NextRequest) {
 		// Manual filtering is unnecessary and can cause issues (e.g. missing tool contexts).
 		const uiMessages = incomingMessages;
 
-		const messages = convertToModelMessages(uiMessages as UIMessage[]);
+		const formatCanvasContext = (ctx: any): string => {
+			try {
+				if (!ctx || !Array.isArray(ctx?.courses)) return '';
+				const lines: string[] = [];
+				lines.push('[Canvas Context]');
+				lines.push(`User is enrolled in ${ctx.courses.length} courses:`);
+				lines.push('');
+				for (const course of ctx.courses.slice(0, 20)) {
+					lines.push(`${course.name} (${course.code})`);
+					const assigns = Array.isArray(course.assignments) ? course.assignments.slice(0, 30) : [];
+					const mods = Array.isArray(course.modules) ? course.modules.slice(0, 30) : [];
+					if (assigns.length > 0) {
+						lines.push(`  - Assignments: ${assigns.map((a: any) => `${a.name} (ID:${a.id})`).join(', ')}`);
+					} else {
+						lines.push(`  - Assignments: none`);
+					}
+					if (mods.length > 0) {
+						lines.push(`  - Modules: ${mods.map((m: any) => `${m.name} (ID:${m.id})`).join(', ')}`);
+					} else {
+						lines.push(`  - Modules: none`);
+					}
+					lines.push('');
+				}
+				return lines.join('\n');
+			} catch {
+				return '';
+			}
+		};
+
+		const systemText =
+			typeof canvasContext !== 'undefined' && canvasContext
+				? `${SYSTEM_PROMPT}\n\n${formatCanvasContext(canvasContext)}`
+				: SYSTEM_PROMPT;
+
+		const uiMessagesWithSystem: UIMessage[] = [
+			{ role: 'system', parts: [{ type: 'text', text: systemText }] } as any,
+			...(uiMessages as UIMessage[]),
+		];
+
+		const messages = convertToModelMessages(uiMessagesWithSystem as UIMessage[]);
 
 		const cjkRegex = /[\u4E00-\u9FFF]/;
 		const jpRegex = /[\u3040-\u309F\u30A0-\u30FF]/;

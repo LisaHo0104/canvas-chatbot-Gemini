@@ -75,6 +75,8 @@ export default function ChatPage() {
     { id: 'google/gemini-2.0-flash-exp', name: 'Gemini 2.0 Flash', chef: 'Google', chefSlug: 'google', providers: ['google'] },
   ])
   const [titleGenerating, setTitleGenerating] = useState(false)
+  const [canvasContext, setCanvasContext] = useState<any | null>(null)
+  const [syncingCanvas, setSyncingCanvas] = useState(false)
   const { messages: uiMessages, sendMessage: sendChatMessage, status, regenerate, setMessages: setUIMessages } = useChat({
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
     onResponse: (response: Response) => {
@@ -372,6 +374,26 @@ export default function ChatPage() {
   }, [router])
 
   useEffect(() => {
+    const prefetchCanvas = async () => {
+      if (canvasStatus !== 'connected') return
+      try {
+        setSyncingCanvas(true)
+        console.log('[DEBUG] Prefetching Canvas context')
+        const res = await fetch('/api/canvas/prefetch', { method: 'GET' })
+        if (res.ok) {
+          const data = await res.json()
+          setCanvasContext(data)
+        }
+      } catch (e) {
+        console.error('Canvas prefetch failed', e)
+      } finally {
+        setSyncingCanvas(false)
+      }
+    }
+    prefetchCanvas()
+  }, [canvasStatus])
+
+  useEffect(() => {
     const handleStorage = (event: StorageEvent) => {
       if (event.key === 'preferredModel' && typeof event.newValue === 'string') {
         const value = event.newValue.trim()
@@ -546,6 +568,7 @@ export default function ChatPage() {
           webSearch,
           canvas_token: canvasStatus === 'connected' ? canvasToken : undefined,
           canvas_url: canvasStatus === 'connected' ? canvasUrl : undefined,
+          canvasContext: canvasContext || undefined,
         },
         headers: { 'X-Session-ID': sessionForSend.id },
       },
@@ -708,6 +731,7 @@ export default function ChatPage() {
                 </div>
                 <h2 className="text-2xl font-semibold text-slate-900 mb-2">Start a conversation</h2>
                 <p className="text-slate-600 mb-8">Ask about your courses, assignments, modules, or Canvas announcements. I’ll guide you.</p>
+                {syncingCanvas && <p className="text-slate-500">Syncing Canvas data...</p>}
               </div>
             ) : (
               uiMessages.map((message) => {
