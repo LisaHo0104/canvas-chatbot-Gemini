@@ -9,17 +9,17 @@ import { lastAssistantMessageIsCompleteWithApprovalResponses } from 'ai'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Conversation, ConversationContent, ConversationScrollButton } from '@/components/ai-elements/conversation'
 import { Message as AIMessage, MessageContent as AIMessageContent, MessageAction, MessageActions, MessageResponse, MessageAttachments, MessageAttachment } from '@/components/ai-elements/message'
-import { PromptInput, PromptInputActionMenu, PromptInputActionMenuContent, PromptInputActionMenuTrigger, PromptInputActionMenuItem, PromptInputActionAddAttachments, PromptInputBody, PromptInputFooter, PromptInputProvider, PromptInputSubmit, PromptInputTextarea, PromptInputTools, PromptInputButton, PromptInputSpeechButton } from '@/components/ai-elements/prompt-input'
+import { PromptInput, PromptInputActionMenu, PromptInputActionMenuContent, PromptInputActionMenuTrigger, PromptInputActionMenuItem, PromptInputActionAddAttachments, PromptInputBody, PromptInputFooter, PromptInputProvider, PromptInputSubmit, PromptInputTextarea, PromptInputTools, PromptInputButton, PromptInputSpeechButton, PromptInputAttachments, PromptInputAttachment } from '@/components/ai-elements/prompt-input'
 import { ModelSelector, ModelSelectorContent, ModelSelectorEmpty, ModelSelectorGroup, ModelSelectorInput, ModelSelectorItem, ModelSelectorList, ModelSelectorLogo, ModelSelectorLogoGroup, ModelSelectorName, ModelSelectorTrigger } from '@/components/ai-elements/model-selector'
 import { Sources, SourcesContent, SourcesTrigger, Source } from '@/components/ai-elements/sources'
 import { Suggestions, Suggestion } from '@/components/ai-elements/suggestion'
 import { Reasoning, ReasoningContent, ReasoningTrigger } from '@/components/ai-elements/reasoning'
 import { Tool, ToolHeader, ToolContent, ToolInput, ToolOutput } from '@/components/ai-elements/tool'
-import { Confirmation, ConfirmationTitle, ConfirmationRequest, ConfirmationAccepted, ConfirmationRejected, ConfirmationActions, ConfirmationAction } from '@/components/ai-elements/confirmation'
+import { ToolRenderer } from '@/components/canvas-tools/tool-renderer'
 import type { ToolUIPart } from 'ai'
 import { Shimmer } from '@/components/ai-elements/shimmer'
 import EnhancedSidebar from '@/components/EnhancedSidebar'
-import { AIProvider } from '@/lib/ai-provider-service'
+import { AIProvider } from '@/types/ai-providers'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
@@ -75,9 +75,35 @@ export default function ChatPage() {
     { id: 'google/gemini-2.0-flash-exp', name: 'Gemini 2.0 Flash', chef: 'Google', chefSlug: 'google', providers: ['google'] },
   ])
   const [titleGenerating, setTitleGenerating] = useState(false)
-  const { messages: uiMessages, sendMessage: sendChatMessage, status, regenerate, addToolApprovalResponse, setMessages: setUIMessages } = useChat({
+  const [canvasContext, setCanvasContext] = useState<any | null>(null)
+  const [syncingCanvas, setSyncingCanvas] = useState(false)
+  const { messages: uiMessages, sendMessage: sendChatMessage, status, regenerate, setMessages: setUIMessages } = useChat({
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
-  })
+    onResponse: (response: Response) => {
+      const sid = response.headers.get('x-session-id')
+      if (sid && sid !== currentSession?.id) {
+        const newSession: ChatSession = {
+          id: sid,
+          title: 'New Chat',
+          messages: [],
+          lastMessage: new Date(),
+          created_at: new Date(),
+          updated_at: new Date()
+        }
+
+        setCurrentSession(newSession)
+        setSessions(prev => {
+          if (prev.some(s => s.id === sid)) return prev
+          return [newSession, ...prev]
+        })
+
+        if (typeof window !== 'undefined') {
+          ; (window as any).__currentSessionId = sid
+          localStorage.setItem('currentSessionId', sid)
+        }
+      }
+    }
+  } as any)
 
   const staticSuggestions = useMemo(() => [
     'Show my current courses',
@@ -93,6 +119,7 @@ export default function ChatPage() {
   const [suggestionsVisible, setSuggestionsVisible] = useState<boolean>(true)
 
   useEffect(() => {
+    /*
     const lastAssistant = [...uiMessages].reverse().find((m) => m.role === 'assistant')
     const isIdle = status !== 'streaming' && status !== 'submitted'
     if (!lastAssistant || !isIdle) return
@@ -126,9 +153,11 @@ export default function ChatPage() {
           setLoadingSuggestions(false)
         }
       })()
+      */
   }, [uiMessages, status, selectedModel, activeProvider])
 
   const regenerateAllSuggestions = async () => {
+    /*
     setLoadingSuggestions(true)
     setSuggestionsVisible(true)
     try {
@@ -153,6 +182,7 @@ export default function ChatPage() {
     } finally {
       setLoadingSuggestions(false)
     }
+      */
   }
 
   useEffect(() => {
@@ -197,7 +227,8 @@ export default function ChatPage() {
     const mappedMessages = mapUIMessagesToSessionMessages()
 
       ; (async () => {
-        let generatedTitle: string | null = null
+        const generatedTitle: string | null = null
+        /*
         const needsTitle = !currentSession?.title || currentSession?.title === 'New Chat'
         if (needsTitle) {
           try {
@@ -223,6 +254,7 @@ export default function ChatPage() {
             setTitleGenerating(false)
           }
         }
+        */
 
         const fallbackTitleBase = String(lastUserText || '').substring(0, 50)
         const fallbackTitle = fallbackTitleBase + (String(lastUserText || '').length > 50 ? '...' : '')
@@ -267,23 +299,6 @@ export default function ChatPage() {
 
       })()
   }, [uiMessages, status, selectedModel, activeProvider])
-
-  const getToolPartId = (tp: ToolUIPart): string | undefined => {
-    const anyTp = tp as any
-    return anyTp.approval?.id
-  }
-
-  const onApproveTool = (tp: ToolUIPart) => {
-    const id = getToolPartId(tp)
-    if (!id || !(addToolApprovalResponse as any)) return
-      ; (addToolApprovalResponse as any)({ id, response: 'approved' })
-  }
-
-  const onDenyTool = (tp: ToolUIPart) => {
-    const id = getToolPartId(tp)
-    if (!id || !(addToolApprovalResponse as any)) return
-      ; (addToolApprovalResponse as any)({ id, response: 'denied', reason: 'User denied' })
-  }
 
   // Check authentication and load data
   useEffect(() => {
@@ -359,6 +374,26 @@ export default function ChatPage() {
   }, [router])
 
   useEffect(() => {
+    const prefetchCanvas = async () => {
+      if (canvasStatus !== 'connected') return
+      try {
+        setSyncingCanvas(true)
+        console.log('[DEBUG] Prefetching Canvas context')
+        const res = await fetch('/api/canvas/prefetch', { method: 'GET' })
+        if (res.ok) {
+          const data = await res.json()
+          setCanvasContext(data)
+        }
+      } catch (e) {
+        console.error('Canvas prefetch failed', e)
+      } finally {
+        setSyncingCanvas(false)
+      }
+    }
+    prefetchCanvas()
+  }, [canvasStatus])
+
+  useEffect(() => {
     const handleStorage = (event: StorageEvent) => {
       if (event.key === 'preferredModel' && typeof event.newValue === 'string') {
         const value = event.newValue.trim()
@@ -414,13 +449,9 @@ export default function ChatPage() {
 
   const loadAIProviders = async () => {
     try {
-      const response = await fetch('/api/ai-providers', { credentials: 'include' })
-      if (response.ok) {
-        const data = await response.json()
-        setAiProviders(data.providers)
-        const active = data.providers.find((p: AIProvider) => p.is_active)
-        setActiveProvider(active || null)
-      }
+      console.log('[DEBUG] loadAIProviders disabled; returning empty providers')
+      setAiProviders([])
+      setActiveProvider(null)
     } catch (error) {
       console.error('Error loading AI providers:', error)
     }
@@ -471,6 +502,7 @@ export default function ChatPage() {
         .single()
 
       if (error) {
+
         console.error('Error creating session:', error)
         return null
       }
@@ -499,6 +531,7 @@ export default function ChatPage() {
         return newSession
       }
     } catch (error) {
+
       console.error('Error creating session:', error)
     }
     return null
@@ -528,16 +561,14 @@ export default function ChatPage() {
       sessionForSend = created
     }
     await sendChatMessage(
-      { text: message.text },
+      { role: 'user', parts: [{ type: 'text', text: message.text }, ...(Array.isArray(message.files) ? message.files : [])] } as any,
       {
         body: {
           model: selectedModel,
           webSearch,
           canvas_token: canvasStatus === 'connected' ? canvasToken : undefined,
           canvas_url: canvasStatus === 'connected' ? canvasUrl : undefined,
-          provider_id: activeProvider?.id,
-          model_override:
-            activeProvider?.provider_name === 'openrouter' ? selectedModel : undefined,
+          canvasContext: canvasContext || undefined,
         },
         headers: { 'X-Session-ID': sessionForSend.id },
       },
@@ -551,7 +582,7 @@ export default function ChatPage() {
     setDynamicSuggestions([])
     const { data, error } = await supabase
       .from('chat_messages')
-      .select('*')
+      .select('id, role, ui_parts, metadata, created_at')
       .eq('session_id', session.id)
       .order('created_at', { ascending: true })
 
@@ -559,14 +590,19 @@ export default function ChatPage() {
       const loadedMessages = data.map((msg: any) => ({
         id: msg.id,
         role: msg.role,
-        content: msg.content,
+        content: Array.isArray(msg.ui_parts)
+          ? msg.ui_parts
+            .filter((p: any) => p?.type === 'text')
+            .map((p: any) => String(p.text || ''))
+            .join('')
+          : '',
         timestamp: new Date(msg.created_at),
         provider_type: msg.metadata?.provider_type,
         provider_id: msg.metadata?.provider_id,
       }))
 
       setMessages(loadedMessages)
-      const uiHistory = loadedMessages.map((m: any) => ({ id: m.id, role: m.role, parts: [{ type: 'text', text: m.content }] }))
+      const uiHistory = data.map((msg: any) => ({ id: msg.id, role: msg.role, parts: Array.isArray(msg.ui_parts) ? msg.ui_parts : [] }))
       setUIMessages(uiHistory as any)
       try {
         const lastAssistantInHistory = [...uiHistory].reverse().find((m: any) => m.role === 'assistant')
@@ -695,6 +731,7 @@ export default function ChatPage() {
                 </div>
                 <h2 className="text-2xl font-semibold text-slate-900 mb-2">Start a conversation</h2>
                 <p className="text-slate-600 mb-8">Ask about your courses, assignments, modules, or Canvas announcements. I’ll guide you.</p>
+                {syncingCanvas && <p className="text-slate-500">Syncing Canvas data...</p>}
               </div>
             ) : (
               uiMessages.map((message) => {
@@ -706,6 +743,7 @@ export default function ChatPage() {
                 const reasoningDeltaParts = message.parts.filter((p) => (p as any).type === 'reasoning-delta') as any[]
 
                 const isMessageStreaming = message.role === 'assistant' && (textDeltaParts.length > 0 || reasoningDeltaParts.length > 0)
+
                 return (
                   <div key={message.id}>
                     {message.role === 'assistant' && message.parts.filter((p) => p.type === 'source-url').length > 0 && (
@@ -727,108 +765,76 @@ export default function ChatPage() {
                         </MessageAttachments>
                       )}
                       <AIMessageContent className="w-fit max-w-[85%] min-w-0">
-                        {(() => {
-                          type Segment =
-                            | { kind: 'text'; content: string }
-                            | { kind: 'reasoning'; content: string; streaming: boolean }
-                            | { kind: 'tool'; part: ToolUIPart }
+                        {message.parts.map((part, idx) => {
+                          const type = part.type
 
-                          const segments: Segment[] = []
-                          let current: Segment | null = null
-
-                          const finalizeCurrent = () => {
-                            if (current) {
-                              segments.push(current)
-                              current = null
-                            }
+                          if (type === 'text') {
+                            return (
+                              <MessageResponse key={`${message.id}-text-${idx}`}>
+                                {part.text}
+                              </MessageResponse>
+                            )
                           }
 
-                          const partsInOrder = message.parts as any[]
-                          for (let i = 0; i < partsInOrder.length; i++) {
-                            const part: any = partsInOrder[i]
-                            const type: string = String(part.type || '')
-
-                            if (type.startsWith('tool-') && message.role === 'assistant') {
-                              finalizeCurrent()
-                              const tp = part as unknown as ToolUIPart
-                              segments.push({ kind: 'tool', part: tp })
-                              continue
-                            }
-
-                            if (type === 'text' || type === 'text-delta') {
-                              if (!current || current.kind !== 'text') {
-                                finalizeCurrent()
-                                current = { kind: 'text', content: '' }
-                              }
-                              const chunk = String(part.textDelta ?? part.text ?? '')
-                              current.content = (current.content || '') + chunk
-                              continue
-                            }
-
-                            if (type === 'reasoning' || type === 'reasoning-delta') {
-                              if (!current || current.kind !== 'reasoning') {
-                                finalizeCurrent()
-                                current = { kind: 'reasoning', content: '', streaming: false }
-                              }
-                              const chunk = String(part.textDelta ?? part.text ?? '')
-                              current.content = (current.content || '') + chunk
-                              if (type === 'reasoning-delta') {
-                                ; (current as any).streaming = true
-                              } else {
-                                ; (current as any).streaming = false
-                              }
-                              continue
-                            }
+                          if (type === 'reasoning') {
+                            return (
+                              <Reasoning
+                                key={`${message.id}-reasoning-${idx}`}
+                                isStreaming={isMessageStreaming && idx === message.parts.length - 1}
+                                defaultOpen
+                              >
+                                <ReasoningTrigger />
+                                <ReasoningContent>
+                                  {part.text}
+                                </ReasoningContent>
+                              </Reasoning>
+                            )
                           }
-                          finalizeCurrent()
 
-                          return segments.map((seg, idx) => {
-                            if (seg.kind === 'tool') {
-                              const tp = seg.part
+                          if (type.startsWith('tool-')) {
+                            const tp = part as unknown as ToolUIPart
+                            const toolName = tp.type.split('-').slice(1).join('-')
+                            const isUITool = [
+                              'list_courses',
+                              'get_assignments',
+                              'get_modules',
+                              'get_calendar_events',
+                              'get_page_content',
+                              'get_file',
+                              'get_assignment_grade',
+                              'get_assignment_feedback_and_rubric',
+                              'webSearch'
+                            ].includes(toolName)
+
+                            if (isUITool && tp.state === 'output-available') {
                               return (
-                                <div className="mt-2 w-full max-w-full min-w-0 overflow-x-auto break-words" key={`${message.id}-tool-${idx}`}>
-                                  <Tool key={`${message.id}-tool-${idx}-${(message.role === 'assistant' && (textDeltaParts.length > 0 || reasoningDeltaParts.length > 0 || textParts.length > 0)) ? 'collapsed' : 'open'}`} defaultOpen={!(message.role === 'assistant' && (textDeltaParts.length > 0 || reasoningDeltaParts.length > 0 || textParts.length > 0))}>
-                                    <ToolHeader type={tp.type} state={tp.state} />
-                                    <ToolContent>
-                                      <ToolInput input={tp.input} />
-                                      <Confirmation approval={(tp as any).approval} state={tp.state}>
-                                        <ConfirmationTitle>
-                                          Execute {tp.type.split('-').slice(1).join('-')}?
-                                        </ConfirmationTitle>
-                                        <ConfirmationRequest>
-                                          <ConfirmationActions>
-                                            <ConfirmationAction onClick={() => onApproveTool(tp)}>Approve</ConfirmationAction>
-                                            <ConfirmationAction variant="outline" onClick={() => onDenyTool(tp)}>Deny</ConfirmationAction>
-                                          </ConfirmationActions>
-                                        </ConfirmationRequest>
-                                        <ConfirmationAccepted>
-                                          <div className="text-sm text-muted-foreground">Approved</div>
-                                        </ConfirmationAccepted>
-                                        <ConfirmationRejected>
-                                          <div className="text-sm text-muted-foreground">Denied</div>
-                                        </ConfirmationRejected>
-                                      </Confirmation>
-                                      <ToolOutput className="min-w-0" output={tp.output} errorText={tp.errorText} />
-                                    </ToolContent>
-                                  </Tool>
+                                <div className="mt-2 w-full max-w-full min-w-0 break-words" key={`${message.id}-tool-${idx}`}>
+                                  <ToolRenderer toolName={toolName} result={tp.output} />
                                 </div>
                               )
                             }
-                            if (seg.kind === 'reasoning') {
-                              return (
-                                <Reasoning isStreaming={seg.streaming && isMessageStreaming} defaultOpen key={`${message.id}-reasoning-${idx}`}>
-                                  <ReasoningTrigger />
-                                  <ReasoningContent>
-                                    {seg.content}
-                                  </ReasoningContent>
-                                </Reasoning>
-                              )
-                            }
+
                             return (
-                              <MessageResponse key={`${message.id}-text-${idx}`}>{seg.content}</MessageResponse>
+                              <div className="mt-2 w-full max-w-full min-w-0 overflow-x-auto break-words" key={`${message.id}-tool-${idx}`}>
+                                <Tool key={`${message.id}-tool-${idx}-${(message.role === 'assistant' && (textDeltaParts.length > 0 || reasoningDeltaParts.length > 0 || textParts.length > 0)) ? 'collapsed' : 'open'}`} defaultOpen={!(message.role === 'assistant' && (textDeltaParts.length > 0 || reasoningDeltaParts.length > 0 || textParts.length > 0))}>
+                                  <ToolHeader type={tp.type} state={tp.state} />
+                                  <ToolContent>
+                                    <ToolInput input={tp.input} />
+                                    {'error' in tp && tp.error ? (
+                                      <ToolOutput className="min-w-0" output={null} errorText={String(tp.error)} />
+                                    ) : (
+                                      <div className="mt-2 min-w-0">
+                                        <ToolRenderer toolName={toolName} result={'output' in tp ? tp.output : undefined} />
+                                      </div>
+                                    )}
+                                  </ToolContent>
+                                </Tool>
+                              </div>
                             )
-                          })
-                        })()}
+                          }
+
+                          return null
+                        })}
                         {message.role === 'assistant' && !isMessageStreaming && status !== 'streaming' && status !== 'submitted' && (
                           <div className="mt-1">
                             <MessageActions>
@@ -883,7 +889,20 @@ export default function ChatPage() {
                 )
               )}
             </Suggestions>
-            <PromptInput className="px-4 pb-4 w-full" globalDrop multiple onSubmit={onSubmitAI}>
+            <PromptInput
+              className="px-4 pb-4 w-full"
+              globalDrop
+              multiple
+              accept="application/pdf,image/*"
+              maxFiles={4}
+              maxFileSize={10 * 1024 * 1024}
+              onSubmit={onSubmitAI}
+            >
+              <PromptInputAttachments>
+                {(file) => (
+                  <PromptInputAttachment data={file} />
+                )}
+              </PromptInputAttachments>
               <PromptInputBody>
                 <PromptInputTextarea ref={textareaRef} placeholder="Ask about your courses, assignments, modules..." className="w-full" />
               </PromptInputBody>
@@ -892,7 +911,7 @@ export default function ChatPage() {
                   <PromptInputActionMenu>
                     <PromptInputActionMenuTrigger />
                     <PromptInputActionMenuContent>
-                      <PromptInputActionAddAttachments disabled />
+                      <PromptInputActionAddAttachments />
                       <PromptInputActionMenuItem onSelect={(e) => { e.preventDefault(); setWebSearch(v => !v) }}>
                         {webSearch ? 'Disable Web Search' : 'Enable Web Search'}
                       </PromptInputActionMenuItem>

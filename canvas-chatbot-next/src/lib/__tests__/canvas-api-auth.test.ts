@@ -21,4 +21,20 @@ describe('CanvasAPIService auth headers', () => {
     const [, options] = spy.mock.calls.at(-1) as any
     expect(options.headers.Authorization).toBe(`Bearer ${token}`)
   })
+
+  test('getAssignment sets Authorization Bearer header', async () => {
+    const spy = jest.spyOn(axios, 'get').mockResolvedValue({ data: {} } as any)
+    await service.getAssignment(1, 2, { includeRubric: true })
+    const [, options] = spy.mock.calls.at(-1) as any
+    expect(options.headers.Authorization).toBe(`Bearer ${token}`)
+    expect(options.params.include).toEqual(['rubric'])
+  })
+
+  test('getAssignmentSubmission sets Authorization Bearer header', async () => {
+    jest.spyOn(axios, 'get').mockResolvedValueOnce({ data: { id: 99 } } as any)
+    const spy = jest.spyOn(axios, 'get').mockResolvedValueOnce({ data: { id: 1, user_id: 99 } } as any)
+    await service.getAssignmentSubmission(1, 2)
+    const [, options] = spy.mock.calls.at(-1) as any
+    expect(options.headers.Authorization).toBe(`Bearer ${token}`)
+  })
 })

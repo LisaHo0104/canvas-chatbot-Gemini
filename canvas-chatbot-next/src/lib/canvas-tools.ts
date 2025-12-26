@@ -159,5 +159,149 @@ export function createCanvasTools(token: string, url: string) {
 				return api.getFileContent(fileId);
 			},
 		}),
+
+		get_file_text: tool({
+			description: 'Extract text content from a Canvas file (PDF only)',
+			inputSchema: z.object({
+				fileId: z.number(),
+			}),
+			execute: async ({ fileId }: { fileId: number }) => {
+				return api.getFileText(fileId);
+			},
+		}),
+
+		get_assignment_grade: tool({
+			description: 'Get grade and score for an assignment',
+			inputSchema: z.object({
+				courseId: z.number(),
+				assignmentId: z.number(),
+				userId: z.number().optional(),
+			}),
+			execute: async ({
+				courseId,
+				assignmentId,
+				userId,
+			}: {
+				courseId: number;
+				assignmentId: number;
+				userId?: number;
+			}) => {
+				const submission = await api.getAssignmentSubmission(courseId, assignmentId, {
+					userId,
+				});
+				const assignment = await api.getAssignment(courseId, assignmentId);
+				return {
+					grade: (submission as any).grade ?? null,
+					score: submission?.score ?? null,
+					pointsPossible: assignment?.points_possible ?? null,
+					gradedAt: submission?.graded_at ?? null,
+					workflowState: String(submission?.workflow_state || ''),
+					submittedAt: submission?.submitted_at ?? null,
+				};
+			},
+		}),
+
+		get_assignment_feedback_and_rubric: tool({
+			description: 'Get submission comments and a complete rubric breakdown for an assignment',
+			inputSchema: z.object({
+				courseId: z.number(),
+				assignmentId: z.number(),
+				userId: z.number().optional(),
+			}),
+			execute: async ({
+				courseId,
+				assignmentId,
+				userId,
+			}: {
+				courseId: number;
+				assignmentId: number;
+				userId?: number;
+			}) => {
+				const submission = await api.getAssignmentSubmission(courseId, assignmentId, {
+					userId,
+					includeRubric: true,
+					includeComments: true,
+				});
+				const assignment = await api.getAssignment(courseId, assignmentId, {
+					includeRubric: true,
+				});
+				const rubric = Array.isArray((assignment as any).rubric)
+					? ((assignment as any).rubric as any[])
+					: [];
+				const assessment = (submission as any).rubric_assessment || {};
+				const merged = rubric.map((c: any) => {
+					const primaryId = c?.id ?? c?.criterion_id;
+					const keys = [
+						primaryId,
+						String(primaryId),
+						c?.criterion_id,
+						String(c?.criterion_id),
+						primaryId != null ? `criterion_${String(primaryId)}` : null,
+						c?.criterion_id != null ? `criterion_${String(c?.criterion_id)}` : null,
+					].filter((k) => typeof k === 'string' && k.length > 0);
+					let a: any = null;
+					for (const k of keys as any[]) {
+						if (assessment && Object.prototype.hasOwnProperty.call(assessment, k)) {
+							a = (assessment as any)[k];
+							break;
+						}
+					}
+					const ratingsArr = Array.isArray(c?.ratings) ? c.ratings : [];
+					const computedPointsPossible =
+						typeof c?.points === 'number'
+							? c.points
+							: ratingsArr.length
+							? Math.max(
+								...ratingsArr.map((r: any) =>
+									typeof r?.points === 'number' ? r.points : 0,
+								),
+							)
+							: null;
+					let assessedPoints = typeof a?.points === 'number' ? a.points : null;
+					if (assessedPoints === null && a?.rating_id && ratingsArr.length) {
+						const match = ratingsArr.find(
+							(r: any) => String(r?.id ?? r?.rating_id ?? '') === String(a.rating_id),
+						);
+						const ratingPts = typeof match?.points === 'number' ? match.points : null;
+						if (typeof ratingPts === 'number') assessedPoints = ratingPts;
+					}
+					return {
+						id: String(primaryId ?? c?.criterion_id ?? ''),
+						description: c?.description ?? null,
+						long_description: c?.long_description ?? null,
+						points_possible: computedPointsPossible,
+						ratings: ratingsArr.map((r: any) => ({
+							description: r?.description ?? null,
+							points: typeof r?.points === 'number' ? r.points : null,
+						})),
+						assessed_points: assessedPoints,
+						your_score: assessedPoints,
+						assessed_comments: a?.comments ?? null,
+					};
+				});
+				const pointsPossible = merged.reduce(
+					(sum: number, c: any) => sum + (typeof c?.points_possible === 'number' ? c.points_possible : 0),
+					0,
+				);
+				const pointsEarned = merged.reduce(
+					(sum: number, c: any) => sum + (typeof c?.assessed_points === 'number' ? c.assessed_points : 0),
+					0,
+				);
+				const percentage = pointsPossible > 0 ? (pointsEarned / pointsPossible) * 100 : null;
+				return {
+					rubric: merged,
+					submissionComments: Array.isArray((submission as any).submission_comments)
+						? (submission as any).submission_comments
+						: [],
+					grade: (submission as any).grade ?? null,
+					score: submission?.score ?? null,
+					totals: {
+						points_possible: pointsPossible || null,
+						points_earned: pointsEarned || null,
+						percentage: percentage ?? null,
+					},
+				};
+			},
+		}),
 	};
 }

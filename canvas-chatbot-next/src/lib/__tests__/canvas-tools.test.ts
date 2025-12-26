@@ -25,6 +25,38 @@ jest.mock('../canvas-api', () => {
     getFileContent(fileId: number) {
       return Promise.resolve({ id: fileId, filename: 'file.pdf', url: 'https://example.com/file.pdf', 'content-type': 'application/pdf' })
     }
+    getAssignment(courseId: number, assignmentId: number, _opts?: any) {
+      return Promise.resolve({
+        id: assignmentId,
+        name: 'HW1',
+        points_possible: 100,
+        course_id: courseId,
+        description: null,
+        due_at: null,
+        html_url: '',
+        submission: null,
+        rubric: [
+          { id: 'crit1', description: 'Quality', points: 50, ratings: [{ description: 'Excellent', points: 50 }, { description: 'Poor', points: 0 }] },
+          { id: 'crit2', description: 'Completeness', points: 50, ratings: [{ description: 'Complete', points: 50 }, { description: 'Incomplete', points: 0 }] },
+        ],
+      })
+    }
+    getAssignmentSubmission(_courseId: number, _assignmentId: number, _opts?: any) {
+      return Promise.resolve({
+        id: 1,
+        user_id: 99,
+        grade: '90',
+        score: 90,
+        graded_at: new Date().toISOString(),
+        workflow_state: 'graded',
+        submitted_at: new Date().toISOString(),
+        rubric_assessment: {
+          crit1: { points: 40, comments: 'Nice work' },
+          crit2: { points: 50 },
+        },
+        submission_comments: [{ author_id: 2, comment: 'Good job', created_at: new Date().toISOString() }],
+      })
+    }
   }
   return { CanvasAPIService: MockCanvasAPIService }
 })
@@ -61,5 +93,21 @@ describe('canvas tools', () => {
   test('get_file returns file metadata', async () => {
     const res = await tools.get_file.execute({ parameters: { fileId: 42 } })
     expect(res.filename).toBe('file.pdf')
+  })
+
+  test('get_assignment_grade returns grade details', async () => {
+    const res = await tools.get_assignment_grade.execute({ parameters: { courseId: 1, assignmentId: 10 } })
+    expect(res.grade).toBe('90')
+    expect(res.pointsPossible).toBe(100)
+  })
+
+  test('get_assignment_feedback_and_rubric returns rubric and comments', async () => {
+    const res = await tools.get_assignment_feedback_and_rubric.execute({ parameters: { courseId: 1, assignmentId: 10 } })
+    expect(Array.isArray(res.rubric)).toBe(true)
+    expect(res.rubric.length).toBe(2)
+    expect(res.rubric[0].assessed_points).toBe(40)
+    expect(res.totals.points_possible).toBe(100)
+    expect(res.totals.points_earned).toBe(90)
+    expect(Array.isArray(res.submissionComments)).toBe(true)
   })
 })

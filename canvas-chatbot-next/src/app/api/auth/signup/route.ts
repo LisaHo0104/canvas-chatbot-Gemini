@@ -1,5 +1,5 @@
-import { createServerClient } from '@supabase/ssr'
 import { NextRequest, NextResponse } from 'next/server'
+import { createAuthRouteHandlerClient } from '@/lib/supabase/server'
 import { encrypt } from '@/lib/crypto'
 import { CanvasAPIService } from '@/lib/canvas-api'
 
@@ -18,26 +18,7 @@ export async function POST(request: NextRequest) {
       request,
     })
 
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_OR_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return request.cookies.getAll()
-          },
-          setAll(cookiesToSet) {
-            cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
-            supabaseResponse = NextResponse.next({
-              request,
-            })
-            cookiesToSet.forEach(({ name, value, options }) =>
-              supabaseResponse.cookies.set(name, value, options)
-            )
-          },
-        },
-      }
-    )
+    const supabase = createAuthRouteHandlerClient(request, supabaseResponse)
 
     // Sign up the user
     const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -86,8 +67,7 @@ export async function POST(request: NextRequest) {
 
     const { error: profileError } = await supabase
       .from('profiles')
-      .update(updatePayload)
-      .eq('id', authData.user.id)
+      .upsert({ id: authData.user.id, email, ...updatePayload }, { onConflict: 'id' })
 
     if (profileError) {
       console.error('Error updating user profile:', profileError)

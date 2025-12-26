@@ -19,6 +19,67 @@ export class CanvasContextService {
     this.canvasService = new CanvasAPIService(apiKey, canvasURL)
   }
 
+  async buildStaticEntityMap(limitPerCourse: number = 30) {
+    console.log('[DEBUG] Prefetch: building static entity map')
+    const courses = await this.canvasService.getCourses({
+      enrollmentState: 'active',
+      enrollmentType: 'student',
+      perPage: 100,
+    })
+    const results: Array<{
+      id: number
+      name: string
+      code: string
+      assignments: Array<{ id: number; name: string }>
+      modules: Array<{ id: number; name: string }>
+    }> = []
+
+    const concurrency = 4
+    let index = 0
+    const runner = async () => {
+      while (index < courses.length) {
+        const i = index++
+        const course = courses[i]
+        try {
+          const [assignments, modules] = await Promise.all([
+            this.canvasService.getAssignments(course.id, {
+              includeSubmission: false,
+              perPage: 100,
+              orderBy: 'position',
+            }),
+            this.canvasService.getModules(course.id, {
+              includeItems: false,
+              includeContentDetails: false,
+              perPage: 100,
+            }),
+          ])
+          results.push({
+            id: course.id,
+            name: course.name,
+            code: course.course_code,
+            assignments: assignments
+              .slice(0, limitPerCourse)
+              .map(a => ({ id: a.id, name: a.name })),
+            modules: modules
+              .slice(0, limitPerCourse)
+              .map(m => ({ id: m.id, name: m.name })),
+          })
+        } catch (err) {
+          console.error(`[DEBUG] Prefetch: failed for course ${course.id}`, err)
+          results.push({
+            id: course.id,
+            name: course.name,
+            code: course.course_code,
+            assignments: [],
+            modules: [],
+          })
+        }
+      }
+    }
+    await Promise.all(new Array(Math.min(concurrency, courses.length)).fill(0).map(() => runner()))
+    return { courses: results }
+  }
+
   async buildContext(query: string, userId: string): Promise<string> {
     try {
       const queryLower = query.toLowerCase()
@@ -359,7 +420,8 @@ export class CanvasContextService {
 
       // Filter modules if specific week/module is mentioned
       let targetModules = modules
-      const numberMatch = query.match(/(?:week|module|wk|mod)\s*(\d+)/)
+      const numberMatch = query.match(/(?:week|module|unit|lesson|wk|mod|w)\s*(\d+)/)
+      const spelledMatch = query.match(/\bweek\s*(one|two|three|four|five|six|seven|eight|nine|ten|xi|x|v|iv|iii|ii|i)\b/i)
       if (numberMatch) {
         const number = numberMatch[1]
         targetModules = modules.filter(module => {
@@ -382,6 +444,19 @@ export class CanvasContextService {
         } else {
           context += `  🔍 Showing content for ${numberMatch[0].toUpperCase()}\n\n`
         }
+      } else if (spelledMatch) {
+        const map: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, i: 1, ii: 2, iii: 3, iv: 4, v: 5, x: 10, xi: 11 }
+        const spelled = spelledMatch[1].toLowerCase()
+        const number = map[spelled]
+        if (number) {
+          targetModules = modules.filter(module => {
+            const nm = module.name.toLowerCase()
+            return nm.includes(`week ${number}`) || nm.includes(`module ${number}`) || nm.includes(`wk ${number}`) || nm.includes(`unit ${number}`)
+          })
+          if (targetModules.length > 0) {
+            context += `  🔍 Showing content for WEEK ${number}\n\n`
+          }
+        }
       }
 
       for (const module of targetModules.slice(0, 8)) {
@@ -394,8 +469,7 @@ export class CanvasContextService {
         }
 
         context += `    📋 Found ${items.length} items in this module\n\n`
-        
-        for (const item of items.slice(0, 20)) {
+        for (const item of items) {
           context += `    ${'─'.repeat(50)}\n`
           context += `    📌 ${item.title} (${item.type})\n`
           
@@ -417,6 +491,13 @@ export class CanvasContextService {
               const fileInfo = await this.canvasService.getFileContent(item.content_id)
               context += `    📎 File: ${fileInfo.filename}\n`
               context += `    🔗 Download: ${item.html_url}\n`
+              const fileText = await this.canvasService.getFileText(item.content_id)
+              if (fileText) {
+                context += `\n    📄 PDF CONTENT:\n`
+                context += `    ${'-'.repeat(50)}\n`
+                context += `${this.cleanText(fileText)}\n`
+                context += `    ${'-'.repeat(50)}\n`
+              }
             } catch (error) {
               context += `    ⚠️ Could not fetch file information\n`
             }
@@ -438,6 +519,12 @@ export class CanvasContextService {
             } catch (error) {
               context += `    ⚠️ Could not fetch assignment details\n`
             }
+          } else if (item.type === 'ExternalUrl' && item.external_url) {
+            context += `    🌐 External Link:\n`
+            context += `       🔗 ${item.external_url}\n`
+          } else if (item.type === 'ExternalTool' && item.html_url) {
+            context += `    🛠️ External Tool:\n`
+            context += `       🔗 ${item.html_url}\n`
           }
           
           if (item.html_url) {

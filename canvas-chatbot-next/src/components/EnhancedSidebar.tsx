@@ -18,7 +18,7 @@ import { createClient as createSupabaseClient } from '@/lib/supabase/client'
 import { Shimmer } from '@/components/ai-elements/shimmer'
 import { Skeleton } from '@/components/ui/skeleton'
 
-let supabase: any = null
+let supabase: ReturnType<typeof createSupabaseClient> | null = null
 
 try {
   supabase = createSupabaseClient()
@@ -135,10 +135,40 @@ export default function EnhancedSidebar({
     if (!actionSessionId) return
     try {
       if (supabase) {
-        await supabase
+        console.log('[DEBUG] Attempting to delete session', { actionSessionId })
+        const { error: sessionError } = await supabase
           .from('chat_sessions')
           .delete()
           .eq('id', actionSessionId)
+
+        if (sessionError) {
+          console.error('Error deleting session:', sessionError)
+          const isFKViolation =
+            (sessionError as any)?.code === '23503' ||
+            String((sessionError as any)?.message || '').toLowerCase().includes('violates foreign key') ||
+            String((sessionError as any)?.details || '').toLowerCase().includes('foreign key')
+          if (isFKViolation) {
+            console.log('[DEBUG] Foreign key constraint detected; attempting to delete messages first', { actionSessionId })
+            const { error: messagesError } = await supabase
+              .from('chat_messages')
+              .delete()
+              .eq('session_id', actionSessionId)
+            if (messagesError) {
+              console.error('Error deleting messages before session:', messagesError)
+              throw messagesError
+            }
+            const { error: retryError } = await supabase
+              .from('chat_sessions')
+              .delete()
+              .eq('id', actionSessionId)
+            if (retryError) {
+              console.error('Error deleting session after messages removed:', retryError)
+              throw retryError
+            }
+          } else {
+            throw sessionError
+          }
+        }
       }
 
       onSessionDelete?.(actionSessionId)
@@ -146,7 +176,7 @@ export default function EnhancedSidebar({
       setActionSessionId(null)
     } catch (error) {
       console.error('Error deleting session:', error)
-      alert('Failed to delete conversation')
+      alert(`Failed to delete conversation: ${String((error as any)?.message || 'Unknown error')}`)
     }
   }
 
@@ -338,15 +368,28 @@ export default function EnhancedSidebar({
                           <DropdownMenuContent className="w-40" align="end" onClick={(e) => e.stopPropagation()}>
                             <DropdownMenuLabel>Conversation Actions</DropdownMenuLabel>
                             <DropdownMenuGroup>
-                              <DropdownMenuItem onSelect={() => { setEditingSession(session.id); setEditTitle(session.title) }}>
-                                Rename
-                              </DropdownMenuItem>
-                              <DropdownMenuItem variant="destructive" onSelect={() => setShowDeleteDialog(true)}>
-                                Delete
-                              </DropdownMenuItem>
-                            </DropdownMenuGroup>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                          <DropdownMenuItem onSelect={() => { setEditingSession(session.id); setEditTitle(session.title) }}>
+                            Rename
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            variant="destructive"
+                            onClick={(e) => {
+                              console.log('[DEBUG] Delete menu item clicked', { actionSessionId })
+                              e.preventDefault()
+                              e.stopPropagation()
+                              setShowDeleteDialog(true)
+                            }}
+                            onSelect={(e) => {
+                              console.log('[DEBUG] Delete menu item selected', { actionSessionId })
+                              e.preventDefault()
+                              setShowDeleteDialog(true)
+                            }}
+                          >
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuGroup>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
 
                       </div>
                     </div>
@@ -363,7 +406,20 @@ export default function EnhancedSidebar({
                     <DialogClose asChild>
                       <Button variant="outline">Cancel</Button>
                     </DialogClose>
-                    <Button onClick={handleSessionDelete} variant="destructive">Delete</Button>
+                    <Button
+                      onClick={() => {
+                        console.log('[DEBUG] handleSessionDelete invoked', { actionSessionId })
+                        if (!actionSessionId) {
+                          console.error('Delete requested with no actionSessionId')
+                          setShowDeleteDialog(false)
+                          return
+                        }
+                        handleSessionDelete()
+                      }}
+                      variant="destructive"
+                    >
+                      Delete
+                    </Button>
                   </div>
                 </DialogContent>
               </Dialog>

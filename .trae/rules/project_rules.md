@@ -1,1 +1,2 @@
 - Always preview the application at `http://localhost:3000` if nothing there run the `npm run dev` command
+- When implement code, always have minimum of 1 debug log statement

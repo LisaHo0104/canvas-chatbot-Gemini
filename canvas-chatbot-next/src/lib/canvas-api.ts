@@ -11,18 +11,45 @@ export interface CanvasCourse {
 }
 
 export interface CanvasAssignment {
-	id: number;
-	name: string;
-	description: string | null;
-	due_at: string | null;
-	points_possible: number;
-	course_id: number;
-	html_url: string;
-	submission: {
-		score: number | null;
-		graded_at: string | null;
-		workflow_state: string;
-	} | null;
+  id: number;
+  name: string;
+  description: string | null;
+  due_at: string | null;
+  points_possible: number;
+  course_id: number;
+  html_url: string;
+  submission: {
+    score: number | null;
+    graded_at: string | null;
+    workflow_state: string;
+  } | null;
+  rubric?: CanvasRubricCriterion[] | null;
+}
+export interface CanvasRubricRating {
+  id?: string | number;
+  description?: string | null;
+  long_description?: string | null;
+  points?: number;
+}
+export interface CanvasRubricCriterion {
+  id: string;
+  description?: string | null;
+  long_description?: string | null;
+  points?: number;
+  ratings?: CanvasRubricRating[];
+}
+export interface CanvasSubmission {
+  id: number;
+  user_id: number;
+  grade: string | null;
+  score: number | null;
+  graded_at: string | null;
+  workflow_state: string;
+  submitted_at: string | null;
+  late?: boolean;
+  missing?: boolean;
+  rubric_assessment?: any;
+  submission_comments?: Array<{ author_id: number; comment: string; created_at: string }>;
 }
 
 export interface CanvasModule {
@@ -228,7 +255,7 @@ export class CanvasAPIService {
 		}
 	}
 
-	async getAssignments(
+  async getAssignments(
 		courseId: number,
 		optionsOrIncludeSubmission:
 			| boolean
@@ -258,7 +285,7 @@ export class CanvasAPIService {
 				perPage = optionsOrIncludeSubmission.perPage;
 				orderBy = optionsOrIncludeSubmission.orderBy;
 				searchTerm = optionsOrIncludeSubmission.searchTerm;
-			}
+  }
 
 			params.per_page = perPage ?? 50;
 			if (includeSubmission) params['include[]'] = ['submission'];
@@ -288,8 +315,77 @@ export class CanvasAPIService {
 					status ? ` (${status})` : ''
 				}: ${message}`,
 			);
-		}
-	}
+    }
+  }
+
+  async getAssignment(
+    courseId: number,
+    assignmentId: number,
+    options?: { includeRubric?: boolean },
+  ) {
+    try {
+      const includeRubric = options?.includeRubric === true;
+      const params: any = {};
+      if (includeRubric) params.include = ['rubric'];
+      const response = await axios.get(
+        `${this.baseURL}/courses/${courseId}/assignments/${assignmentId}`,
+        {
+          headers: this.getHeaders(),
+          params,
+          timeout: 10000,
+        },
+      );
+      return response.data as CanvasAssignment;
+    } catch (error: any) {
+      const status = error?.response?.status;
+      const data = error?.response?.data;
+      const message =
+        (typeof data === 'string' ? data : data?.errors?.[0]?.message) ||
+        error?.message ||
+        'Unknown error';
+      throw new Error(
+        `Failed to fetch assignment${status ? ` (${status})` : ''}: ${message}`,
+      );
+    }
+  }
+
+  async getAssignmentSubmission(
+    courseId: number,
+    assignmentId: number,
+    options?: { userId?: number; includeRubric?: boolean; includeComments?: boolean },
+  ) {
+    try {
+      let userId = options?.userId;
+      if (!userId) {
+        const me = await this.getCurrentUser();
+        userId = Number(me?.id);
+      }
+      const includeRubric = options?.includeRubric === true;
+      const includeComments = options?.includeComments === true;
+      const params: any = { include: [] as string[] };
+      if (includeRubric) params.include.push('rubric_assessment');
+      if (includeComments) params.include.push('submission_comments');
+      const response = await axios.get(
+        `${this.baseURL}/courses/${courseId}/assignments/${assignmentId}/submissions/${userId}`,
+        {
+          headers: this.getHeaders(),
+          params,
+          timeout: 10000,
+        },
+      );
+      return response.data as CanvasSubmission;
+    } catch (error: any) {
+      const status = error?.response?.status;
+      const data = error?.response?.data;
+      const message =
+        (typeof data === 'string' ? data : data?.errors?.[0]?.message) ||
+        error?.message ||
+        'Unknown error';
+      throw new Error(
+        `Failed to fetch submission${status ? ` (${status})` : ''}: ${message}`,
+      );
+    }
+  }
 
 	async getModules(
 		courseId: number,
@@ -337,24 +433,33 @@ export class CanvasAPIService {
 
 	async getPageContent(courseId: number, pageUrl: string) {
 		try {
+			let finalSlug: string | null = null;
 			let response;
-
-			// Try direct URL first
-			if (pageUrl.startsWith('http')) {
-				try {
-					response = await axios.get(pageUrl, {
-						headers: this.getHeaders(),
-						timeout: 15000,
-					});
-				} catch (error) {
-					// If direct URL fails, try API endpoint
-					response = null;
+			const trimmed = String(pageUrl || '').trim();
+			if (trimmed.startsWith('http')) {
+				const mApi = trimmed.match(/\/courses\/(\d+)\/pages\/([a-z0-9\-_%]+)/i);
+				if (mApi && Number(mApi[1]) === Number(courseId)) {
+					finalSlug = mApi[2];
 				}
 			}
 
-			// If no response or failed, try API endpoint
-			if (!response) {
-				const apiPageUrl = `${this.baseURL}/courses/${courseId}/pages/${pageUrl}`;
+			if (finalSlug) {
+				const apiPageUrl = `${this.baseURL}/courses/${courseId}/pages/${finalSlug}`;
+				response = await this.withRetry(async () => {
+					return axios.get(apiPageUrl, {
+						headers: this.getHeaders(),
+						timeout: 15000,
+					});
+				});
+			} else if (trimmed.startsWith('http')) {
+				response = await this.withRetry(async () => {
+					return axios.get(trimmed, {
+						headers: this.getHeaders(),
+						timeout: 15000,
+					});
+				});
+			} else {
+				const apiPageUrl = `${this.baseURL}/courses/${courseId}/pages/${trimmed}`;
 				response = await this.withRetry(async () => {
 					return axios.get(apiPageUrl, {
 						headers: this.getHeaders(),
@@ -362,7 +467,6 @@ export class CanvasAPIService {
 					});
 				});
 			}
-
 			return (response as any).data as CanvasPage;
 		} catch (error: any) {
 			const status = error?.response?.status;
@@ -504,6 +608,32 @@ export class CanvasAPIService {
 			throw new Error(
 				`Failed to download file${status ? ` (${status})` : ''}: ${message}`,
 			);
+		}
+	}
+
+	async getFileText(fileId: number) {
+		try {
+			const meta = await this.getFileContent(fileId);
+			const url = meta.url;
+			const contentType = String((meta as any)['content-type'] || '').toLowerCase();
+			if (!url) return '';
+			const data = await this.downloadFile(url);
+			if (contentType.includes('pdf')) {
+				const buf = Buffer.from(data);
+				let pdfParseFn: any = null;
+				try {
+					const mod: any = await import('pdf-parse');
+					pdfParseFn = mod?.default || mod?.pdf || mod;
+				} catch {}
+				if (typeof pdfParseFn === 'function') {
+					const res = await pdfParseFn(buf);
+					return String(res?.text || '').trim();
+				}
+				return '';
+			}
+			return '';
+		} catch {
+			return '';
 		}
 	}
 }

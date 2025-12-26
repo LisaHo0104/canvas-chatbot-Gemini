@@ -1,26 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@supabase/ssr';
+import { createRouteHandlerClient } from '@/lib/supabase/server';
 import { OpenRouterService } from '@/lib/openrouter-service';
 import { rateLimitMiddleware } from '@/lib/rate-limit';
 
 async function getModelsHandler(request: NextRequest) {
 	try {
-		const supabase = createServerClient(
-			process.env.NEXT_PUBLIC_SUPABASE_URL!,
-			process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_OR_ANON_KEY!,
-			{
-				cookies: {
-					getAll() {
-						return request.cookies.getAll();
-					},
-					setAll(cookiesToSet) {
-						cookiesToSet.forEach(({ name, value, options }) => {
-							request.cookies.set(name, value);
-						});
-					},
-				},
-			},
-		);
+		const supabase = createRouteHandlerClient(request);
 
 		// Get current user
 		const {

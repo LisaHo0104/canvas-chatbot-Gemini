@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem, SelectGroup, SelectLabel, SelectSeparator } from '@/components/ui/select'
 import { Spinner } from '@/components/ui/spinner'
 
 interface User {
@@ -37,16 +37,25 @@ export default function SettingsPage() {
     console.error('Error creating Supabase client:', error)
   }
 
-  const institutions = [
-    { value: 'https://swinburne.instructure.com', label: 'Swinburne University' },
-    { value: 'https://canvas.mit.edu', label: 'MIT' },
-    { value: 'https://canvas.harvard.edu', label: 'Harvard University' },
-    { value: 'https://bcourses.berkeley.edu', label: 'UC Berkeley' },
-    { value: 'https://canvas.stanford.edu', label: 'Stanford University' },
-    { value: 'https://canvas.uw.edu', label: 'University of Washington' },
-    { value: 'https://canvas.yale.edu', label: 'Yale University' },
-    { value: 'https://canvas.cornell.edu', label: 'Cornell University' },
-    { value: 'custom', label: 'Custom Institution URL' },
+  const auInstitutions = [
+    { value: 'https://myuni.adelaide.edu.au', label: 'University of Adelaide' },
+    { value: 'https://canvas.anu.edu.au', label: 'Australian National University (ANU)' },
+    { value: 'https://canvas.online.acu.edu.au', label: 'Australian Catholic University (ACU)' },
+    { value: 'https://rmit.instructure.com', label: 'Royal Melbourne Institute of Technology (RMIT)' },
+    { value: 'https://canvas.sydney.edu.au', label: 'University of Sydney' },
+    { value: 'https://lms.unimelb.edu.au/canvas', label: 'University of Melbourne' },
+    { value: 'https://canvas.uts.edu.au', label: 'University of Technology Sydney (UTS)' },
+    { value: 'https://uclearn.canberra.edu.au', label: 'University of Canberra (UC)' },
+    { value: 'https://canvas.qut.edu.au', label: 'Queensland University of Technology (QUT)' },
+    { value: 'https://swinburne.instructure.com', label: 'Swinburne University of Technology' },
+    { value: 'https://usc.instructure.com', label: 'University of the Sunshine Coast (USC)' },
+    { value: 'https://canvas.newcastle.edu.au', label: 'University of Newcastle (UON)' },
+  ]
+
+  const vnInstitutions = [
+    { value: 'https://vinuni.instructure.com', label: 'VinUniversity (VinUni)' },
+    { value: 'https://rmit.instructure.com', label: 'RMIT University Vietnam' },
+    { value: 'https://swinburne.instructure.com', label: 'Swinburne Vietnam' },
   ]
 
   useEffect(() => {
@@ -127,6 +136,10 @@ export default function SettingsPage() {
     loadCanvasStatus()
   }, [user])
 
+  useEffect(() => {
+    console.debug('Canvas token instructions ready')
+  }, [])
+
   const handleCanvasSave = async (e: React.FormEvent) => {
     e.preventDefault()
     setCanvasMessage(null)
@@ -195,15 +208,27 @@ export default function SettingsPage() {
               <CardContent>
                 <form className="space-y-4" onSubmit={handleCanvasSave} aria-busy={savingCanvas}>
                   <div>
-                    <Label htmlFor="institution">Canvas Institution</Label>
-                    <Select value={canvasInstitution} onValueChange={setCanvasInstitution}>
+                    <Label htmlFor="institution">Canvas Links for Australian and Vietnamese Universities</Label>
+                    <Select value={canvasInstitution} onValueChange={(v) => { console.debug('Selected Canvas institution', v); setCanvasInstitution(v) }}>
                       <SelectTrigger id="institution" className="mt-2">
                         <SelectValue placeholder="Select institution" />
                       </SelectTrigger>
                       <SelectContent>
-                        {institutions.map((inst) => (
-                          <SelectItem key={inst.value} value={inst.value}>{inst.label}</SelectItem>
-                        ))}
+                        <SelectGroup>
+                          <SelectLabel>Australian Universities</SelectLabel>
+                          {auInstitutions.map((inst) => (
+                            <SelectItem key={`${inst.value}-au`} value={inst.value}>{inst.label}</SelectItem>
+                          ))}
+                        </SelectGroup>
+                        <SelectSeparator />
+                        <SelectGroup>
+                          <SelectLabel>Vietnamese Universities</SelectLabel>
+                          {vnInstitutions.map((inst) => (
+                            <SelectItem key={`${inst.value}-vn`} value={inst.value}>{inst.label}</SelectItem>
+                          ))}
+                        </SelectGroup>
+                        <SelectSeparator />
+                        <SelectItem value="custom">Custom Institution URL</SelectItem>
                       </SelectContent>
                     </Select>
                     {canvasInstitution === 'custom' && (
@@ -218,6 +243,29 @@ export default function SettingsPage() {
                     <Label htmlFor="canvasToken">Canvas API Token</Label>
                     <Input id="canvasToken" type="password" value={canvasToken} onChange={(e) => setCanvasToken(e.target.value)} placeholder="Canvas API Token" aria-describedby="canvasTokenHelp" />
                     <p id="canvasTokenHelp" className="mt-2 text-xs text-muted-foreground">Token is sent securely to the server and stored encrypted. It is not saved in your browser.</p>
+                    <div id="canvasTokenInstructions" className="mt-2 text-xs text-muted-foreground space-y-2">
+                      <p>How to get a Canvas API token:</p>
+                      <ol className="list-decimal ml-4 space-y-1">
+                        <li>
+                          Sign in to your institution’s Canvas
+                          { (canvasInstitution || canvasUrl) && (
+                            <>
+                              {' '}
+                              <a
+                                href={(canvasInstitution === 'custom' ? canvasUrl : canvasInstitution) || '#'}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="underline"
+                              >Open Canvas</a>
+                            </>
+                          )}
+                        </li>
+                        <li>Go to Account → Settings.</li>
+                        <li>Find the Access Tokens section and click New Access Token.</li>
+                        <li>Enter a purpose and optional expiry, then Generate Token.</li>
+                        <li>Copy the token and paste it into the field above.</li>
+                      </ol>
+                    </div>
                   </div>
 
                   {canvasMessage && (
