@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -12,8 +12,7 @@ import { CheckCircle, Clock, CreditCard, ArrowRight, Info } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 
-export default function CheckoutSuccessPage() {
-  const searchParams = useSearchParams()
+function CheckoutSuccessContent() {
   const router = useRouter()
   const supabase = createClient()
   const [isLoading, setIsLoading] = useState(true)
@@ -22,43 +21,44 @@ export default function CheckoutSuccessPage() {
   useEffect(() => {
     // Polar redirects to success URL after checkout
     // No session_id needed - just fetch user's subscription
-    verifySubscription()
-  }, [searchParams, router])
+    const verifySubscription = async () => {
+      try {
+        // Check if user is authenticated
+        const { data: { user }, error: authError } = await supabase.auth.getUser()
+        
+        if (authError || !user) {
+          toast.error('Please sign in to view your subscription')
+          router.push('/auth/login')
+          return
+        }
 
-  const verifySubscription = async () => {
-    try {
-      // Check if user is authenticated
-      const { data: { user }, error: authError } = await supabase.auth.getUser()
-      
-      if (authError || !user) {
-        toast.error('Please sign in to view your subscription')
-        router.push('/auth/login')
-        return
+        // Get user subscription data (schema from NEXT_PUBLIC_SUPABASE_SCHEMA env var)
+        const { data: subscriptionData, error: subError } = await supabase
+          .from('subscriptions')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single()
+
+        if (subError && subError.code !== 'PGRST116') {
+          console.error('Failed to fetch subscription:', subError)
+          // Still show success message even if we can't fetch details
+          setSessionData({ status: 'complete' })
+        } else {
+          setSessionData(subscriptionData || { status: 'complete' })
+        }
+      } catch (error) {
+        console.error('Subscription verification error:', error)
+        toast.error('Failed to verify subscription')
+      } finally {
+        setIsLoading(false)
       }
-
-      // Get user subscription data (schema from NEXT_PUBLIC_SUPABASE_SCHEMA env var)
-      const { data: subscriptionData, error: subError } = await supabase
-        .from('subscriptions')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single()
-
-      if (subError && subError.code !== 'PGRST116') {
-        console.error('Failed to fetch subscription:', subError)
-        // Still show success message even if we can't fetch details
-        setSessionData({ status: 'complete' })
-      } else {
-        setSessionData(subscriptionData || { status: 'complete' })
-      }
-    } catch (error) {
-      console.error('Subscription verification error:', error)
-      toast.error('Failed to verify subscription')
-    } finally {
-      setIsLoading(false)
     }
-  }
+
+    verifySubscription()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   if (isLoading) {
     return (
@@ -186,5 +186,22 @@ export default function CheckoutSuccessPage() {
         </Alert>
       </div>
     </div>
+  )
+}
+
+export default function CheckoutSuccessPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="text-center space-y-4">
+            <Spinner className="h-12 w-12 mx-auto" />
+            <p className="text-gray-600">Loading...</p>
+          </div>
+        </div>
+      }
+    >
+      <CheckoutSuccessContent />
+    </Suspense>
   )
 }

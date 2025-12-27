@@ -10,12 +10,9 @@ import { toast } from 'sonner'
 import { 
   CreditCard, 
   Calendar, 
-  DollarSign, 
   ExternalLink, 
   Settings,
-  History,
-  AlertCircle,
-  CheckCircle
+  AlertCircle
 } from 'lucide-react'
 import { format } from 'date-fns'
 
@@ -29,21 +26,11 @@ interface SubscriptionData {
   created_at: string
 }
 
-interface PaymentData {
-  id: string
-  amount: number
-  currency: string
-  status: string
-  created_at: string
-  polar_order_id?: string
-}
-
 export default function BillingPage() {
   const router = useRouter()
   const supabase = createClient()
   const [isLoading, setIsLoading] = useState(true)
   const [subscription, setSubscription] = useState<SubscriptionData | null>(null)
-  const [payments, setPayments] = useState<PaymentData[]>([])
   const [isPortalLoading, setIsPortalLoading] = useState(false)
 
   useEffect(() => {
@@ -73,19 +60,6 @@ export default function BillingPage() {
         console.error('Failed to fetch subscription:', subError)
       } else if (subData) {
         setSubscription(subData)
-      }
-
-      // Fetch payment history (schema from NEXT_PUBLIC_SUPABASE_SCHEMA env var)
-      const { data: paymentsData, error: paymentsError } = await supabase
-        .from('payments')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-
-      if (paymentsError) {
-        console.error('Failed to fetch payments:', paymentsError)
-      } else {
-        setPayments(paymentsData || [])
       }
     } catch (error) {
       console.error('Failed to fetch billing data:', error)
@@ -213,57 +187,6 @@ export default function BillingPage() {
                 <Button onClick={() => router.push('/pricing')}>
                   View Pricing Plans
                 </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Payment History */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <History className="h-5 w-5" />
-              Payment History
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {payments.length > 0 ? (
-              <div className="space-y-4">
-                {payments.map((payment) => (
-                  <div key={payment.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-white rounded-full">
-                        <DollarSign className="h-5 w-5 text-green-500" />
-                      </div>
-                      <div>
-                        <p className="font-medium">${payment.amount} {payment.currency.toUpperCase()}</p>
-                        <p className="text-sm text-gray-600">
-                          {format(new Date(payment.created_at), 'MMM d, yyyy')}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      {payment.status === 'succeeded' ? (
-                        <Badge className="bg-green-100 text-green-800">
-                          <CheckCircle className="h-3 w-3 mr-1" />
-                          Paid
-                        </Badge>
-                      ) : payment.status === 'failed' ? (
-                        <Badge className="bg-red-100 text-red-800">
-                          <AlertCircle className="h-3 w-3 mr-1" />
-                          Failed
-                        </Badge>
-                      ) : (
-                        <Badge variant="outline">{payment.status}</Badge>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-8">
-                <History className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-600">No payment history found</p>
               </div>
             )}
           </CardContent>

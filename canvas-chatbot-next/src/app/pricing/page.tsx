@@ -63,8 +63,14 @@ export default function PricingPage() {
     }
   }
 
-  const handlePlanSelect = async (planId: PlanId) => {
-    setIsLoading(planId)
+  const handlePlanSelect = async (planId: string) => {
+    if (!(planId in PLANS)) {
+      console.error('Invalid plan ID:', planId)
+      return
+    }
+
+    const validPlanId = planId as PlanId
+    setIsLoading(validPlanId)
 
     try {
       // Check if user is authenticated
@@ -76,9 +82,9 @@ export default function PricingPage() {
         return
       }
 
-      const plan = PLANS[planId]
+      const plan = PLANS[validPlanId]
 
-      if (planId === 'free') {
+      if (validPlanId === 'free') {
         const res = await fetch('/api/select-free-plan', { method: 'POST' })
         if (!res.ok) {
           const err = await res.json().catch(() => ({}))
@@ -174,6 +180,7 @@ export default function PricingPage() {
               plan={{
                 ...plan,
                 price: plan.price,
+                features: Array.from(plan.features) as string[],
               }}
               isLoading={isLoading === planId}
               onSelect={handlePlanSelect}

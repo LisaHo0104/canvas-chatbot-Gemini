@@ -2,7 +2,10 @@
 
 import { createServiceRoleClient } from '@/lib/supabase/server';
 import { Polar } from '@polar-sh/sdk';
-import * as PolarTypes from '@polar-sh/sdk/models/components';
+import type { WebhookProductUpdatedPayload } from '@polar-sh/sdk/models/components/webhookproductupdatedpayload';
+import type { WebhookProductCreatedPayload } from '@polar-sh/sdk/models/components/webhookproductcreatedpayload';
+import type { WebhookSubscriptionUpdatedPayload } from '@polar-sh/sdk/models/components/webhooksubscriptionupdatedpayload';
+import type { WebhookSubscriptionCreatedPayload } from '@polar-sh/sdk/models/components/webhooksubscriptioncreatedpayload';
 
 // Initialize Polar client
 const polar = new Polar({
@@ -16,8 +19,8 @@ const polar = new Polar({
  */
 export async function upsertProductRecord(
   payload:
-    | PolarTypes.WebhookProductUpdatedPayload
-    | PolarTypes.WebhookProductCreatedPayload
+    | WebhookProductUpdatedPayload
+    | WebhookProductCreatedPayload
 ) {
   const supabaseAdmin = createServiceRoleClient();
   const product = payload.data;
@@ -52,7 +55,7 @@ export async function upsertProductRecord(
       price.type === 'recurring' && price.recurringInterval
         ? price.recurringInterval
         : null,
-    metadata: price.metadata ?? null
+    metadata: ('metadata' in price && price.metadata) ? price.metadata : null
   }));
 
   // Upsert prices
@@ -268,8 +271,8 @@ export async function createOrRetrieveCustomer({
  */
 export async function manageSubscriptionStatusChange(
   payload:
-    | PolarTypes.WebhookSubscriptionUpdatedPayload
-    | PolarTypes.WebhookSubscriptionCreatedPayload
+    | WebhookSubscriptionUpdatedPayload
+    | WebhookSubscriptionCreatedPayload
 ) {
   const supabaseAdmin = createServiceRoleClient();
   const polarCustomerId = payload.data.customer.id;
@@ -422,7 +425,7 @@ export async function manageSubscriptionStatusChange(
     polar_subscription_id: subscription.id, // Use Polar subscription ID
     polar_product_id: subscription.product?.id || null,
     status: subscription.status,
-    price_id: subscription.price?.id || null, // New field from migration
+    price_id: subscription.prices?.[0]?.id || null, // New field from migration
     cancel_at_period_end: subscription.cancelAtPeriodEnd || false,
     current_period_start: subscription.currentPeriodStart
       ? subscription.currentPeriodStart.toISOString()
