@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { DatabaseService } from '@/lib/stripe/database'
+import { DatabaseService } from '@/lib/polar/database'
 import { createClient } from '@/lib/supabase/server'
 
 export async function POST(_request: NextRequest) {

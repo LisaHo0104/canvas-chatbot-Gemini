@@ -22,7 +22,7 @@ import { format } from 'date-fns'
 interface SubscriptionData {
   id: string
   status: string
-  stripe_price_id: string
+  polar_product_id: string
   current_period_start: string
   current_period_end: string
   cancel_at_period_end: boolean
@@ -35,7 +35,7 @@ interface PaymentData {
   currency: string
   status: string
   created_at: string
-  stripe_invoice_id?: string
+  polar_order_id?: string
 }
 
 export default function BillingPage() {
@@ -60,7 +60,7 @@ export default function BillingPage() {
         return
       }
 
-      // Fetch subscription data
+      // Fetch subscription data (schema from NEXT_PUBLIC_SUPABASE_SCHEMA env var)
       const { data: subData, error: subError } = await supabase
         .from('subscriptions')
         .select('*')
@@ -75,7 +75,7 @@ export default function BillingPage() {
         setSubscription(subData)
       }
 
-      // Fetch payment history
+      // Fetch payment history (schema from NEXT_PUBLIC_SUPABASE_SCHEMA env var)
       const { data: paymentsData, error: paymentsError } = await supabase
         .from('payments')
         .select('*')
@@ -99,30 +99,8 @@ export default function BillingPage() {
     setIsPortalLoading(true)
     
     try {
-      const returnUrl = `${window.location.origin}/account/billing`
-      
-      const response = await fetch('/api/create-portal-session', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          returnUrl,
-        }),
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to create portal session')
-      }
-
-      // Redirect to Stripe Customer Portal
-      if (data.url) {
-        window.location.href = data.url
-      } else {
-        throw new Error('No portal URL received')
-      }
+      // Redirect to Polar Customer Portal (GET route)
+      window.location.href = '/portal'
     } catch (error) {
       console.error('Portal creation error:', error)
       toast.error(error instanceof Error ? error.message : 'Failed to open billing portal')
@@ -146,9 +124,12 @@ export default function BillingPage() {
     }
   }
 
-  const getPlanName = (priceId: string) => {
-    if (priceId.includes('pro')) return 'Lulu Pro Plan'
-    return 'Unknown Plan'
+  const getPlanName = (productId: string) => {
+    // Check if it's the Premium Subscription product ID
+    if (productId === '11e3a7bc-3786-48ff-853a-7e14e960c1e1' || productId.includes('11e3a7bc')) {
+      return 'Premium Subscription'
+    }
+    return 'Pro Plan'
   }
 
   if (isLoading) {
@@ -184,7 +165,7 @@ export default function BillingPage() {
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="font-medium">{getPlanName(subscription.stripe_price_id)}</p>
+                    <p className="font-medium">{getPlanName(subscription.polar_product_id)}</p>
                     <p className="text-sm text-gray-600">Monthly billing</p>
                   </div>
                   {getStatusBadge(subscription.status)}

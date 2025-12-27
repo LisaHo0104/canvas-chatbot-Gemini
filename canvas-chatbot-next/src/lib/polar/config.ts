@@ -1,11 +1,8 @@
+// Polar payment configuration
+// Product ID: 11e3a7bc-3786-48ff-853a-7e14e960c1e1 (Premium Subscription, $29.99/month)
 
-// Client-side configuration
-export const getStripePublishableKey = () => {
-  return process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!
-}
-
-export const getStripePriceIds = () => ({
-  pro: process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_PRO!,
+export const getPolarProductIds = () => ({
+  pro: process.env.NEXT_PUBLIC_POLAR_PRODUCT_ID_PRO!,
 })
 
 export const PLANS = {
@@ -25,8 +22,8 @@ export const PLANS = {
     id: 'pro',
     name: 'Pro',
     description: 'Ideal for growing teams and businesses',
-    price: 29,
-    priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_PRO!,
+    price: 29.99,
+    productId: process.env.NEXT_PUBLIC_POLAR_PRODUCT_ID_PRO || '11e3a7bc-3786-48ff-853a-7e14e960c1e1',
     features: [
       'Up to 1,000 API calls per month',
       'Advanced AI models',
@@ -40,3 +37,4 @@ export const PLANS = {
 } as const
 
 export type PlanId = keyof typeof PLANS
+

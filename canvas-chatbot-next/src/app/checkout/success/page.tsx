@@ -4,7 +4,11 @@ import { useEffect, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { CheckCircle, Clock, CreditCard, ArrowRight } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Separator } from '@/components/ui/separator'
+import { Spinner } from '@/components/ui/spinner'
+import { CheckCircle, Clock, CreditCard, ArrowRight, Info } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 
@@ -16,19 +20,12 @@ export default function CheckoutSuccessPage() {
   const [sessionData, setSessionData] = useState<any>(null)
 
   useEffect(() => {
-    const sessionId = searchParams.get('session_id')
-    
-    if (!sessionId) {
-      toast.error('Invalid session ID')
-      router.push('/pricing')
-      return
-    }
-
-    // Verify the session and get subscription details
-    verifySession(sessionId)
+    // Polar redirects to success URL after checkout
+    // No session_id needed - just fetch user's subscription
+    verifySubscription()
   }, [searchParams, router])
 
-  const verifySession = async (sessionId: string) => {
+  const verifySubscription = async () => {
     try {
       // Check if user is authenticated
       const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -39,7 +36,7 @@ export default function CheckoutSuccessPage() {
         return
       }
 
-      // Get user subscription data (avoid join to reduce RLS/permission issues)
+      // Get user subscription data (schema from NEXT_PUBLIC_SUPABASE_SCHEMA env var)
       const { data: subscriptionData, error: subError } = await supabase
         .from('subscriptions')
         .select('*')
@@ -56,8 +53,8 @@ export default function CheckoutSuccessPage() {
         setSessionData(subscriptionData || { status: 'complete' })
       }
     } catch (error) {
-      console.error('Session verification error:', error)
-      toast.error('Failed to verify payment session')
+      console.error('Subscription verification error:', error)
+      toast.error('Failed to verify subscription')
     } finally {
       setIsLoading(false)
     }
@@ -66,8 +63,8 @@ export default function CheckoutSuccessPage() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+        <div className="text-center space-y-4">
+          <Spinner className="h-12 w-12 mx-auto" />
           <p className="text-gray-600">Verifying your payment...</p>
         </div>
       </div>
@@ -100,13 +97,14 @@ export default function CheckoutSuccessPage() {
                 <CheckCircle className="h-5 w-5 text-green-500" />
                 <span className="font-medium">Status</span>
               </div>
-              <span className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium">
+              <Badge className="bg-green-100 text-green-800 hover:bg-green-100">
                 Active
-              </span>
+              </Badge>
             </div>
             
             {sessionData && (
               <>
+                <Separator />
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <Clock className="h-5 w-5 text-blue-500" />
@@ -120,14 +118,16 @@ export default function CheckoutSuccessPage() {
                   </span>
                 </div>
                 
+                <Separator />
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <CreditCard className="h-5 w-5 text-purple-500" />
                     <span className="font-medium">Plan</span>
                   </div>
                   <span className="text-gray-600 capitalize">
-                    {sessionData.stripe_price_id?.includes('pro') ? 'Lulu Pro' :
-                     'Standard'}
+                    {sessionData.polar_product_id === '11e3a7bc-3786-48ff-853a-7e14e960c1e1' 
+                      ? 'Premium Subscription' 
+                      : 'Pro Plan'}
                   </span>
                 </div>
               </>
@@ -138,15 +138,17 @@ export default function CheckoutSuccessPage() {
         <div className="space-y-4">
           <Button
             onClick={() => router.push('/protected')}
-            className="w-full bg-blue-500 hover:bg-blue-600"
+            className="w-full"
             size="lg"
           >
             Go to Dashboard
             <ArrowRight className="ml-2 h-4 w-4" />
           </Button>
           
-          <div className="text-center">
-            <p className="text-sm text-gray-600 mb-4">
+          <Separator />
+          
+          <div className="text-center space-y-4">
+            <p className="text-sm text-muted-foreground">
               You should receive a confirmation email shortly.
             </p>
             
@@ -170,15 +172,18 @@ export default function CheckoutSuccessPage() {
           </div>
         </div>
 
-        <div className="mt-8 p-4 bg-blue-50 rounded-lg">
-          <h3 className="font-semibold text-blue-900 mb-2">What's Next?</h3>
-          <ul className="text-sm text-blue-800 space-y-1">
-            <li>• Your subscription is immediately active</li>
-            <li>• You can access all features in your dashboard</li>
-            <li>• Manage your subscription in account settings</li>
-            <li>• Contact support if you need help</li>
-          </ul>
-        </div>
+        <Alert className="mt-8">
+          <Info className="h-4 w-4" />
+          <AlertTitle>What's Next?</AlertTitle>
+          <AlertDescription>
+            <ul className="list-disc list-inside space-y-1 mt-2">
+              <li>Your subscription is immediately active</li>
+              <li>You can access all features in your dashboard</li>
+              <li>Manage your subscription in account settings</li>
+              <li>Contact support if you need help</li>
+            </ul>
+          </AlertDescription>
+        </Alert>
       </div>
     </div>
   )
