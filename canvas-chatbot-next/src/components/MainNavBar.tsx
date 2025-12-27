@@ -108,6 +108,17 @@ export default function MainNavBar() {
                         <Link href="/help">Help</Link>
                       </NavigationMenuLink>
                     </NavigationMenuItem>
+                    <NavigationMenuItem>
+                      <NavigationMenuLink
+                        asChild
+                        className={cn(
+                          pathname.startsWith('/account/billing') ? 'bg-accent text-accent-foreground' : ''
+                        )}
+                        aria-current={pathname.startsWith('/account/billing') ? 'page' : undefined}
+                      >
+                        <Link href="/account/billing">Billing</Link>
+                      </NavigationMenuLink>
+                    </NavigationMenuItem>
                   </NavigationMenuList>
                 </NavigationMenu>
               </div>
@@ -130,6 +141,9 @@ export default function MainNavBar() {
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
                       <Link href="/help">Help</Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/account/billing">Billing</Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
                       <LogoutButton />

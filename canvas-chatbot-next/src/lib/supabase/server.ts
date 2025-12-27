@@ -1,4 +1,5 @@
 import { createServerClient } from '@supabase/ssr';
+import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -82,4 +83,38 @@ export function createAuthRouteHandlerClient(
 			},
 		},
 	);
+}
+
+/**
+ * Creates a Supabase client with service role key
+ * This bypasses RLS and should only be used for server-side operations like webhooks
+ * Never expose this client to the client-side
+ */
+export function createServiceRoleClient() {
+	const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+	if (!serviceRoleKey) {
+		throw new Error('SUPABASE_SERVICE_ROLE_KEY environment variable is not set');
+	}
+
+	const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+	if (!supabaseUrl) {
+		throw new Error('NEXT_PUBLIC_SUPABASE_URL environment variable is not set');
+	}
+
+	// Create client with service role key - this bypasses RLS
+	const client = createSupabaseClient(
+		supabaseUrl,
+		serviceRoleKey,
+		{
+			db: {
+				schema: process.env.NEXT_PUBLIC_SUPABASE_SCHEMA || 'public',
+			},
+			auth: {
+				autoRefreshToken: false,
+				persistSession: false,
+			},
+		},
+	);
+
+	return client;
 }

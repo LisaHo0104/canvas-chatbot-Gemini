@@ -85,7 +85,7 @@ async function suggestionsHandler(request: NextRequest) {
 			},
 		];
 
-		const messages = convertToModelMessages(uiMessages);
+		const messages = await convertToModelMessages(uiMessages);
 
         console.log('[DEBUG] Suggestions model', selectedModel);
         const { object } = await generateObject({

@@ -103,6 +103,8 @@ export class CanvasAPIService {
 	private apiKey: string;
 	private baseURL: string;
 	private forceStringIds: boolean;
+	private maxRetries = 3;
+	private baseDelayMs = 500;
 
 	constructor(
 		apiKey: string,
@@ -128,6 +130,45 @@ export class CanvasAPIService {
 		return headers;
 	}
 
+	private async withRetry<T>(fn: () => Promise<T>, attempt = 1): Promise<T> {
+		try {
+			return await fn();
+		} catch (error: any) {
+			const status = error?.response?.status;
+			const retryAfter = Number(error?.response?.headers?.['retry-after']) || 0;
+			const isRateLimit = status === 429;
+			const isServerError = status >= 500 && status < 600;
+			const isNetworkError =
+				!status &&
+				(error?.code === 'ECONNABORTED' ||
+					error?.code === 'ENOTFOUND' ||
+					error?.code === 'ETIMEDOUT' ||
+					error?.message?.includes('Network Error'));
+			if (
+				attempt < this.maxRetries &&
+				(isRateLimit || isServerError || isNetworkError)
+			) {
+				const delay =
+					retryAfter > 0
+						? retryAfter * 1000
+						: this.baseDelayMs * Math.pow(2, attempt - 1);
+				await new Promise((r) => setTimeout(r, delay));
+				return this.withRetry(fn, attempt + 1);
+			}
+			throw error;
+		}
+	}
+
+	private async ensureCourseExists(courseId: number) {
+		return this.withRetry(async () => {
+			const response = await axios.get(`${this.baseURL}/courses/${courseId}`, {
+				headers: this.getHeaders(),
+				timeout: 10000,
+			});
+			return response.data as CanvasCourse;
+		});
+	}
+
 	async getCurrentUser() {
 		try {
 			const response = await axios.get(`${this.baseURL}/users/self`, {
@@ -136,7 +177,18 @@ export class CanvasAPIService {
 			});
 			return response.data;
 		} catch (error) {
-			throw new Error('Failed to authenticate with Canvas API');
+			const status = (error as any)?.response?.status;
+			const data = (error as any)?.response?.data;
+			const message =
+				(typeof data === 'string' ? data : data?.errors?.[0]?.message) ||
+				(error as any)?.message ||
+				'Unknown error';
+			console.error('CanvasAPIService:getCurrentUser', { status, message });
+			throw new Error(
+				`Failed to authenticate with Canvas API${
+					status ? ` (${status})` : ''
+				}: ${message}`,
+			);
 		}
 	}
 
@@ -175,20 +227,31 @@ export class CanvasAPIService {
 			}
 
 			params.per_page = perPage ?? 100;
-			if (include && include.length) params.include = include;
+			if (include && include.length) params['include[]'] = include;
 			if (enrollmentState !== 'all') params.enrollment_state = enrollmentState;
 			if (enrollmentType) params.enrollment_type = enrollmentType;
 			if (searchTerm) params.search_term = searchTerm;
 
-			const response = await axios.get(`${this.baseURL}/users/self/courses`, {
-				headers: this.getHeaders(),
-				params,
-				timeout: 10000,
+			const response = await this.withRetry(async () => {
+				return axios.get(`${this.baseURL}/users/self/courses`, {
+					headers: this.getHeaders(),
+					params,
+					timeout: 10000,
+				});
 			});
 
-			return response.data as CanvasCourse[];
-		} catch (error) {
-			throw new Error('Failed to fetch courses');
+			return (response as any).data as CanvasCourse[];
+		} catch (error: any) {
+			const status = error?.response?.status;
+			const data = error?.response?.data;
+			const message =
+				(typeof data === 'string' ? data : data?.errors?.[0]?.message) ||
+				error?.message ||
+				'Unknown error';
+			console.error('CanvasAPIService:getCourses', { status, message });
+			throw new Error(
+				`Failed to fetch courses${status ? ` (${status})` : ''}: ${message}`,
+			);
 		}
 	}
 
@@ -205,7 +268,8 @@ export class CanvasAPIService {
 			  } = true,
 	) {
 		try {
-			const params: any = { include: [] };
+			await this.ensureCourseExists(courseId);
+			const params: any = {};
 			let includeSubmission = true;
 			let bucket: string | undefined;
 			let perPage: number | undefined;
@@ -224,21 +288,20 @@ export class CanvasAPIService {
   }
 
 			params.per_page = perPage ?? 50;
-			if (includeSubmission) params.include.push('submission');
+			if (includeSubmission) params['include[]'] = ['submission'];
 			if (bucket) params.bucket = bucket;
 			if (orderBy) params.order_by = orderBy;
 			if (searchTerm) params.search_term = searchTerm;
 
-      const response = await axios.get(
-        `${this.baseURL}/courses/${courseId}/assignments`,
-				{
+			const response = await this.withRetry(async () => {
+				return axios.get(`${this.baseURL}/courses/${courseId}/assignments`, {
 					headers: this.getHeaders(),
 					params,
 					timeout: 10000,
-				},
-			);
+				});
+			});
 
-      return response.data as CanvasAssignment[];
+			return (response as any).data as CanvasAssignment[];
 		} catch (error: any) {
 			const status = error?.response?.status;
 			const data = error?.response?.data;
@@ -246,6 +309,7 @@ export class CanvasAPIService {
 				(typeof data === 'string' ? data : data?.errors?.[0]?.message) ||
 				error?.message ||
 				'Unknown error';
+			console.error('CanvasAPIService:getAssignments', { status, message });
 			throw new Error(
 				`Failed to fetch assignments${
 					status ? ` (${status})` : ''
@@ -332,6 +396,7 @@ export class CanvasAPIService {
 		},
 	) {
 		try {
+			await this.ensureCourseExists(courseId);
 			const includeItems = options?.includeItems !== false;
 			const includeContentDetails = options?.includeContentDetails === true;
 			const perPage = options?.perPage ?? 50;
@@ -340,21 +405,29 @@ export class CanvasAPIService {
 			if (includeItems) include.push('items');
 			if (includeContentDetails) include.push('content_details');
 
-			const response = await axios.get(
-				`${this.baseURL}/courses/${courseId}/modules`,
-				{
+			const response = await this.withRetry(async () => {
+				return axios.get(`${this.baseURL}/courses/${courseId}/modules`, {
 					headers: this.getHeaders(),
 					params: {
 						per_page: perPage,
-						include,
+						'include[]': include,
 					},
 					timeout: 10000,
-				},
-			);
+				});
+			});
 
-			return response.data as CanvasModule[];
-		} catch (error) {
-			throw new Error('Failed to fetch modules');
+			return (response as any).data as CanvasModule[];
+		} catch (error: any) {
+			const status = error?.response?.status;
+			const data = error?.response?.data;
+			const message =
+				(typeof data === 'string' ? data : data?.errors?.[0]?.message) ||
+				error?.message ||
+				'Unknown error';
+			console.error('CanvasAPIService:getModules', { status, message });
+			throw new Error(
+				`Failed to fetch modules${status ? ` (${status})` : ''}: ${message}`,
+			);
 		}
 	}
 
@@ -369,40 +442,71 @@ export class CanvasAPIService {
 					finalSlug = mApi[2];
 				}
 			}
+
 			if (finalSlug) {
 				const apiPageUrl = `${this.baseURL}/courses/${courseId}/pages/${finalSlug}`;
-				response = await axios.get(apiPageUrl, {
-					headers: this.getHeaders(),
-					timeout: 15000,
+				response = await this.withRetry(async () => {
+					return axios.get(apiPageUrl, {
+						headers: this.getHeaders(),
+						timeout: 15000,
+					});
 				});
 			} else if (trimmed.startsWith('http')) {
-				response = await axios.get(trimmed, {
-					headers: this.getHeaders(),
-					timeout: 15000,
+				response = await this.withRetry(async () => {
+					return axios.get(trimmed, {
+						headers: this.getHeaders(),
+						timeout: 15000,
+					});
 				});
 			} else {
 				const apiPageUrl = `${this.baseURL}/courses/${courseId}/pages/${trimmed}`;
-				response = await axios.get(apiPageUrl, {
-					headers: this.getHeaders(),
-					timeout: 15000,
+				response = await this.withRetry(async () => {
+					return axios.get(apiPageUrl, {
+						headers: this.getHeaders(),
+						timeout: 15000,
+					});
 				});
 			}
-			return response.data as CanvasPage;
-		} catch {
-			throw new Error('Failed to fetch page content');
+			return (response as any).data as CanvasPage;
+		} catch (error: any) {
+			const status = error?.response?.status;
+			const data = error?.response?.data;
+			const message =
+				(typeof data === 'string' ? data : data?.errors?.[0]?.message) ||
+				error?.message ||
+				'Unknown error';
+			console.error('CanvasAPIService:getPageContent', { status, message });
+			throw new Error(
+				`Failed to fetch page content${
+					status ? ` (${status})` : ''
+				}: ${message}`,
+			);
 		}
 	}
 
 	async getFileContent(fileId: number) {
 		try {
-			const response = await axios.get(`${this.baseURL}/files/${fileId}`, {
-				headers: this.getHeaders(),
-				timeout: 10000,
+			const response = await this.withRetry(async () => {
+				return axios.get(`${this.baseURL}/files/${fileId}`, {
+					headers: this.getHeaders(),
+					timeout: 10000,
+				});
 			});
 
-			return response.data as CanvasFile;
-		} catch (error) {
-			throw new Error('Failed to fetch file information');
+			return (response as any).data as CanvasFile;
+		} catch (error: any) {
+			const status = error?.response?.status;
+			const data = error?.response?.data;
+			const message =
+				(typeof data === 'string' ? data : data?.errors?.[0]?.message) ||
+				error?.message ||
+				'Unknown error';
+			console.error('CanvasAPIService:getFileContent', { status, message });
+			throw new Error(
+				`Failed to fetch file information${
+					status ? ` (${status})` : ''
+				}: ${message}`,
+			);
 		}
 	}
 
@@ -455,31 +559,55 @@ export class CanvasAPIService {
 			if (typeof allEvents === 'boolean') params.all_events = allEvents;
 			if (type) params.type = type;
 			if (contextCodes && contextCodes.length)
-				params.context_codes = contextCodes;
+				params['context_codes[]'] = contextCodes;
 
-			const response = await axios.get(`${this.baseURL}/calendar_events`, {
-				headers: this.getHeaders(),
-				params,
-				timeout: 10000,
+			const response = await this.withRetry(async () => {
+				return axios.get(`${this.baseURL}/calendar_events`, {
+					headers: this.getHeaders(),
+					params,
+					timeout: 10000,
+				});
 			});
 
-			return response.data as CanvasCalendarEvent[];
-		} catch (error) {
-			throw new Error('Failed to fetch calendar events');
+			return (response as any).data as CanvasCalendarEvent[];
+		} catch (error: any) {
+			const status = error?.response?.status;
+			const data = error?.response?.data;
+			const message =
+				(typeof data === 'string' ? data : data?.errors?.[0]?.message) ||
+				error?.message ||
+				'Unknown error';
+			console.error('CanvasAPIService:getCalendarEvents', { status, message });
+			throw new Error(
+				`Failed to fetch calendar events${
+					status ? ` (${status})` : ''
+				}: ${message}`,
+			);
 		}
 	}
 
 	async downloadFile(fileUrl: string) {
 		try {
-			const response = await axios.get(fileUrl, {
-				headers: this.getHeaders(),
-				responseType: 'arraybuffer',
-				timeout: 30000,
+			const response = await this.withRetry(async () => {
+				return axios.get(fileUrl, {
+					headers: this.getHeaders(),
+					responseType: 'arraybuffer',
+					timeout: 30000,
+				});
 			});
 
-			return response.data;
-		} catch (error) {
-			throw new Error('Failed to download file');
+			return (response as any).data;
+		} catch (error: any) {
+			const status = error?.response?.status;
+			const data = error?.response?.data;
+			const message =
+				(typeof data === 'string' ? data : data?.errors?.[0]?.message) ||
+				error?.message ||
+				'Unknown error';
+			console.error('CanvasAPIService:downloadFile', { status, message });
+			throw new Error(
+				`Failed to download file${status ? ` (${status})` : ''}: ${message}`,
+			);
 		}
 	}
 

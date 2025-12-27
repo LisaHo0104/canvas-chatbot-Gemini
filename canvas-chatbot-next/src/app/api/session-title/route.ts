@@ -81,7 +81,7 @@ async function titleHandler(request: NextRequest) {
 			},
 		];
 
-		const messages = convertToModelMessages(uiMessages);
+		const messages = await convertToModelMessages(uiMessages);
 
         console.log('[DEBUG] Title model', selectedModel);
         const { object } = await generateObject({
