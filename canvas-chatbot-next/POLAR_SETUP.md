@@ -18,14 +18,17 @@ NEXT_PUBLIC_POLAR_PRODUCT_ID_PRO=11e3a7bc-3786-48ff-853a-7e14e960c1e1
 POLAR_SERVER=production
 
 # Polar URLs (optional, defaults provided)
+# If not set, the app will automatically use VERCEL_URL on Vercel deployments
+# For local development, it defaults to http://localhost:3000
 POLAR_SUCCESS_URL=http://localhost:3000/checkout/success
 POLAR_RETURN_URL=http://localhost:3000/account/billing
 
 # Supabase Schema (set to dev to match payment tables)
 NEXT_PUBLIC_SUPABASE_SCHEMA=dev
 
-# App URL (for production)
-NEXT_PUBLIC_APP_URL=http://localhost:3000
+# Note: NEXT_PUBLIC_APP_URL is no longer needed!
+# The app automatically uses VERCEL_URL (set by Vercel) in production/preview environments.
+# For local development, it defaults to http://localhost:3000
 ```
 
 ## Migration Complete
