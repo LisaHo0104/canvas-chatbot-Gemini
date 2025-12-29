@@ -1,3 +1,5 @@
+import { getAppUrl } from '@/lib/utils/get-app-url';
+
 export interface ConversationMessage {
 	role: 'user' | 'assistant' | 'system';
 	content: string;
@@ -74,8 +76,7 @@ export class OpenRouterService {
 					Authorization: `Bearer ${this.apiKey}`,
 					'HTTP-Referer':
 						process.env.OPENROUTER_SITE_URL ||
-						process.env.NEXT_PUBLIC_APP_URL ||
-						'http://localhost:3000',
+						getAppUrl(),
 					'X-Title': process.env.OPENROUTER_APP_TITLE || 'Canvas Chatbot',
 					'Content-Type': 'application/json',
 				},
@@ -144,8 +145,7 @@ export class OpenRouterService {
 			const response = await fetch(`${this.baseURL}/models`, {
 				headers: {
 					Authorization: `Bearer ${this.apiKey}`,
-					'HTTP-Referer':
-						process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+					'HTTP-Referer': getAppUrl(),
 					'X-Title': 'Canvas Chatbot',
 				},
 			});
@@ -180,8 +180,7 @@ export class OpenRouterService {
 			const response = await fetch(`${this.baseURL}/models`, {
 				headers: {
 					Authorization: `Bearer ${this.apiKey}`,
-					'HTTP-Referer':
-						process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+					'HTTP-Referer': getAppUrl(),
 					'X-Title': 'Canvas Chatbot',
 				},
 			});

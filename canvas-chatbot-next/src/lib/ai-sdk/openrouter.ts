@@ -1,5 +1,6 @@
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { OpenRouterService } from '../openrouter-service';
+import { getAppUrl } from '@/lib/utils/get-app-url';
 
 export function createOpenRouterProvider(apiKey: string) {
 	const provider = createOpenRouter({
@@ -7,8 +8,7 @@ export function createOpenRouterProvider(apiKey: string) {
 		headers: {
 			'HTTP-Referer':
 				process.env.OPENROUTER_SITE_URL ||
-				process.env.NEXT_PUBLIC_APP_URL ||
-				'http://localhost:3000',
+				getAppUrl(),
 			'X-Title': process.env.OPENROUTER_APP_TITLE || 'Canvas Chatbot',
 		},
 	});
