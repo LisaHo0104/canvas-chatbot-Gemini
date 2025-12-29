@@ -7,6 +7,11 @@ import {
 /**
  * Webhook handler for Polar events
  * Handles product and subscription lifecycle events
+ * 
+ * Following Polar best practices:
+ * - Validates webhook secret for security
+ * - Handles product and subscription lifecycle events
+ * - Automatically syncs products/prices before subscriptions to avoid FK constraints
  */
 export const POST = Webhooks({
   webhookSecret: process.env.POLAR_WEBHOOK_SECRET!,

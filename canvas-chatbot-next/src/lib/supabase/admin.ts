@@ -418,6 +418,100 @@ export async function manageSubscriptionStatusChange(
 
   const subscription = payload.data;
 
+  // Get the price ID - handle both singular price and prices array (for different SDK versions)
+  const priceId = (subscription as any).price?.id || subscription.prices?.[0]?.id || null;
+
+  // Ensure price exists in database before creating subscription
+  // This handles cases where subscription webhook arrives before product/price webhooks
+  let verifiedPriceId: string | null = null;
+  
+  if (priceId) {
+    // Check if price exists
+    const { data: existingPrice, error: priceCheckError } = await supabaseAdmin
+      .from('prices')
+      .select('id')
+      .eq('id', priceId)
+      .maybeSingle();
+
+    if (priceCheckError) {
+      console.warn(`Error checking price existence: ${priceCheckError.message}`);
+    }
+
+    // If price doesn't exist, try to create it from subscription data
+    if (!existingPrice) {
+      console.warn(
+        `Price ${priceId} not found in database. Attempting to create from subscription data.`
+      );
+
+      // Get price data from subscription
+      const priceData = (subscription as any).price || subscription.prices?.[0];
+      const productId = subscription.product?.id;
+
+      if (priceData && productId) {
+        // First ensure the product exists
+        const { data: existingProduct } = await supabaseAdmin
+          .from('products')
+          .select('id')
+          .eq('id', productId)
+          .maybeSingle();
+
+        if (!existingProduct && subscription.product) {
+          // Create the product if it doesn't exist
+          const { error: productError } = await supabaseAdmin
+            .from('products')
+            .upsert({
+              id: productId,
+              active: !subscription.product.isArchived,
+              name: subscription.product.name,
+              description: subscription.product.description ?? null,
+              image: subscription.product.medias?.[0]?.publicUrl ?? null,
+              metadata: subscription.product.metadata ?? null
+            });
+
+          if (productError) {
+            console.warn(`Failed to create product ${productId}: ${productError.message}`);
+          } else {
+            console.log(`Created missing product: ${productId}`);
+          }
+        }
+
+        // Create the price
+        const priceToInsert = {
+          id: priceId,
+          product_id: productId,
+          price_amount: priceData.amountType === 'fixed' ? priceData.priceAmount : null,
+          type: priceData.type,
+          recurring_interval:
+            priceData.type === 'recurring' && priceData.recurringInterval
+              ? priceData.recurringInterval
+              : null,
+          metadata: ('metadata' in priceData && priceData.metadata) ? priceData.metadata : null
+        };
+
+        const { error: priceCreateError } = await supabaseAdmin
+          .from('prices')
+          .upsert([priceToInsert]);
+
+        if (priceCreateError) {
+          console.warn(
+            `Failed to create price ${priceId}: ${priceCreateError.message}. ` +
+            `Subscription will be created without price_id.`
+          );
+        } else {
+          console.log(`Created missing price: ${priceId}`);
+          verifiedPriceId = priceId;
+        }
+      } else {
+        console.warn(
+          `Cannot create price ${priceId}: missing price data or product ID in subscription payload.`
+        );
+      }
+    } else {
+      // Price exists, use it
+      verifiedPriceId = priceId;
+    }
+  }
+
   // Prepare subscription data
   // Note: id is auto-generated UUID, polar_subscription_id is the Polar subscription ID
   const subscriptionData = {
@@ -425,7 +519,7 @@ export async function manageSubscriptionStatusChange(
     polar_subscription_id: subscription.id, // Use Polar subscription ID
     polar_product_id: subscription.product?.id || null,
     status: subscription.status,
-    price_id: subscription.prices?.[0]?.id || null, // New field from migration
+    price_id: verifiedPriceId, // Use verified price_id (null if price doesn't exist and couldn't be created)
     cancel_at_period_end: subscription.cancelAtPeriodEnd || false,
     current_period_start: subscription.currentPeriodStart
       ? subscription.currentPeriodStart.toISOString()
@@ -444,9 +538,36 @@ export async function manageSubscriptionStatusChange(
     });
 
   if (upsertError) {
-    throw new Error(
-      `Subscription insert/update failed: ${upsertError.message}`
-    );
+    // If it's still a foreign key error, try without price_id as fallback
+    if (upsertError.message.includes('foreign key constraint') && verifiedPriceId) {
+      console.warn(
+        `Foreign key error with price_id ${verifiedPriceId}, retrying without it`
+      );
+      const subscriptionDataWithoutPrice = {
+        ...subscriptionData,
+        price_id: null
+      };
+      
+      const { error: retryError } = await supabaseAdmin
+        .from('subscriptions')
+        .upsert([subscriptionDataWithoutPrice], {
+          onConflict: 'polar_subscription_id'
+        });
+
+      if (retryError) {
+        throw new Error(
+          `Subscription insert/update failed even without price_id: ${retryError.message}`
+        );
+      }
+      
+      console.log(
+        `Inserted/updated subscription [${subscription.id}] for user [${customerData.id}] without price_id`
+      );
+    } else {
+      throw new Error(
+        `Subscription insert/update failed: ${upsertError.message}`
+      );
+    }
   }
   
   console.log(
