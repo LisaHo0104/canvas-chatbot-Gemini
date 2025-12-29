@@ -1,6 +1,6 @@
 import { CustomerPortal } from "@polar-sh/nextjs";
 import { NextRequest } from "next/server";
-import { createRouteHandlerClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/server';
 import { createOrRetrieveCustomer } from '@/lib/supabase/admin';
 import { getAppUrl } from '@/lib/utils/get-app-url';
 
@@ -9,7 +9,7 @@ export const GET = CustomerPortal({
   returnUrl: process.env.POLAR_RETURN_URL || getAppUrl('/account/billing'),
   server: (process.env.POLAR_SERVER as "sandbox" | "production") || "production",
   getCustomerId: async (req: NextRequest) => {
-    const supabase = createRouteHandlerClient(req);
+    const supabase = await createClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
 
     if (authError || !user) {
