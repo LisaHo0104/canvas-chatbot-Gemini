@@ -43,6 +43,48 @@ export default function QuizModuleQnAPage() {
   const [showResults, setShowResults] = useState<boolean>(false)
   const abortRef = useRef<AbortController | null>(null)
   const [carouselApi, setCarouselApi] = useState<CarouselApi | undefined>()
+  const [expandedResults, setExpandedResults] = useState<Record<number, boolean>>({})
+  const [selections, setSelections] = useState<Record<number, number | undefined>>({})
+  const rightColRef = useRef<HTMLDivElement | null>(null)
+  const [sidebarHeight, setSidebarHeight] = useState<number | null>(null)
+
+  function displayOption(opt: string): string {
+    let s = String(opt || '')
+    s = s.replace(/^\s*\(\s*[A-Za-z]\s*\)\s*/, '')
+    s = s.replace(/^\s*[A-Za-z]\s*[\.\):]\s*/, '')
+    s = s.replace(/^\s*\d+\s*[\.\):]\s*/, '')
+    return s.trim()
+  }
+  function cleanExplanation(exp: string): string {
+    let s = String(exp || '')
+    s = s.replace(/https?:\/\/\S+/gi, '')
+    s = s.replace(/(?:^|\s)(Source(?:s)?\s*Title?\s*:\s*.+?)$/gi, '')
+    s = s.replace(/(?:^|\s)(Source(?:s)?\s*:\s*.+?)$/gi, '')
+    s = s.replace(/\s{2,}/g, ' ')
+    return s.trim()
+  }
+  function extractTopic(stem: string): string {
+    let s = String(stem || '').trim()
+    s = s.replace(/\s*\?.*$/, '')
+    s = s.replace(/^(what|which|how|why|when|where|according to|does|is|are|can)\b[\s,:-]*/i, '')
+    s = s.replace(/\s{2,}/g, ' ')
+    s = s.trim()
+    if (!s) return 'Key concept review'
+    return s
+  }
+  function firstSentence(s: string): string {
+    const t = String(s || '').trim()
+    if (!t) return ''
+    const parts = t.split(/(?<=\.)\s+/)
+    const head = parts[0] || t
+    return head.trim()
+  }
+  function buildReviewBullet(q: QnAItem): string {
+    const exp = firstSentence(cleanExplanation(q.explanation || ''))
+    if (exp) return exp
+    const stem = extractTopic(q.question || '')
+    return stem
+  }
 
   const loadQnA = async () => {
     try {
@@ -73,6 +115,9 @@ export default function QuizModuleQnAPage() {
       setAnswers([])
       setTotalCorrect(0)
       setShowResults(false)
+      setExpandedResults({})
+      setSelections({})
+      setSidebarHeight(null)
     } catch (e: any) {
       if (e?.name === 'AbortError') {
         console.debug('[DEBUG] QnA generation aborted')
@@ -93,7 +138,13 @@ export default function QuizModuleQnAPage() {
       setLoading(false)
       return
     }
-    loadQnA()
+    const key = `${courseId}:${moduleId}:${itemId || 'module'}`
+    if ((window as any).__qna_loaded_key !== key) {
+      (window as any).__qna_loaded_key = key
+      loadQnA()
+    } else {
+      console.debug('[DEBUG] Skip duplicate loadQnA due to dev double render')
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [courseId, moduleId])
 
@@ -109,6 +160,7 @@ export default function QuizModuleQnAPage() {
       if (typeof next[current] === 'undefined') {
         next[current] = correct
         setTotalCorrect(tc => tc + (correct ? 1 : 0))
+        setSelections(s => ({ ...s, [current]: selected }))
       }
       return next
     })
@@ -157,6 +209,16 @@ export default function QuizModuleQnAPage() {
   }, [carouselApi])
 
   const completedCount = answers.reduce((acc, v) => acc + (typeof v !== 'undefined' ? 1 : 0), 0)
+  useEffect(() => {
+    const measure = () => {
+      if (rightColRef.current) {
+        setSidebarHeight(rightColRef.current.clientHeight)
+      }
+    }
+    setTimeout(measure, 0)
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [showResults, questions, answers, expandedResults])
 
   return (
     <div className="min-h-[calc(100vh-3rem)] w-full px-4 py-4">
@@ -236,7 +298,7 @@ export default function QuizModuleQnAPage() {
                                 aria-selected={isSelectedOption && qIdx === current ? true : undefined}
                               >
                                 <span className="font-mono text-xs mr-2">{String.fromCharCode(65 + idx)}.</span>
-                                <span>{opt}</span>
+                                <span>{displayOption(opt)}</span>
                               </button>
                             )
                           })}
@@ -254,12 +316,12 @@ export default function QuizModuleQnAPage() {
                             <div className="text-sm">
                               <span className="font-medium">{isCorrect ? 'Correct' : 'Correct answer'}:</span>{' '}
                               <span className="font-mono text-xs mr-1">{String.fromCharCode(65 + q.correctIndex)}.</span>
-                              <span>{q.options[q.correctIndex]}</span>
+                              <span>{displayOption(q.options[q.correctIndex])}</span>
                             </div>
                             {q.explanation && (
                               <div className="text-sm">
                                 <span className="font-medium">Explanation:</span>{' '}
-                                <span>{q.explanation}</span>
+                                <span>{cleanExplanation(q.explanation)}</span>
                               </div>
                             )}
                             {(q.sourceUrl || q.sourceTitle) && (
@@ -313,17 +375,186 @@ export default function QuizModuleQnAPage() {
 
         {!loading && !error && showResults && (
           <div className="w-full max-w-5xl">
-            <Card className="bg-background w-full overflow-hidden">
-              <CardContent className="p-6 space-y-4">
-                <h3 className="text-lg font-semibold">Quiz Results</h3>
-                <QuizResultsRadial correct={totalCorrect} total={questions.length} />
-                <div className="text-sm">You answered <span className="font-medium">{totalCorrect}</span> out of <span className="font-medium">{questions.length}</span> correctly.</div>
-                <div className="flex items-center gap-3 pt-2">
-                  <Button size="lg" onClick={() => { setShowResults(false); setAnswers([]); setTotalCorrect(0); setCurrent(0); setSelected(null); setChecked(false); setIsCorrect(null) }}>Redo this set</Button>
-                  <Button size="lg" variant="outline" onClick={() => loadQnA()}>Generate new set</Button>
-                </div>
-              </CardContent>
-            </Card>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-stretch min-h-0">
+              <Card className="bg-background w-full overflow-visible md:col-span-1 h-full min-h-0">
+                <CardContent
+                  className="p-4 space-y-3 h-full min-h-0"
+                >
+                  <h3 className="text-lg font-semibold">All Questions</h3>
+                  <div
+                    className="flex-1 min-h-0 overflow-y-auto scroll-smooth overscroll-contain"
+                    style={sidebarHeight ? { height: sidebarHeight } : { maxHeight: '75vh' }}
+                  >
+                    <div className="space-y-2">
+                    {questions.map((q, idx) => {
+                      const userCorrect = answers[idx] === true
+                      const letter = String.fromCharCode(65 + q.correctIndex)
+                      const selectedIdx = selections[idx]
+                      const selectedLetter = typeof selectedIdx === 'number' ? String.fromCharCode(65 + selectedIdx) : ''
+                      const selectedText = typeof selectedIdx === 'number' ? displayOption(q.options[selectedIdx]) : ''
+                      const isOpen = !!expandedResults[idx]
+                      return (
+                        <div
+                          key={idx}
+                          className={`border rounded-md p-3 transition-colors ${userCorrect ? 'border-green-600 bg-green-50/40' : 'border-red-600 bg-red-50/40'}`}
+                        >
+                          <div className="text-xs text-muted-foreground">Q{idx + 1}</div>
+                          <div className="text-sm font-medium">{q.question}</div>
+                          <div className="text-xs mt-1">
+                            <span className="font-medium">Correct:</span>{' '}
+                            <span className="font-mono">{letter}.</span>{' '}
+                            <span>{displayOption(q.options[q.correctIndex])}</span>
+                          </div>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-xs font-medium">You:</span>
+                            <Badge variant="secondary" className={userCorrect ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}>
+                              {userCorrect ? 'Correct' : 'Incorrect'}
+                            </Badge>
+                          </div>
+                          {selectedLetter && (
+                            <div className="text-xs mt-1">
+                              <span className="font-medium">Your answer:</span>{' '}
+                              <span className="font-mono">{selectedLetter}.</span>{' '}
+                              <span>{selectedText}</span>
+                            </div>
+                          )}
+                          <div className="mt-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                console.debug('[DEBUG] Toggle result details', { index: idx, open: !isOpen })
+                                setExpandedResults(prev => ({ ...prev, [idx]: !isOpen }))
+                              }}
+                            >
+                              {isOpen ? 'Hide explanation' : 'Show explanation'}
+                            </Button>
+                          </div>
+                          {isOpen && (
+                            <div className="text-xs mt-2 space-y-1">
+                              {q.explanation && (
+                                <div>
+                                  <span className="font-medium">Explanation:</span>{' '}
+                                  <span>{cleanExplanation(q.explanation)}</span>
+                                </div>
+                              )}
+                              {(q.sourceUrl || q.sourceTitle) && (
+                                <div>
+                                  <span className="font-medium">Source:</span>{' '}
+                                  {q.sourceUrl ? (
+                                    <a href={q.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">
+                                      {q.sourceTitle || q.sourceUrl}
+                                    </a>
+                                  ) : (
+                                    <span>{q.sourceTitle}</span>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <div className="md:col-span-2 flex flex-col gap-4 min-h-0 h-full" ref={rightColRef}>
+                <Card className="bg-background w-full overflow-hidden">
+                  <CardContent className="p-6 space-y-4">
+                    <h3 className="text-lg font-semibold">Quiz Results</h3>
+                    <QuizResultsRadial correct={totalCorrect} total={questions.length} />
+                    <div className="text-sm">You answered <span className="font-medium">{totalCorrect}</span> out of <span className="font-medium">{questions.length}</span> correctly.</div>
+                    <div className="flex items-center gap-3 pt-2">
+                      <Button size="lg" onClick={() => { setShowResults(false); setAnswers([]); setTotalCorrect(0); setCurrent(0); setSelected(null); setChecked(false); setIsCorrect(null) }}>Redo this set</Button>
+                      <Button size="lg" variant="outline" onClick={() => loadQnA()}>Generate new set</Button>
+                    </div>
+                  </CardContent>
+                </Card>
+                {(() => {
+                  const wrongIdxs = answers.map((v, i) => (v === false ? i : -1)).filter(i => i >= 0)
+                  const sectionMap: Record<string, { total: number; correct: number }> = {}
+                  questions.forEach((q, i) => {
+                    const sec = q.section || 'General'
+                    const ok = answers[i] === true
+                    const cur = sectionMap[sec] || { total: 0, correct: 0 }
+                    sectionMap[sec] = { total: cur.total + 1, correct: cur.correct + (ok ? 1 : 0) }
+                  })
+                  const sections = Object.entries(sectionMap).map(([name, st]) => ({
+                    name,
+                    total: st.total,
+                    correct: st.correct,
+                    accuracy: st.total > 0 ? Math.round((st.correct / st.total) * 100) : 0
+                  })).sort((a, b) => a.accuracy - b.accuracy)
+                  console.debug('[DEBUG] Performance summary', { totalCorrect, total: questions.length, sections })
+                  return (
+                    <Card className="bg-background w-full overflow-hidden">
+                      <CardContent className="p-6 space-y-4">
+                        <h3 className="text-lg font-semibold">Performance Summary</h3>
+                        <div className="text-sm">
+                          Score: <span className="font-medium">{totalCorrect}/{questions.length}</span> (
+                          <span className="font-medium">{Math.round((totalCorrect / Math.max(questions.length, 1)) * 100)}</span>%)
+                        </div>
+                        <div className="space-y-2">
+                          <div className="text-sm font-medium">Focus areas</div>
+                          <ul className="list-disc pl-5 space-y-1">
+                            {sections.slice(0, 3).map((s, i) => (
+                              <li key={i} className="text-sm">
+                                <span className="font-medium">{s.name}</span>: {s.correct}/{s.total} correct ({s.accuracy}%)
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                        {(() => {
+                          const focus = sections.filter(s => s.accuracy < 60).slice(0, 3)
+                          const details = focus.map(s => {
+                            const idxs = questions
+                              .map((q, i) => ({ q, i }))
+                              .filter(({ q, i }) => (q.section || 'General') === s.name && answers[i] === false)
+                              .map(({ i }) => i)
+                          return { name: s.name, wrongIdxs: idxs }
+                          })
+                          console.debug('[DEBUG] Recommendation summary', { details })
+                          return details.length > 0 ? (
+                            <div className="space-y-2">
+                              <div className="text-sm font-medium">Recommendations</div>
+                              <ul className="list-disc pl-5 space-y-1">
+                                {details.map((d, idx) => (
+                                  <li key={idx} className="text-sm">
+                                    <span className="font-medium">{d.name}</span>: review Q{d.wrongIdxs.map(n => n + 1).join(', ')}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          ) : null
+                        })()}
+                        {wrongIdxs.length > 0 && (
+                          <div className="space-y-2">
+                            <div className="text-sm font-medium">Key Takeaways to Review</div>
+                            <ul className="list-disc pl-5 space-y-1">
+                              {(() => {
+                                const set = new Set<string>()
+                                const items: string[] = []
+                                wrongIdxs.forEach((i) => {
+                                  const q = questions[i]
+                                  const bullet = buildReviewBullet(q)
+                                  const clean = bullet.trim()
+                                  if (clean && !set.has(clean)) {
+                                    set.add(clean)
+                                    items.push(clean)
+                                  }
+                                })
+                                return items.slice(0, 10).map((t, idx) => (<li key={idx} className="text-sm">{t}</li>))
+                              })()}
+                            </ul>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )
+                })()}
+              </div>
+            </div>
           </div>
         )}
       </div>
