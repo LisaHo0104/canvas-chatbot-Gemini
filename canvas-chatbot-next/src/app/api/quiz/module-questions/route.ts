@@ -23,6 +23,8 @@ async function moduleQuestionsHandler(request: NextRequest) {
     const questionsCount = Math.max(10, Math.min(20, Number(url.searchParams.get('count') || '15')))
     const courseId = courseIdParam ? Number(courseIdParam) : NaN
     const moduleId = moduleIdParam ? Number(moduleIdParam) : NaN
+    const itemIdParam = url.searchParams.get('itemId')
+    const itemId = itemIdParam ? Number(itemIdParam) : null
     if (!courseId || Number.isNaN(courseId) || !moduleId || Number.isNaN(moduleId)) {
       return new Response(JSON.stringify({ error: 'Missing or invalid courseId/moduleId' }), { status: 400 })
     }
@@ -53,7 +55,7 @@ async function moduleQuestionsHandler(request: NextRequest) {
     }
 
     const api = new CanvasAPIService(canvasApiKey, canvasApiUrl)
-    console.log('[DEBUG] QnA API: fetch module and pages', { courseId, moduleId })
+    console.log('[DEBUG] QnA API: fetch module and pages', { courseId, moduleId, itemId })
 
     const modules = await api.getModules(courseId, { includeItems: true, includeContentDetails: true, perPage: 50 })
     const target = modules.find((m: any) => Number(m?.id) === Number(moduleId))
@@ -61,32 +63,51 @@ async function moduleQuestionsHandler(request: NextRequest) {
       return new Response(JSON.stringify({ error: 'Module not found' }), { status: 404 })
     }
 
-    const pageItems = Array.isArray(target.items) ? target.items.filter((it: any) => String(it?.type) === 'Page') : []
-    const pageFetchResults = await Promise.allSettled(
-      pageItems.map(async (it: any) => {
-        const candidateUrl = String((it as any)?.content_details?.page_url || it?.html_url || it?.url || '')
-        const page = await api.getPageContent(courseId, candidateUrl)
-        return {
-          title: String(page?.title || it?.title || ''),
-          body: String(page?.body || ''),
-          url: String(page?.url || it?.html_url || candidateUrl || ''),
-          htmlUrl: String((page as any)?.html_url || it?.html_url || candidateUrl || '')
+    let pages: Array<{ title: string; body: string; url: string; htmlUrl?: string }> = []
+    if (itemId) {
+      const it = Array.isArray(target.items) ? target.items.find((x: any) => Number(x?.id) === Number(itemId)) : null
+      if (!it) {
+        return new Response(JSON.stringify({ error: 'Module item not found' }), { status: 404 })
+      }
+      if (String(it?.type) !== 'Page') {
+        return new Response(JSON.stringify({ error: 'Item-level quiz currently supports Canvas Page items only' }), { status: 400 })
+      }
+      const candidateUrl = String((it as any)?.content_details?.page_url || it?.html_url || it?.url || '')
+      const page = await api.getPageContent(courseId, candidateUrl)
+      pages.push({
+        title: String(page?.title || it?.title || ''),
+        body: String(page?.body || ''),
+        url: String(page?.url || it?.html_url || candidateUrl || ''),
+        htmlUrl: String((page as any)?.html_url || it?.html_url || candidateUrl || '')
+      })
+      console.log('[DEBUG] Pages processed summary', { scope: 'item', itemId, success: pages.length })
+    } else {
+      const pageItems = Array.isArray(target.items) ? target.items.filter((it: any) => String(it?.type) === 'Page') : []
+      const pageFetchResults = await Promise.allSettled(
+        pageItems.map(async (it: any) => {
+          const candidateUrl = String((it as any)?.content_details?.page_url || it?.html_url || it?.url || '')
+          const page = await api.getPageContent(courseId, candidateUrl)
+          return {
+            title: String(page?.title || it?.title || ''),
+            body: String(page?.body || ''),
+            url: String(page?.url || it?.html_url || candidateUrl || ''),
+            htmlUrl: String((page as any)?.html_url || it?.html_url || candidateUrl || '')
+          }
+        })
+      )
+      const failures: Array<{ id?: any; title?: any }> = []
+      pageFetchResults.forEach((res, idx) => {
+        const it = pageItems[idx]
+        if (res.status === 'fulfilled') {
+          pages.push(res.value)
+        } else {
+          failures.push({ id: it?.id, title: it?.title })
         }
       })
-    )
-    const pages: Array<{ title: string; body: string; url: string; htmlUrl?: string }> = []
-    const failures: Array<{ id?: any; title?: any }> = []
-    pageFetchResults.forEach((res, idx) => {
-      const it = pageItems[idx]
-      if (res.status === 'fulfilled') {
-        pages.push(res.value)
-      } else {
-        failures.push({ id: it?.id, title: it?.title })
+      console.log('[DEBUG] Pages processed summary', { scope: 'module', totalItems: pageItems.length, success: pages.length, failures: failures.length })
+      if (failures.length > 0) {
+        return new Response(JSON.stringify({ error: 'Failed to retrieve some Canvas page content', failedItems: failures, processed: pages.length, total: pageItems.length }), { status: 500 })
       }
-    })
-    console.log('[DEBUG] Pages processed summary', { totalItems: pageItems.length, success: pages.length, failures: failures.length })
-    if (failures.length > 0) {
-      return new Response(JSON.stringify({ error: 'Failed to retrieve some Canvas page content', failedItems: failures, processed: pages.length, total: pageItems.length }), { status: 500 })
     }
 
     function cleanText(html: string): string {

@@ -50,12 +50,17 @@ export function CourseList({ courses }: CourseListProps) {
                       {course.course_code}
                     </p>
                   </div>
+                  {(() => {
+                    const status = (course as any)?.status ?? course.workflow_state
+                    return (
                   <Badge
-                    variant={course.workflow_state === 'available' ? 'default' : 'secondary'}
+                    variant={status === 'available' ? 'default' : 'secondary'}
                     className="text-[10px] px-2 py-0.5 h-fit shrink-0 capitalize"
                   >
-                    {course.workflow_state}
+                    {status}
                   </Badge>
+                    )
+                  })()}
                 </div>
 
                 <div className="flex flex-col gap-1.5 pt-3 border-t border-border/50">
