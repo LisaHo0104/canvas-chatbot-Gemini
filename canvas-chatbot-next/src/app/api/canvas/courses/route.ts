@@ -42,7 +42,7 @@ async function getCoursesHandler(request: NextRequest) {
 
     const url = new URL(request.url)
     const searchTerm = url.searchParams.get('searchTerm') || undefined
-    const enrollmentState = (url.searchParams.get('enrollmentState') as 'active' | 'completed' | 'all') || 'active'
+    const enrollmentState = (url.searchParams.get('enrollmentState') as 'active' | 'completed' | 'all') || 'all'
     const perPage = Number(url.searchParams.get('perPage') || '100')
 
     console.log('[DEBUG] Courses API called', { enrollmentState, perPage, searchTerm: searchTerm || '' })
@@ -57,4 +57,3 @@ async function getCoursesHandler(request: NextRequest) {
 }
 
 export const GET = rateLimitMiddleware(getCoursesHandler)
-

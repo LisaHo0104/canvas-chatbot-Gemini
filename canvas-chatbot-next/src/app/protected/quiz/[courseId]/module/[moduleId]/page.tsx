@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -11,7 +11,6 @@ import { Spinner } from '@/components/ui/spinner'
 import QuizResultsRadial from '@/components/quiz/QuizResultsRadial'
 import { Carousel, CarouselContent, CarouselItem, type CarouselApi } from '@/components/ui/carousel'
 import { ArrowLeft, ArrowRight } from 'lucide-react'
-
 interface QnAItem {
   question: string
   options: string[]
@@ -24,8 +23,11 @@ interface QnAItem {
 
 export default function QuizModuleQnAPage() {
   const params = useParams<{ courseId: string; moduleId: string }>()
+  const searchParams = useSearchParams()
   const courseId = Number(params?.courseId)
   const moduleId = Number(params?.moduleId)
+  const itemIdParam = searchParams.get('itemId')
+  const itemId = itemIdParam ? Number(itemIdParam) : null
   const [questions, setQuestions] = useState<QnAItem[]>([])
   const [summary, setSummary] = useState<string>("")
   const [loading, setLoading] = useState(true)
@@ -45,11 +47,12 @@ export default function QuizModuleQnAPage() {
     try {
       setLoading(true)
       setError(null)
-      console.log('[DEBUG] Fetching QnA (server API)', { courseId, moduleId })
+      console.debug('[DEBUG] Fetching QnA (server API)', { courseId, moduleId, itemId })
       const qs = new URLSearchParams()
       qs.set('courseId', String(courseId))
       qs.set('moduleId', String(moduleId))
       qs.set('count', '20')
+      if (itemId) qs.set('itemId', String(itemId))
       abortRef.current = new AbortController()
       const res = await fetch(`/api/quiz/module-questions?${qs.toString()}`, { credentials: 'include', signal: abortRef.current.signal })
       if (!res.ok) {
@@ -64,17 +67,14 @@ export default function QuizModuleQnAPage() {
       setPageCount(Array.isArray(j?.pages) ? j.pages.length : 0)
       const sum = typeof j?.summary === 'string' ? j.summary : ''
       setSummary(sum)
-      console.log('[DEBUG] QnA summary loaded', { hasSummary: !!sum, length: sum?.length || 0 })
+      console.debug('[DEBUG] QnA summary loaded', { hasSummary: !!sum, length: sum?.length || 0 })
       setCurrent(0)
-      setSelected(null)
-      setChecked(false)
-      setIsCorrect(null)
       setAnswers([])
       setTotalCorrect(0)
       setShowResults(false)
-    } catch (e) {
-      if ((e as any)?.name === 'AbortError') {
-        console.log('[DEBUG] QnA generation aborted')
+    } catch (e: any) {
+      if (e?.name === 'AbortError') {
+        console.debug('[DEBUG] QnA generation aborted')
         setError('')
       } else {
         console.error('Failed to load QnA', e)
@@ -163,110 +163,76 @@ export default function QuizModuleQnAPage() {
           <div className="mt-1"><Badge variant="secondary">Pages processed: {pageCount}</Badge></div>
         </div>
 
-        {loading ? (
-          <div className="w-full">
-            <Empty className="w-full">
-              <EmptyHeader>
-                <EmptyMedia variant="icon">
-                  <Spinner className="size-6" />
-                </EmptyMedia>
-                <EmptyTitle>Preparing your quiz</EmptyTitle>
-                <EmptyDescription>
-                  Please wait while we generate your quiz. Do not refresh the page.
-                </EmptyDescription>
-              </EmptyHeader>
-              <EmptyContent>
-                <Button variant="outline" size="sm" onClick={() => { try { abortRef.current?.abort() } catch {}; setLoading(false) }}>Cancel</Button>
-              </EmptyContent>
-            </Empty>
+        {loading && (
+          <div className="flex items-center justify-center py-12">
+            <Spinner className="mr-2" />
+            <span className="text-sm text-muted-foreground">
+              {itemId ? 'Generating questions for selected item…' : 'Generating questions for module…'}
+            </span>
           </div>
-        ) : error ? (
-          <div className="text-sm text-destructive">{error}</div>
-        ) : questions.length === 0 ? (
-          <div className="text-sm text-muted-foreground italic">No questions generated.</div>
-        ) : !showResults ? (
-          <div className="w-full max-w-5xl">
-            
-            <Carousel className="w-full" setApi={setCarouselApi}>
-              <CarouselContent className="-ml-4">
+        )}
+
+        {!loading && error && (
+          <Empty>
+            <EmptyHeader>
+              <EmptyMedia />
+              <EmptyTitle>Failed to load Q&A</EmptyTitle>
+              <EmptyDescription>{error}</EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent>
+              <Button onClick={() => loadQnA()}>Retry</Button>
+            </EmptyContent>
+          </Empty>
+        )}
+
+        {!loading && !error && !showResults && questions.length > 0 && (
+          <div className="relative">
+            <Carousel setApi={setCarouselApi}>
+              <CarouselContent>
                 {questions.map((q, qIdx) => (
-                  <CarouselItem className="pl-4" key={qIdx}>
-                    <div className="p-1">
-                      <Card className="bg-background w-full overflow-hidden">
-                        <CardContent className="p-6 space-y-4">
-                          <div className="flex items-center justify-between">
-                            <div className="text-xs text-muted-foreground">Question {qIdx + 1} of {questions.length}</div>
-                            <Badge variant="secondary">Pages processed: {pageCount}</Badge>
-                          </div>
-                          {q.section ? (
-                            <div className="text-xs font-medium text-muted-foreground">{q.section}</div>
-                          ) : null}
-                          <h3 className="text-lg font-semibold leading-tight">{q.question}</h3>
-                          <div className="space-y-2">
-                            {q.options.map((opt, idx) => {
-                              const isSelectedOption = (qIdx === current) && selected === idx
-                              const isCorrectOption = idx === q.correctIndex
-                              let cls = "w-full text-left rounded-md border px-4 py-3 transition-colors "
-                              if (qIdx !== current) {
-                                cls += "opacity-60 pointer-events-none"
-                              } else if (!checked) {
-                                cls += isSelectedOption ? "bg-accent text-accent-foreground border-2" : "hover:bg-muted"
+                  <CarouselItem key={qIdx} className="p-2">
+                    <Card className="bg-background">
+                      <CardContent className="p-4 space-y-4">
+                        <div className="text-base font-medium">{q.question}</div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {q.options.map((opt, idx) => {
+                            const isSelectedOption = selected === idx && qIdx === current
+                            const isCorrectOption = checked && qIdx === current && idx === q.correctIndex
+                            let cls = "w-full text-left p-2 rounded border transition-colors"
+                            if (checked && qIdx === current) {
+                              if (isCorrectOption) {
+                                cls += " bg-green-100 text-green-800 border-green-600"
+                              } else if (isSelectedOption) {
+                                cls += " bg-red-100 text-red-700 border-red-600"
                               } else {
-                                if (isCorrectOption) {
-                                  cls += "bg-green-100 text-green-800 border-green-600"
-                                } else {
-                                  cls += "bg-red-100 text-red-700 border-red-600"
-                                }
-                                if (isSelectedOption) {
-                                  cls += " border-2"
-                                }
+                                cls += " bg-muted/50"
                               }
-                              return (
-                                <button
-                                  key={idx}
-                                  type="button"
-                                  onClick={() => { if (qIdx === current) setSelected(idx) }}
-                                  className={cls}
-                                >
-                                  <span className="font-mono text-xs mr-2">{String.fromCharCode(65 + idx)}.</span>
-                                  <span>{opt}</span>
-                                </button>
-                              )
-                            })}
+                            } else if (isSelectedOption) {
+                              cls += " border-2"
+                            }
+                            return (
+                              <button
+                                key={idx}
+                                type="button"
+                                onClick={() => { if (qIdx === current) setSelected(idx) }}
+                                className={cls}
+                              >
+                                <span className="font-mono text-xs mr-2">{String.fromCharCode(65 + idx)}.</span>
+                                <span>{opt}</span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                        {qIdx === current && (
+                          <div className="flex flex-wrap items-center gap-3 pt-3">
+                            <Button size="lg" onClick={onCheck} disabled={selected == null || checked}>
+                              Check answer
+                            </Button>
+                            <Separator className="mx-1 w-px h-6" />
                           </div>
-                          {qIdx === current && (
-                            <div className="flex flex-wrap items-center gap-3 pt-3">
-                              <Button size="lg" onClick={onCheck} disabled={selected == null || checked}>
-                                Check answer
-                              </Button>
-                              <Separator className="mx-1 w-px h-6" />
-                            </div>
-                          )}
-                          {qIdx === current && checked && (
-                            <div className={"text-sm rounded-md border px-3 py-2 " + (isCorrect ? "border-green-600 text-green-700" : "border-red-600 text-red-700") }>
-                              {isCorrect ? "Correct" : "Incorrect"}
-                            </div>
-                          )}
-                          {qIdx === current && checked && selected != null && (
-                            <div className="text-sm">
-                              <span className="font-medium">Your answer:</span> {String.fromCharCode(65 + selected)}. {q.options[selected]}
-                            </div>
-                          )}
-                          {qIdx === current && checked && (
-                            <div className="text-xs text-muted-foreground">
-                              <span className="font-medium">Explanation:</span> {q.explanation}
-                              {q.sourceUrl ? (
-                                <span> 
-                                  <a href={q.sourceUrl} target="_blank" rel="noreferrer" className="underline">
-                                    Read: {q.sourceTitle || 'Canvas Page'}
-                                  </a>
-                                </span>
-                              ) : null}
-                            </div>
-                          )}
-                        </CardContent>
-                      </Card>
-                    </div>
+                        )}
+                      </CardContent>
+                    </Card>
                   </CarouselItem>
                 ))}
               </CarouselContent>
@@ -293,7 +259,9 @@ export default function QuizModuleQnAPage() {
               <div className="sr-only">Question Carousel</div>
             </Carousel>
           </div>
-        ) : (
+        )}
+
+        {!loading && !error && showResults && (
           <div className="w-full max-w-5xl">
             <Card className="bg-background w-full overflow-hidden">
               <CardContent className="p-6 space-y-4">

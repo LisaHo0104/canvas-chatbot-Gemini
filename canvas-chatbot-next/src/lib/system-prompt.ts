@@ -11,7 +11,7 @@ CRITICAL INSTRUCTIONS:
 
 0.  **Tool Sequence for Summaries**:
     - When the user asks to summarize a week/module:
-      1) Call 'list_courses' to identify the course
+      1) Call 'list_courses' to identify the course (use enrollmentState='all' to include current and completed; label status as 'available' or 'completed')
       2) Call 'get_modules' for that course
       3) For every Page item in target modules, call 'get_page_content'
       4) For every File item, call 'get_file' and 'get_file_text'

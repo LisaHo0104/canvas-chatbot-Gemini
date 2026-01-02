@@ -3,15 +3,13 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import type { CanvasModule } from '@/lib/canvas-api'
-// removed Next.js Link to avoid nested anchor hydration issues
-import { Card } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ChevronDown, FileText, Link as LinkIcon, CheckSquare, MessageSquare, File } from 'lucide-react'
-import { cn } from '@/lib/utils'
 
-export default function QuizCourseModulesPage() {
+export default function CourseModulesPage() {
   const params = useParams<{ courseId: string }>()
   const router = useRouter()
   const courseId = Number(params?.courseId)
@@ -19,12 +17,25 @@ export default function QuizCourseModulesPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [openModules, setOpenModules] = useState<Record<number, boolean>>({})
+  const [selectedItemByModule, setSelectedItemByModule] = useState<Record<number, number | null>>({})
 
-  const loadModules = async () => {
+  function getItemIcon(type: string) {
+    switch (type) {
+      case 'Page': return <FileText className="w-3 h-3 text-blue-500" />
+      case 'Assignment': return <CheckSquare className="w-3 h-3 text-green-500" />
+      case 'Quiz': return <CheckSquare className="w-3 h-3 text-orange-500" />
+      case 'Discussion': return <MessageSquare className="w-3 h-3 text-purple-500" />
+      case 'File': return <File className="w-3 h-3 text-gray-500" />
+      case 'ExternalUrl': return <LinkIcon className="w-3 h-3 text-sky-500" />
+      default: return <File className="w-3 h-3" />
+    }
+  }
+
+  async function loadModules() {
     try {
       setLoading(true)
       setError(null)
-      console.log('[DEBUG] Fetching modules (server API)', { courseId })
+      console.debug('[DEBUG] Fetching modules (server API)', { courseId })
       const qs = new URLSearchParams()
       qs.set('courseId', String(courseId))
       qs.set('includeItems', 'true')
@@ -59,20 +70,8 @@ export default function QuizCourseModulesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [courseId])
 
-  const toggleModule = (id: number) => {
+  function toggleModule(id: number) {
     setOpenModules(prev => ({ ...prev, [id]: !prev[id] }))
-  }
-
-  const getItemIcon = (type: string) => {
-    switch (type) {
-      case 'Page': return <FileText className="w-3 h-3 text-blue-500" />
-      case 'Assignment': return <CheckSquare className="w-3 h-3 text-green-500" />
-      case 'Quiz': return <CheckSquare className="w-3 h-3 text-orange-500" />
-      case 'Discussion': return <MessageSquare className="w-3 h-3 text-purple-500" />
-      case 'File': return <File className="w-3 h-3 text-gray-500" />
-      case 'ExternalUrl': return <LinkIcon className="w-3 h-3 text-sky-500" />
-      default: return <File className="w-3 h-3" />
-    }
   }
 
   return (
@@ -83,79 +82,130 @@ export default function QuizCourseModulesPage() {
           <p className="text-sm text-muted-foreground">Course ID: {courseId}</p>
         </div>
 
-        {loading ? (
+        {loading && (
           <div className="text-sm text-muted-foreground">Loading modules…</div>
-        ) : error ? (
+        )}
+
+        {error && (
           <div className="text-sm text-destructive">{error}</div>
-        ) : modules.length === 0 ? (
-          <div className="text-sm text-muted-foreground italic">No modules found.</div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        )}
+
+        {!loading && !error && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {modules.map((module) => (
-              <div
-                key={module.id}
-                className="block"
-                onClick={(e) => { e.preventDefault(); console.log('[DEBUG] Navigate to module', { courseId, moduleId: module.id }); router.push(`/protected/quiz/${courseId}/module/${module.id}`) }}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { console.log('[DEBUG] Navigate to module (keyboard)', { courseId, moduleId: module.id }); router.push(`/protected/quiz/${courseId}/module/${module.id}`) } }}
-              >
-                <Card 
-                  className={cn(
-                    "flex flex-col transition-all hover:shadow-md",
-                    "bg-background hover:bg-accent/5"
-                  )}
+              <Card key={module.id} className="transition-all hover:shadow-md bg-background hover:bg-accent/5 h-full rounded-2xl overflow-hidden">
+                <Collapsible
+                  open={!!openModules[module.id]}
+                  onOpenChange={() => toggleModule(module.id)}
+                  className="w-full"
                 >
-                  <Collapsible
-                    open={!!openModules[module.id]}
-                    onOpenChange={() => toggleModule(module.id)}
-                    className="w-full flex flex-col h-full"
-                  >
-                    <div 
-                      className="flex items-start justify-between p-3 hover:bg-muted/50 gap-2 border-b border-border/50 min-h-[60px]"
-                    >
-                      <div className="flex-1 min-w-0 space-y-1">
-                        <h4 className="text-sm font-semibold leading-tight line-clamp-2 whitespace-normal" title={module.name}>
+                  <CollapsibleTrigger className="w-full flex justify-between text-left">
+                    <div className="flex items-start justify-between p-4 w-full">
+                      <div className="flex-1 min-w-0">
+                        <h4 className="text-sm font-semibold leading-tight truncate" title={module.name}>
                           {module.name}
                         </h4>
-                        <Badge variant="secondary" className="text-[10px] h-4 px-1.5">{module.items?.length || 0} items</Badge>
+                        <div className="mt-2">
+                          <Badge variant="secondary" className="text-[10px] px-2 py-0.5 h-fit shrink-0">
+                            {Array.isArray(module.items) ? module.items.length : 0} items
+                          </Badge>
+                        </div>
                       </div>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        className="w-6 h-6 p-0 shrink-0"
-                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleModule(module.id) }}
-                      >
-                        <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", openModules[module.id] ? "transform rotate-180" : "")} />
-                        <span className="sr-only">Toggle</span>
-                      </Button>
+                      <span className="inline-flex items-center justify-center size-8 rounded-full bg-muted">
+                        <ChevronDown className={`w-4 h-4 transition-transform ${openModules[module.id] ? 'rotate-180' : ''}`} />
+                      </span>
                     </div>
-                    <CollapsibleContent className="flex-1 bg-muted/20">
-                      <div className="p-2 space-y-1 max-h-[200px] overflow-y-auto">
-                        {module.items && module.items.length > 0 ? (
-                          module.items.map((item) => (
-                            <a
-                              key={item.id}
-                              href={item.html_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex items-start gap-2 p-2 rounded-md hover:bg-accent hover:text-accent-foreground text-xs group transition-colors"
-                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.open(item.html_url, '_blank') }}
+                  </CollapsibleTrigger>
+                  <div className="border-t border-border/50" />
+                  <CollapsibleContent>
+                    <CardContent className="p-4 space-y-3 text-left">
+                      {Array.isArray(module.items) && module.items.length > 0 ? (
+                        <>
+                          {module.items.map((item) => {
+                            const sel = selectedItemByModule[module.id] === item.id
+                            const isSelectable = item.type === 'Page'
+                            const baseCls = "flex items-center gap-3 py-2 px-2 rounded-md cursor-pointer transition-colors"
+                            const cls =
+                              baseCls +
+                              (sel
+                                ? " border border-green-600 bg-green-50"
+                                : " hover:bg-muted/40 border border-transparent")
+                            return (
+                              <div
+                                key={item.id}
+                                className={cls}
+                                onClick={() => {
+                                  if (!isSelectable) return
+                                  setSelectedItemByModule((prev) => ({
+                                    ...prev,
+                                    [module.id]:
+                                      prev[module.id] === item.id ? null : item.id,
+                                  }))
+                                  console.debug('[DEBUG] Module item selected', {
+                                    courseId,
+                                    moduleId: module.id,
+                                    itemId: item.id,
+                                    type: item.type,
+                                  })
+                                }}
+                              >
+                                <span className="flex-shrink-0 text-blue-600">
+                                  {getItemIcon(item.type)}
+                                </span>
+                                <span className="flex-1 truncate text-sm" title={item.title}>
+                                  {item.title}
+                                </span>
+                                {!isSelectable && (
+                                  <span className="text-[10px] px-2 py-0.5 rounded bg-muted text-muted-foreground">
+                                    Not supported
+                                  </span>
+                                )}
+                              </div>
+                            )
+                          })}
+                          <div className="flex items-center gap-2 pt-3 flex-wrap">
+                            <Button
+                              size="sm"
+                              onClick={(e) => {
+                                e.preventDefault()
+                                const itemId = selectedItemByModule[module.id]
+                                if (!itemId) return
+                                console.debug('[DEBUG] Generate item quiz', {
+                                  courseId,
+                                  moduleId: module.id,
+                                  itemId,
+                                })
+                                router.push(
+                                  `/protected/quiz/${courseId}/module/${module.id}?itemId=${itemId}`,
+                                )
+                              }}
+                              disabled={!selectedItemByModule[module.id]}
                             >
-                              <span className="mt-0.5 flex-shrink-0">{getItemIcon(item.type)}</span>
-                              <span className="flex-1 line-clamp-2 whitespace-normal font-medium text-muted-foreground group-hover:text-foreground leading-tight" title={item.title}>
-                                {item.title}
-                              </span>
-                            </a>
-                          ))
-                        ) : (
-                          <div className="text-xs text-muted-foreground p-2 italic">Empty module</div>
-                        )}
-                      </div>
-                    </CollapsibleContent>
-                  </Collapsible>
-                </Card>
-              </div>
+                              Generate quiz for selected item
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={(e) => {
+                                e.preventDefault()
+                                console.debug('[DEBUG] Generate module quiz', {
+                                  courseId,
+                                  moduleId: module.id,
+                                })
+                                router.push(`/protected/quiz/${courseId}/module/${module.id}`)
+                              }}
+                            >
+                              Generate quiz for this module
+                            </Button>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="text-xs text-muted-foreground italic">Empty module</div>
+                      )}
+                    </CardContent>
+                  </CollapsibleContent>
+                </Collapsible>
+              </Card>
             ))}
           </div>
         )}
