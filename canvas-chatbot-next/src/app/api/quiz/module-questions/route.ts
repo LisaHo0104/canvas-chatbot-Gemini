@@ -5,6 +5,7 @@ import { CanvasAPIService } from '@/lib/canvas-api'
 import { rateLimitMiddleware } from '@/lib/rate-limit'
 import { createOpenRouterProvider, getDefaultModelId } from '@/lib/ai-sdk/openrouter'
 import { generateObject, jsonSchema } from 'ai'
+import { OpenRouterService } from '@/lib/openrouter-service'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300
@@ -137,6 +138,11 @@ async function moduleQuestionsHandler(request: NextRequest) {
     }
     const selectedModel = await getDefaultModelId()
     const openrouter = createOpenRouterProvider(apiKey)
+    const conn = await new OpenRouterService(apiKey).testConnection()
+    if (!conn.success) {
+      console.error('[DEBUG] QnA API: OpenRouter connection failed', { error: conn.error })
+      return new Response(JSON.stringify({ error: conn.error || 'AI provider connection failed' }), { status: 500 })
+    }
 
     console.log('[DEBUG] QnA model', selectedModel)
     console.log('[DEBUG] QnA prompt: ignoring Links & Checklist for question generation')
@@ -153,7 +159,7 @@ async function moduleQuestionsHandler(request: NextRequest) {
               type: 'object',
               properties: {
                 question: { type: 'string' },
-                options: { type: 'array', items: { type: 'string' }, minItems: 4 },
+                options: { type: 'array', items: { type: 'string' } },
                 correctIndex: { type: 'integer', minimum: 0 },
                 explanation: { type: 'string' },
                 sourceUrl: { type: 'string' },
@@ -180,7 +186,8 @@ async function moduleQuestionsHandler(request: NextRequest) {
     return new Response(JSON.stringify({ pages, summary, questions }), { status: 200 })
   } catch (error) {
     console.error('Module QnA API error:', error)
-    return new Response(JSON.stringify({ error: 'Internal server error' }), { status: 500 })
+    const msg = typeof (error as any)?.message === 'string' ? (error as any).message : ''
+    return new Response(JSON.stringify({ error: msg ? `Internal error: ${msg}` : 'Internal server error' }), { status: 500 })
   }
 }
 

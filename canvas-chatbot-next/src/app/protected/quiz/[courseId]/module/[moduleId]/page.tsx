@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
-import { useParams, useSearchParams } from 'next/navigation'
+import { useParams, useSearchParams, useRouter } from 'next/navigation'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -24,6 +24,7 @@ interface QnAItem {
 export default function QuizModuleQnAPage() {
   const params = useParams<{ courseId: string; moduleId: string }>()
   const searchParams = useSearchParams()
+  const router = useRouter()
   const courseId = Number(params?.courseId)
   const moduleId = Number(params?.moduleId)
   const itemIdParam = searchParams.get('itemId')
@@ -100,6 +101,7 @@ export default function QuizModuleQnAPage() {
     if (selected == null) return
     const q = questions[current]
     const correct = selected === q.correctIndex
+    console.debug('[DEBUG] Answer checked', { current, isCorrect: correct, selected, correctIndex: q.correctIndex })
     setIsCorrect(correct)
     setChecked(true)
     setAnswers(prev => {
@@ -154,13 +156,23 @@ export default function QuizModuleQnAPage() {
     } catch {}
   }, [carouselApi])
 
+  const completedCount = answers.reduce((acc, v) => acc + (typeof v !== 'undefined' ? 1 : 0), 0)
+
   return (
     <div className="min-h-[calc(100vh-3rem)] w-full px-4 py-4">
       <div className="max-w-5xl mx-auto w-full space-y-4">
         <div>
           <h1 className="text-2xl font-semibold">Week Q&A</h1>
           <p className="text-sm text-muted-foreground">Course ID: {courseId} · Module ID: {moduleId}</p>
-          <div className="mt-1"><Badge variant="secondary">Pages processed: {pageCount}</Badge></div>
+          <div className="mt-1 flex items-center gap-2">
+            <Badge variant="secondary">Pages processed: {pageCount}</Badge>
+            {questions.length > 0 && (
+              <Badge variant="secondary">Questions generated: {questions.length}</Badge>
+            )}
+            {questions.length > 0 && (
+              <Badge variant="secondary">Completed: {completedCount}/{questions.length}</Badge>
+            )}
+          </div>
         </div>
 
         {loading && (
@@ -181,6 +193,11 @@ export default function QuizModuleQnAPage() {
             </EmptyHeader>
             <EmptyContent>
               <Button onClick={() => loadQnA()}>Retry</Button>
+              {typeof error === 'string' && (error.includes('Canvas') || error.includes('log in')) && (
+                <Button variant="outline" onClick={() => { console.debug('[DEBUG] Navigate to settings from quiz error'); router.push('/protected/settings') }}>
+                  Open Settings
+                </Button>
+              )}
             </EmptyContent>
           </Empty>
         )}
@@ -190,32 +207,33 @@ export default function QuizModuleQnAPage() {
             <Carousel setApi={setCarouselApi}>
               <CarouselContent>
                 {questions.map((q, qIdx) => (
-                  <CarouselItem key={qIdx} className="p-2">
-                    <Card className="bg-background">
+                  <CarouselItem key={qIdx} className="px-3 sm:px-4 py-2">
+                    <Card className="bg-background box-border w-full max-w-full mx-2">
                       <CardContent className="p-4 space-y-4">
                         <div className="text-base font-medium">{q.question}</div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div className="grid grid-cols-1 gap-2">
                           {q.options.map((opt, idx) => {
                             const isSelectedOption = selected === idx && qIdx === current
                             const isCorrectOption = checked && qIdx === current && idx === q.correctIndex
-                            let cls = "w-full text-left p-2 rounded border transition-colors"
+                            let cls = "w-full text-left p-3 rounded-md border bg-background hover:bg-muted/40 transition-colors box-border"
                             if (checked && qIdx === current) {
                               if (isCorrectOption) {
-                                cls += " bg-green-100 text-green-800 border-green-600"
+                                cls += " bg-green-50 border-green-600"
                               } else if (isSelectedOption) {
-                                cls += " bg-red-100 text-red-700 border-red-600"
+                                cls += " bg-red-50 border-red-600"
                               } else {
                                 cls += " bg-muted/50"
                               }
                             } else if (isSelectedOption) {
-                              cls += " border-2"
+                              cls += " ring-2 ring-primary/40 border-primary bg-primary/5"
                             }
                             return (
                               <button
                                 key={idx}
                                 type="button"
-                                onClick={() => { if (qIdx === current) setSelected(idx) }}
+                                onClick={() => { if (qIdx === current) { console.debug('[DEBUG] Option selected', { questionIndex: current, optionIndex: idx }); setSelected(idx) } }}
                                 className={cls}
+                                aria-selected={isSelectedOption && qIdx === current ? true : undefined}
                               >
                                 <span className="font-mono text-xs mr-2">{String.fromCharCode(65 + idx)}.</span>
                                 <span>{opt}</span>
@@ -229,6 +247,38 @@ export default function QuizModuleQnAPage() {
                               Check answer
                             </Button>
                             <Separator className="mx-1 w-px h-6" />
+                          </div>
+                        )}
+                        {qIdx === current && checked && (
+                          <div className="mt-3 space-y-2">
+                            <div className="text-sm">
+                              <span className="font-medium">{isCorrect ? 'Correct' : 'Correct answer'}:</span>{' '}
+                              <span className="font-mono text-xs mr-1">{String.fromCharCode(65 + q.correctIndex)}.</span>
+                              <span>{q.options[q.correctIndex]}</span>
+                            </div>
+                            {q.explanation && (
+                              <div className="text-sm">
+                                <span className="font-medium">Explanation:</span>{' '}
+                                <span>{q.explanation}</span>
+                              </div>
+                            )}
+                            {(q.sourceUrl || q.sourceTitle) && (
+                              <div className="text-sm">
+                                <span className="font-medium">Source:</span>{' '}
+                                {q.sourceUrl ? (
+                                  <a
+                                    href={q.sourceUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-blue-600 underline"
+                                  >
+                                    {q.sourceTitle || q.sourceUrl}
+                                  </a>
+                                ) : (
+                                  <span>{q.sourceTitle}</span>
+                                )}
+                              </div>
+                            )}
                           </div>
                         )}
                       </CardContent>
