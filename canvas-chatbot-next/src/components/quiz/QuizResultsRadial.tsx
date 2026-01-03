@@ -7,9 +7,10 @@ import { ChartConfig, ChartContainer } from '@/components/ui/chart'
 interface QuizResultsRadialProps {
   correct: number
   total: number
+  variant?: 'card' | 'inline'
 }
 
-export function QuizResultsRadial({ correct, total }: QuizResultsRadialProps) {
+export function QuizResultsRadial({ correct, total, variant = 'card' }: QuizResultsRadialProps) {
   const wrong = Math.max(0, total - correct)
   const percent = total > 0 ? Math.round((correct / total) * 100) : 0
   console.log('[DEBUG] Rendering QuizResultsRadial', { correct, wrong, total, percent })
@@ -19,6 +20,37 @@ export function QuizResultsRadial({ correct, total }: QuizResultsRadialProps) {
   const chartConfig: ChartConfig = {
     correct: { label: 'Correct', color: '#86efac' },
     wrong: { label: 'Wrong', color: '#fca5a5' },
+  }
+
+  if (variant === 'inline') {
+    return (
+      <ChartContainer config={chartConfig} className="relative mx-auto w-full h-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <RadialBarChart data={chartData} startAngle={0} endAngle={360} innerRadius="60%" outerRadius="90%">
+            <RadialBar dataKey="correct" stackId="a" fill="var(--color-correct)" cornerRadius={10} />
+            <RadialBar dataKey="wrong" stackId="a" fill="var(--color-wrong)" cornerRadius={10} />
+            <PolarRadiusAxis tick={false} tickLine={false} axisLine={false}>
+              <Label
+                content={({ viewBox }) => {
+                  if (viewBox && 'cx' in viewBox && 'cy' in viewBox) {
+                    return (
+                      <text x={viewBox.cx} y={viewBox.cy} textAnchor="middle" dominantBaseline="middle">
+                        <tspan x={viewBox.cx} y={viewBox.cy} className="fill-foreground text-base font-semibold">
+                          {correct}/{total}
+                        </tspan>
+                        <tspan x={viewBox.cx} y={(viewBox.cy || 0) + 18} className="fill-muted-foreground text-xs">
+                          {percent}%
+                        </tspan>
+                      </text>
+                    )
+                  }
+                }}
+              />
+            </PolarRadiusAxis>
+          </RadialBarChart>
+        </ResponsiveContainer>
+      </ChartContainer>
+    )
   }
 
   return (
@@ -40,12 +72,12 @@ export function QuizResultsRadial({ correct, total }: QuizResultsRadialProps) {
                     if (viewBox && 'cx' in viewBox && 'cy' in viewBox) {
                       return (
                         <text x={viewBox.cx} y={viewBox.cy} textAnchor="middle" dominantBaseline="middle">
-                        <tspan x={viewBox.cx} y={viewBox.cy} className="fill-foreground text-3xl font-bold">
-                          {correct}/{total}
-                        </tspan>
-                        <tspan x={viewBox.cx} y={(viewBox.cy || 0) + 34} className="fill-muted-foreground">
-                          {percent}%
-                        </tspan>
+                          <tspan x={viewBox.cx} y={viewBox.cy} className="fill-foreground text-3xl font-bold">
+                            {correct}/{total}
+                          </tspan>
+                          <tspan x={viewBox.cx} y={(viewBox.cy || 0) + 34} className="fill-muted-foreground">
+                            {percent}%
+                          </tspan>
                         </text>
                       )
                     }
