@@ -44,6 +44,11 @@ export function ToolRenderer({ toolName, result }: ToolRendererProps) {
     case 'get_assignment_feedback_and_rubric':
       return <FeedbackRubric data={result} />
 
+    case 'get_assignment_rubric':
+      // Hide raw rubric data when it's being interpreted by RubricInterpretation component
+      // The rubric interpretation UI provides a better experience
+      return null
+
     case 'webSearch':
       const results = result?.results || (Array.isArray(result) ? result : [])
       if (!results.length) return <div className="text-sm text-muted-foreground">No results found</div>

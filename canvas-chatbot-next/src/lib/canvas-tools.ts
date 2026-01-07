@@ -303,5 +303,41 @@ export function createCanvasTools(token: string, url: string) {
 				};
 			},
 		}),
+
+		get_assignment_rubric: tool({
+			description: 'Get the rubric criteria and ratings for an assignment. Use this to interpret what is required for each grade level.',
+			inputSchema: z.object({
+				courseId: z.number(),
+				assignmentId: z.number(),
+			}),
+			execute: async ({
+				courseId,
+				assignmentId,
+			}: {
+				courseId: number;
+				assignmentId: number;
+			}) => {
+				const assignment = await api.getAssignment(courseId, assignmentId, {
+					includeRubric: true,
+				});
+				if (!assignment.rubric || !Array.isArray(assignment.rubric)) {
+					return { error: 'No rubric found for this assignment' };
+				}
+				return {
+					assignmentName: assignment.name,
+					assignmentDescription: assignment.description,
+					rubric: assignment.rubric.map((criterion: any) => ({
+						id: criterion.id,
+						description: criterion.description,
+						long_description: criterion.long_description,
+						points_possible: criterion.points,
+						ratings: criterion.ratings?.map((r: any) => ({
+							description: r.description,
+							points: r.points,
+						})) || [],
+					})),
+				};
+			},
+		}),
 	};
 }
