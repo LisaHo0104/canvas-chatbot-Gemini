@@ -14,6 +14,7 @@ import { createOpenRouterProvider } from '@/lib/ai-sdk/openrouter';
 import { getDefaultModelId } from '@/lib/ai-sdk/openrouter';
 import { tavilySearch } from '@tavily/ai-sdk';
 import { SYSTEM_PROMPT } from '@/lib/system-prompt';
+import { CanvasContextService, type CanvasContextAttachment } from '@/lib/canvas-context';
 
 export const maxDuration = 300;
 export const runtime = 'nodejs';
@@ -35,15 +36,23 @@ async function chatHandler(request: NextRequest) {
 		}
 
 		// Extract the text content of the last user message for processing
+		const lastUserMessage = (incomingMessages as UIMessage[])
+			.slice()
+			.reverse()
+			.find((m) => m.role === 'user');
+		
 		const currentMessageContent = String(
-			(incomingMessages as UIMessage[])
-				.slice()
-				.reverse()
-				.find((m) => m.role === 'user')
+			lastUserMessage
 				?.parts.filter((p: any) => p.type === 'text')
 				.map((p: any) => String(p.text || ''))
 				.join('') || '',
 		);
+
+		// Extract context attachments from the last user message
+		const contextAttachments: CanvasContextAttachment[] = lastUserMessage
+			?.parts.filter((p: any) => p.type === 'context')
+			.map((p: any) => p.context as CanvasContextAttachment)
+			|| [];
 
 		const supabase = createRouteHandlerClient(request);
 
@@ -141,38 +150,15 @@ async function chatHandler(request: NextRequest) {
 		// Manual filtering is unnecessary and can cause issues (e.g. missing tool contexts).
 		const uiMessages = incomingMessages;
 
-		const formatCanvasContext = (ctx: any): string => {
-			try {
-				if (!ctx || !Array.isArray(ctx?.courses)) return '';
-				const lines: string[] = [];
-				lines.push('[Canvas Context]');
-				lines.push(`User is enrolled in ${ctx.courses.length} courses:`);
-				lines.push('');
-				for (const course of ctx.courses.slice(0, 20)) {
-					lines.push(`${course.name} (${course.code})`);
-					const assigns = Array.isArray(course.assignments) ? course.assignments.slice(0, 30) : [];
-					const mods = Array.isArray(course.modules) ? course.modules.slice(0, 30) : [];
-					if (assigns.length > 0) {
-						lines.push(`  - Assignments: ${assigns.map((a: any) => `${a.name} (ID:${a.id})`).join(', ')}`);
-					} else {
-						lines.push(`  - Assignments: none`);
-					}
-					if (mods.length > 0) {
-						lines.push(`  - Modules: ${mods.map((m: any) => `${m.name} (ID:${m.id})`).join(', ')}`);
-					} else {
-						lines.push(`  - Modules: none`);
-					}
-					lines.push('');
-				}
-				return lines.join('\n');
-			} catch {
-				return '';
-			}
-		};
+		// Format Canvas context using the clean template-based formatter
+		const formattedContext = CanvasContextService.formatAttachedContext(
+			canvasContext,
+			contextAttachments
+		);
 
 		const systemText =
-			typeof canvasContext !== 'undefined' && canvasContext
-				? `${SYSTEM_PROMPT}\n\n${formatCanvasContext(canvasContext)}`
+			typeof canvasContext !== 'undefined' && canvasContext && formattedContext
+				? `${SYSTEM_PROMPT}\n\n${formattedContext}`
 				: SYSTEM_PROMPT;
 
 		const uiMessagesWithSystem: UIMessage[] = [

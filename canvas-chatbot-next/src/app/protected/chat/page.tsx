@@ -8,8 +8,8 @@ import { useChat } from '@ai-sdk/react'
 import { lastAssistantMessageIsCompleteWithApprovalResponses } from 'ai'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Conversation, ConversationContent, ConversationScrollButton } from '@/components/ai-elements/conversation'
-import { Message as AIMessage, MessageContent as AIMessageContent, MessageAction, MessageActions, MessageResponse, MessageAttachments, MessageAttachment } from '@/components/ai-elements/message'
-import { PromptInput, PromptInputActionMenu, PromptInputActionMenuContent, PromptInputActionMenuTrigger, PromptInputActionMenuItem, PromptInputActionAddAttachments, PromptInputBody, PromptInputFooter, PromptInputProvider, PromptInputSubmit, PromptInputTextarea, PromptInputTools, PromptInputButton, PromptInputSpeechButton, PromptInputAttachments, PromptInputAttachment, PromptInputCommand, PromptInputCommandInput, PromptInputCommandList, PromptInputCommandEmpty, PromptInputCommandGroup, PromptInputCommandItem, PromptInputCommandSeparator, PromptInputHeader } from '@/components/ai-elements/prompt-input'
+import { Message as AIMessage, MessageContent as AIMessageContent, MessageAction, MessageActions, MessageResponse, MessageAttachments, MessageAttachment, MessageContextAttachment } from '@/components/ai-elements/message'
+import { PromptInput, PromptInputActionMenu, PromptInputActionMenuContent, PromptInputActionMenuTrigger, PromptInputActionMenuItem, PromptInputActionAddAttachments, PromptInputBody, PromptInputFooter, PromptInputProvider, PromptInputSubmit, PromptInputTextarea, PromptInputTools, PromptInputButton, PromptInputSpeechButton, PromptInputAttachments, PromptInputAttachment, PromptInputCommand, PromptInputCommandInput, PromptInputCommandList, PromptInputCommandEmpty, PromptInputCommandGroup, PromptInputCommandItem, PromptInputCommandSeparator, PromptInputHeader, PromptInputContexts } from '@/components/ai-elements/prompt-input'
 import { ModelSelector, ModelSelectorContent, ModelSelectorEmpty, ModelSelectorGroup, ModelSelectorInput, ModelSelectorItem, ModelSelectorList, ModelSelectorLogo, ModelSelectorLogoGroup, ModelSelectorName, ModelSelectorTrigger } from '@/components/ai-elements/model-selector'
 import { Sources, SourcesContent, SourcesTrigger, Source } from '@/components/ai-elements/sources'
 import { Suggestions, Suggestion } from '@/components/ai-elements/suggestion'
@@ -567,6 +567,79 @@ export default function ChatPage() {
     } catch { }
   }
 
+  // Helper functions to extract context item data
+  const getCourseById = (courseId: number): any | null => {
+    if (!canvasContext?.courses) return null
+    return canvasContext.courses.find((c: any) => c.id === courseId) || null
+  }
+
+  const getAssignmentById = (assignmentId: number): { assignment: any; course: any } | null => {
+    if (!canvasContext?.courses) return null
+    for (const course of canvasContext.courses) {
+      const assignment = (course.assignments || []).find((a: any) => a.id === assignmentId)
+      if (assignment) {
+        return { assignment, course }
+      }
+    }
+    return null
+  }
+
+  const getModuleById = (moduleId: number): { module: any; course: any } | null => {
+    if (!canvasContext?.courses) return null
+    for (const course of canvasContext.courses) {
+      const module = (course.modules || []).find((m: any) => m.id === moduleId)
+      if (module) {
+        return { module, course }
+      }
+    }
+    return null
+  }
+
+  const getSelectedContextItems = (): Array<{ id: number; type: 'course' | 'assignment' | 'module'; name: string; code?: string }> => {
+    const items: Array<{ id: number; type: 'course' | 'assignment' | 'module'; name: string; code?: string }> = []
+
+    // Add courses
+    selectedContext.courses.forEach((courseId) => {
+      const course = getCourseById(courseId)
+      if (course) {
+        items.push({
+          id: courseId,
+          type: 'course',
+          name: course.name || `Course ${courseId}`,
+          code: course.code || course.course_code
+        })
+      }
+    })
+
+    // Add assignments
+    selectedContext.assignments.forEach((assignmentId) => {
+      const result = getAssignmentById(assignmentId)
+      if (result) {
+        items.push({
+          id: assignmentId,
+          type: 'assignment',
+          name: result.assignment.name || `Assignment ${assignmentId}`,
+          code: result.course.code || result.course.course_code
+        })
+      }
+    })
+
+    // Add modules
+    selectedContext.modules.forEach((moduleId) => {
+      const result = getModuleById(moduleId)
+      if (result) {
+        items.push({
+          id: moduleId,
+          type: 'module',
+          name: result.module.name || `Module ${moduleId}`,
+          code: result.course.code || result.course.course_code
+        })
+      }
+    })
+
+    return items
+  }
+
   const filterCanvasContext = (context: any, selected: { courses: number[]; assignments: number[]; modules: number[] }): any | null => {
     if (!context || !context.courses || !Array.isArray(context.courses)) {
       return context
@@ -631,8 +704,22 @@ export default function ChatPage() {
       ? filterCanvasContext(canvasContext, selectedContext)
       : null
 
+    // Get selected context items to include in message parts
+    const contextItems = getSelectedContextItems()
+    const contextParts = contextItems.map((item) => ({
+      type: 'context',
+      context: item,
+    }))
+
     await sendChatMessage(
-      { role: 'user', parts: [{ type: 'text', text: message.text }, ...(Array.isArray(message.files) ? message.files : [])] } as any,
+      { 
+        role: 'user', 
+        parts: [
+          { type: 'text', text: message.text }, 
+          ...(Array.isArray(message.files) ? message.files : []),
+          ...contextParts,
+        ] 
+      } as any,
       {
         body: {
           model: selectedModel,
@@ -808,6 +895,7 @@ export default function ChatPage() {
             ) : (
               uiMessages.map((message) => {
                 const fileParts = message.parts.filter((p) => p.type === 'file') as any[]
+                const contextParts = message.parts.filter((p) => (p as any).type === 'context') as any[]
                 const textParts = message.parts.filter((p) => p.type === 'text') as any[]
                 const textDeltaParts = message.parts.filter((p) => (p as any).type === 'text-delta') as any[]
                 const toolParts = message.parts.filter((p) => typeof (p as any).type === 'string' && (p as any).type.startsWith('tool-')) as ToolUIPart[]
@@ -829,10 +917,16 @@ export default function ChatPage() {
                       </Sources>
                     )}
                     <AIMessage from={message.role}>
-                      {fileParts.length > 0 && (
+                      {(fileParts.length > 0 || contextParts.length > 0) && (
                         <MessageAttachments className="mb-2">
                           {fileParts.map((fp, idx) => (
                             <MessageAttachment key={`${message.id}-file-${idx}`} data={fp} />
+                          ))}
+                          {contextParts.map((cp, idx) => (
+                            <MessageContextAttachment 
+                              key={`${message.id}-context-${idx}`} 
+                              context={cp.context} 
+                            />
                           ))}
                         </MessageAttachments>
                       )}
@@ -1087,6 +1181,20 @@ export default function ChatPage() {
                     <PromptInputAttachment data={file} />
                   )}
                 </PromptInputAttachments>
+                <PromptInputContexts
+                  contexts={getSelectedContextItems()}
+                  onRemove={(id, type) => {
+                    setSelectedContext(prev => {
+                      if (type === 'course') {
+                        return { ...prev, courses: prev.courses.filter(cId => cId !== id) }
+                      } else if (type === 'assignment') {
+                        return { ...prev, assignments: prev.assignments.filter(aId => aId !== id) }
+                      } else {
+                        return { ...prev, modules: prev.modules.filter(mId => mId !== id) }
+                      }
+                    })
+                  }}
+                />
               </PromptInputHeader>
               <PromptInputBody>
                 <PromptInputTextarea ref={textareaRef} placeholder="Ask about your courses, assignments, modules..." className="w-full" />

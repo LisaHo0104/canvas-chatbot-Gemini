@@ -317,26 +317,61 @@ export function createCanvasTools(token: string, url: string) {
 				courseId: number;
 				assignmentId: number;
 			}) => {
-				const assignment = await api.getAssignment(courseId, assignmentId, {
-					includeRubric: true,
-				});
-				if (!assignment.rubric || !Array.isArray(assignment.rubric)) {
-					return { error: 'No rubric found for this assignment' };
+				try {
+					const assignment = await api.getAssignment(courseId, assignmentId, {
+						includeRubric: true,
+					});
+					
+					// Check if assignment exists
+					if (!assignment) {
+						return { error: `Assignment ${assignmentId} not found in course ${courseId}` };
+					}
+					
+					// Check for rubric - handle null, undefined, empty array, or non-array values
+					const rubric = (assignment as any).rubric;
+					if (!rubric) {
+						return { 
+							error: 'No rubric found for this assignment. The assignment may not have a rubric attached.',
+							assignmentName: assignment.name,
+							assignmentId: assignment.id,
+						};
+					}
+					
+					if (!Array.isArray(rubric)) {
+						return { 
+							error: `Rubric data is in an unexpected format. Expected array, got ${typeof rubric}`,
+							assignmentName: assignment.name,
+							assignmentId: assignment.id,
+						};
+					}
+					
+					if (rubric.length === 0) {
+						return { 
+							error: 'Assignment has a rubric associated but it contains no criteria.',
+							assignmentName: assignment.name,
+							assignmentId: assignment.id,
+						};
+					}
+					
+					return {
+						assignmentName: assignment.name,
+						assignmentDescription: assignment.description,
+						rubric: rubric.map((criterion: any) => ({
+							id: criterion.id,
+							description: criterion.description,
+							long_description: criterion.long_description,
+							points_possible: criterion.points,
+							ratings: criterion.ratings?.map((r: any) => ({
+								description: r.description,
+								points: r.points,
+							})) || [],
+						})),
+					};
+				} catch (error: any) {
+					return {
+						error: error.message || 'Failed to fetch assignment rubric',
+					};
 				}
-				return {
-					assignmentName: assignment.name,
-					assignmentDescription: assignment.description,
-					rubric: assignment.rubric.map((criterion: any) => ({
-						id: criterion.id,
-						description: criterion.description,
-						long_description: criterion.long_description,
-						points_possible: criterion.points,
-						ratings: criterion.ratings?.map((r: any) => ({
-							description: r.description,
-							points: r.points,
-						})) || [],
-					})),
-				};
 			},
 		}),
 	};

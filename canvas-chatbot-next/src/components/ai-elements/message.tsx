@@ -18,6 +18,9 @@ import {
   ChevronRightIcon,
   PaperclipIcon,
   XIcon,
+  FolderIcon,
+  FileText,
+  LayersIcon,
 } from "lucide-react";
 import type { ComponentProps, HTMLAttributes, ReactElement } from "react";
 import { createContext, memo, useContext, useEffect, useState } from "react";
@@ -426,6 +429,66 @@ export function MessageAttachments({
     >
       {children}
     </div>
+  );
+}
+
+export type ContextItem = {
+  id: number;
+  type: 'course' | 'assignment' | 'module';
+  name: string;
+  code?: string;
+};
+
+export type MessageContextAttachmentProps = HTMLAttributes<HTMLDivElement> & {
+  context: ContextItem;
+  className?: string;
+};
+
+export function MessageContextAttachment({
+  context,
+  className,
+  ...props
+}: MessageContextAttachmentProps) {
+  const getIcon = () => {
+    switch (context.type) {
+      case 'course':
+        return <FolderIcon className="size-4" />;
+      case 'assignment':
+        return <FileText className="size-4" />;
+      case 'module':
+        return <LayersIcon className="size-4" />;
+      default:
+        return <PaperclipIcon className="size-4" />;
+    }
+  };
+
+  const getLabel = () => {
+    if (context.code) {
+      return `${context.code}: ${context.name}`;
+    }
+    return context.name;
+  };
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div
+          className={cn(
+            "group relative flex size-24 shrink-0 flex-col items-center justify-center gap-1 overflow-hidden rounded-lg bg-muted p-2 text-muted-foreground",
+            className
+          )}
+          {...props}
+        >
+          {getIcon()}
+          <span className="line-clamp-2 text-center text-xs font-medium">
+            {context.name}
+          </span>
+        </div>
+      </TooltipTrigger>
+      <TooltipContent>
+        <p className="max-w-xs">{getLabel()}</p>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 

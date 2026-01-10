@@ -12,6 +12,28 @@ export interface CanvasContextData {
   }
 }
 
+export interface CanvasContextAttachment {
+  id: number
+  type: 'course' | 'assignment' | 'module'
+  name: string
+  code?: string
+}
+
+export interface CanvasContextFormatOptions {
+  includeInstructions?: boolean
+  maxCourses?: number
+  maxAssignmentsPerCourse?: number
+  maxModulesPerCourse?: number
+}
+
+export interface FormattedCanvasContext {
+  header: string
+  attachmentsSection: string
+  instructionsSection: string
+  coursesSection: string
+  footer: string
+}
+
 export class CanvasContextService {
   private canvasService: CanvasAPIService
 
@@ -723,5 +745,207 @@ export class CanvasContextService {
       .replace(/\s+/g, ' ')
       .trim()
       .substring(0, 20000) // Limit to 20k characters
+  }
+
+  /**
+   * Formats Canvas context for attached courses using template-based approach
+   * Static method that doesn't require Canvas API service instance
+   */
+  static formatAttachedContext(
+    ctx: { courses?: any[] } | null,
+    attachments: CanvasContextAttachment[] = [],
+    options: CanvasContextFormatOptions = {}
+  ): string {
+    try {
+      if (!ctx || !Array.isArray(ctx.courses) || ctx.courses.length === 0) {
+        return ''
+      }
+
+      const {
+        includeInstructions = true,
+        maxCourses = 20,
+        maxAssignmentsPerCourse = 30,
+        maxModulesPerCourse = 30,
+      } = options
+
+      const header = CanvasContextService.buildContextHeader(ctx.courses.length)
+      const attachmentsSection = CanvasContextService.buildAttachmentsList(attachments)
+      const instructionsSection = includeInstructions
+        ? CanvasContextService.buildContextInstructions()
+        : ''
+      const coursesSection = CanvasContextService.buildCoursesSection(
+        ctx.courses,
+        maxCourses,
+        maxAssignmentsPerCourse,
+        maxModulesPerCourse
+      )
+      const footer = CanvasContextService.buildContextFooter()
+
+      return CanvasContextService.formatContextSections({
+        header,
+        attachmentsSection,
+        instructionsSection,
+        coursesSection,
+        footer,
+      })
+    } catch (error) {
+      console.error('Error formatting Canvas context:', error)
+      return ''
+    }
+  }
+
+  /**
+   * Formats context sections into final string
+   */
+  private static formatContextSections(sections: FormattedCanvasContext): string {
+    const parts = [
+      sections.header,
+      sections.attachmentsSection,
+      sections.instructionsSection,
+      sections.coursesSection,
+      sections.footer,
+    ].filter(Boolean)
+
+    return parts.join('\n')
+  }
+
+  /**
+   * Builds the context header section
+   */
+  private static buildContextHeader(courseCount: number): string {
+    return `═══════════════════════════════════════════════════════════
+📚 CANVAS CONTEXT - ATTACHED COURSES
+═══════════════════════════════════════════════════════════
+
+The user has attached ${courseCount} course(s) to this conversation.`
+  }
+
+  /**
+   * Builds the attachments list section
+   */
+  private static buildAttachmentsList(attachments: CanvasContextAttachment[]): string {
+    if (attachments.length === 0) {
+      return ''
+    }
+
+    const courses = attachments.filter((a) => a.type === 'course')
+    const assignments = attachments.filter((a) => a.type === 'assignment')
+    const modules = attachments.filter((a) => a.type === 'module')
+
+    const parts: string[] = ['', '🎯 SPECIFIC ITEMS ATTACHED:']
+
+    if (courses.length > 0) {
+      const courseList = courses
+        .map((c) => `${c.name}${c.code ? ` (${c.code})` : ''}`)
+        .join(', ')
+      parts.push(`   📚 Courses: ${courseList}`)
+    }
+
+    if (assignments.length > 0) {
+      const assignmentList = assignments.map((a) => a.name).join(', ')
+      parts.push(`   📝 Assignments: ${assignmentList}`)
+    }
+
+    if (modules.length > 0) {
+      const moduleList = modules.map((m) => m.name).join(', ')
+      parts.push(`   📦 Modules: ${moduleList}`)
+    }
+
+    return parts.join('\n')
+  }
+
+  /**
+   * Builds the context instructions section
+   */
+  private static buildContextInstructions(): string {
+    return `
+⚠️ CRITICAL INSTRUCTIONS:
+   1. These courses are ATTACHED as context - the user wants you to use them!
+   2. You MUST use Canvas tools to fetch detailed content:
+      - get_modules(course_id) - to get module structure and items
+      - get_assignments(course_id) - to get assignment details and descriptions
+      - get_page_content(course_id, page_url) - to get page/lecture content
+      - get_file(course_id, file_id) - to get file content (PDFs, etc.)
+   3. When the user asks about these courses, IMMEDIATELY fetch the relevant content
+   4. Do NOT just reference course names - fetch and use the actual content!
+
+📋 ATTACHED COURSES:`
+  }
+
+  /**
+   * Builds the courses section with all course details
+   */
+  private static buildCoursesSection(
+    courses: any[],
+    maxCourses: number,
+    maxAssignments: number,
+    maxModules: number
+  ): string {
+    const courseSections = courses
+      .slice(0, maxCourses)
+      .map((course) => CanvasContextService.buildCourseSection(course, maxAssignments, maxModules))
+
+    return courseSections.join('\n')
+  }
+
+  /**
+   * Builds a single course section
+   */
+  private static buildCourseSection(
+    course: any,
+    maxAssignments: number,
+    maxModules: number
+  ): string {
+    const courseName = course.name || 'Unknown Course'
+    const courseCode = course.code || course.course_code || 'No code'
+    const courseId = course.id
+
+    const assignments = Array.isArray(course.assignments)
+      ? course.assignments.slice(0, maxAssignments)
+      : []
+    const modules = Array.isArray(course.modules)
+      ? course.modules.slice(0, maxModules)
+      : []
+
+    const parts: string[] = [
+      '',
+      `🎓 ${courseName} (${courseCode})`,
+      `   Course ID: ${courseId}`,
+    ]
+
+    if (assignments.length > 0) {
+      parts.push(`   📝 Assignments (${assignments.length}):`)
+      assignments.forEach((a: any) => {
+        parts.push(`      - ${a.name} (ID: ${a.id})`)
+      })
+    } else {
+      parts.push(`   📝 Assignments: none`)
+    }
+
+    if (modules.length > 0) {
+      parts.push(`   📦 Modules (${modules.length}):`)
+      modules.forEach((m: any) => {
+        parts.push(`      - ${m.name} (ID: ${m.id})`)
+      })
+    } else {
+      parts.push(`   📦 Modules: none`)
+    }
+
+    parts.push('')
+    parts.push('   💡 To get detailed content for this course:')
+    parts.push(`      - Use get_modules(course_id: ${courseId}) to fetch module details`)
+    parts.push(`      - Use get_assignments(course_id: ${courseId}) to fetch assignment details`)
+    parts.push('      - Use get_page_content(course_id, page_url) for page content')
+    parts.push('      - Use get_file(course_id, file_id) for file content')
+    parts.push('')
+
+    return parts.join('\n')
+  }
+
+  /**
+   * Builds the context footer
+   */
+  private static buildContextFooter(): string {
+    return '═══════════════════════════════════════════════════════════'
   }
 }
