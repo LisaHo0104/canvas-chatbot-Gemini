@@ -32,6 +32,7 @@ interface ContextItem {
   id: number
   name: string
   code?: string
+  course_id?: number // Course ID for assignments and modules
 }
 
 interface ContextSelections {
@@ -98,6 +99,7 @@ export default function ContextPage() {
             return {
               id,
               name: assignment.name,
+              course_id: course.id, // Include course_id
             }
           }
         }
@@ -115,6 +117,7 @@ export default function ContextPage() {
             return {
               id,
               name: module.name,
+              course_id: course.id, // Include course_id
             }
           }
         }

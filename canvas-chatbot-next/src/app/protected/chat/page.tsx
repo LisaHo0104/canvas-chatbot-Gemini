@@ -84,8 +84,8 @@ export default function ChatPage() {
   // Items selected on context page (available pool) with names
   const [availableContext, setAvailableContext] = useState<{
     courses: Array<{ id: number; name: string; code?: string }>
-    assignments: Array<{ id: number; name: string }>
-    modules: Array<{ id: number; name: string }>
+    assignments: Array<{ id: number; name: string; course_id?: number }>
+    modules: Array<{ id: number; name: string; course_id?: number }>
   }>({
     courses: [],
     assignments: [],
@@ -118,7 +118,8 @@ export default function ChatPage() {
   // Store system prompt templates and user prompts for sync logic
   const [systemPromptTemplates, setSystemPromptTemplates] = useState<Array<{ id: string; template_type: string }>>([])
   const [userPrompts, setUserPrompts] = useState<Array<{ id: string; template_type: string | null }>>([])
-  const { messages: uiMessages, sendMessage: sendChatMessage, status, regenerate, setMessages: setUIMessages } = useChat({
+  const { messages: uiMessages, sendMessage: sendChatMessage, status, regenerate, setMessages: setUIMessages, addToolApprovalResponse, error } = useChat({
+    api: '/api/chat',
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
     onResponse: (response: Response) => {
       const sid = response.headers.get('x-session-id')
@@ -143,6 +144,9 @@ export default function ChatPage() {
           localStorage.setItem('currentSessionId', sid)
         }
       }
+    },
+    onError: (error: Error) => {
+      console.error('Chat error:', error)
     }
   } as any)
 
@@ -751,8 +755,8 @@ export default function ChatPage() {
   }
 
   // Helper function to get selected context items (using IDs from Supabase)
-  const getSelectedContextItems = (): Array<{ id: number; type: 'course' | 'assignment' | 'module'; name: string; code?: string }> => {
-    const items: Array<{ id: number; type: 'course' | 'assignment' | 'module'; name: string; code?: string }> = []
+  const getSelectedContextItems = (): Array<{ id: number; type: 'course' | 'assignment' | 'module'; name: string; code?: string; course_id?: number }> => {
+    const items: Array<{ id: number; type: 'course' | 'assignment' | 'module'; name: string; code?: string; course_id?: number }> = []
 
     // Add courses
     selectedContext.courses.forEach((courseId) => {
@@ -764,21 +768,25 @@ export default function ChatPage() {
       })
     })
 
-    // Add assignments
+    // Add assignments (with course_id if available)
     selectedContext.assignments.forEach((assignmentId) => {
+      const assignment = availableContext.assignments.find(a => a.id === assignmentId)
       items.push({
         id: assignmentId,
         type: 'assignment',
         name: getAssignmentName(assignmentId),
+        course_id: assignment?.course_id, // Include course_id from stored data
       })
     })
 
-    // Add modules
+    // Add modules (with course_id if available)
     selectedContext.modules.forEach((moduleId) => {
+      const module = availableContext.modules.find(m => m.id === moduleId)
       items.push({
         id: moduleId,
         type: 'module',
         name: getModuleName(moduleId),
+        course_id: module?.course_id, // Include course_id from stored data
       })
     })
 
@@ -808,6 +816,86 @@ export default function ChatPage() {
           { type: 'text', text: message.text }, 
           ...(Array.isArray(message.files) ? message.files : []),
           ...contextParts,
+        ] 
+      } as any,
+      {
+        body: {
+          model: selectedModel,
+          webSearch,
+          mode,
+          canvas_token: canvasStatus === 'connected' ? canvasToken : undefined,
+          canvas_url: canvasStatus === 'connected' ? canvasUrl : undefined,
+          selected_context: selectedContext.courses.length > 0 || selectedContext.assignments.length > 0 || selectedContext.modules.length > 0 ? selectedContext : undefined,
+          selected_system_prompt_ids: selectedSystemPromptIds.length > 0 ? selectedSystemPromptIds : undefined,
+        },
+        headers: { 'X-Session-ID': sessionForSend.id },
+      },
+    )
+  }
+
+  const handleRegenerate = async () => {
+    if (!user) return
+    
+    // Find the last assistant message
+    let lastAssistantIndex = -1
+    for (let i = uiMessages.length - 1; i >= 0; i--) {
+      if (uiMessages[i].role === 'assistant') {
+        lastAssistantIndex = i
+        break
+      }
+    }
+    
+    if (lastAssistantIndex === -1) return
+
+    // Find the user message that immediately precedes the last assistant message
+    let lastUserIndex = -1
+    for (let i = lastAssistantIndex - 1; i >= 0; i--) {
+      if (uiMessages[i].role === 'user') {
+        lastUserIndex = i
+        break
+      }
+    }
+    
+    if (lastUserIndex === -1) return
+
+    const lastUserMessage = uiMessages[lastUserIndex]
+    
+    // Extract text and parts from the user message
+    const textParts = lastUserMessage.parts.filter((p: any) => p.type === 'text')
+    const fileParts = lastUserMessage.parts.filter((p: any) => p.type === 'file')
+    
+    // Combine all text parts
+    const messageText = textParts.map((p: any) => String(p.text || '')).join('')
+    if (!messageText.trim()) return
+
+    // Remove the last assistant message and the user message that triggered it
+    // We'll re-send the user message to get a new assistant response
+    const newMessages = uiMessages.slice(0, lastUserIndex)
+    setUIMessages(newMessages as any)
+
+    // Ensure we have a session
+    let sessionForSend = currentSession
+    if (!sessionForSend) {
+      const created = await createNewSession()
+      if (!created) return
+      sessionForSend = created
+    }
+
+    // Get current selected context items (in case they changed)
+    const contextItems = getSelectedContextItems()
+    const currentContextParts = contextItems.map((item) => ({
+      type: 'context',
+      context: item,
+    }))
+
+    // Re-send the message with the same options as onSubmitAI
+    await sendChatMessage(
+      { 
+        role: 'user', 
+        parts: [
+          { type: 'text', text: messageText },
+          ...fileParts,
+          ...currentContextParts,
         ] 
       } as any,
       {
@@ -971,7 +1059,20 @@ export default function ChatPage() {
             {status === 'error' && (
               <Alert className="max-w-3xl mx-auto" variant="destructive">
                 <AlertTitle>Message failed</AlertTitle>
-                <AlertDescription>There was an error sending your message. Please check your Canvas settings and try again.</AlertDescription>
+                <AlertDescription>
+                  {error?.message?.includes('No endpoints found that support tool use') || error?.message?.includes('does not support tool use') ? (
+                    <>
+                      The selected model does not support tool use, which is required for quiz generation and other advanced features. Please select a model that supports tool use, such as:
+                      <ul className="list-disc list-inside mt-2">
+                        <li>google/gemini-2.0-flash-exp</li>
+                        <li>anthropic/claude-3.5-sonnet</li>
+                        <li>openai/gpt-4o</li>
+                      </ul>
+                    </>
+                  ) : (
+                    <>There was an error sending your message. {error?.message || 'Please check your Canvas settings and try again.'}</>
+                  )}
+                </AlertDescription>
               </Alert>
             )}
             {uiMessages.length === 0 ? (
@@ -1054,22 +1155,70 @@ export default function ChatPage() {
                               'list_courses',
                               'get_assignments',
                               'get_modules',
+                              'get_module',
                               'get_calendar_events',
-                              'get_page_content',
+                              'get_page_contents',
                               'get_file',
                               'get_assignment_grade',
                               'get_assignment_feedback_and_rubric',
                               'analyze_rubric',
                               'provide_rubric_analysis',
+                              'generate_quiz_plan',
+                              'provide_quiz_output',
                               'webSearch'
                             ].includes(toolName)
 
-                            if (isUITool && tp.state === 'output-available') {
+                            // Handle UITools - show custom UI for these tools
+                            if (isUITool) {
+                              // For generate_quiz_plan, show in all states where we have input or output
+                              // For other tools, only show when output is available
+                              const hasData = toolName === 'generate_quiz_plan' 
+                                ? (tp.input || tp.output)
+                                : tp.output
+                              
+                              const shouldShow = 
+                                (toolName === 'generate_quiz_plan' && hasData) ||
+                                (toolName !== 'generate_quiz_plan' && tp.state === 'output-available')
+                              
+                              if (shouldShow) {
+                                // For generate_quiz_plan, prefer output but fall back to input
+                                // For other tools, use output
+                                const result = toolName === 'generate_quiz_plan' 
+                                  ? (tp.output || tp.input)
+                                  : tp.output
+                                
                               return (
                                 <div className="mt-2 w-full max-w-full min-w-0 break-words" key={`${message.id}-tool-${idx}`}>
-                                  <ToolRenderer toolName={toolName} result={tp.output} />
+                                    <ToolRenderer 
+                                      toolName={toolName} 
+                                      result={result}
+                                      toolPart={tp}
+                                      onApprove={() => {
+                                        // Simply send "approve" as a regular text message
+                                        try {
+                                          sendChatMessage({
+                                            role: 'user',
+                                            parts: [{ type: 'text', text: 'approve' }]
+                                          } as any, {
+                                            body: {
+                                              model: selectedModel,
+                                              webSearch,
+                                              mode,
+                                              canvas_token: canvasStatus === 'connected' ? canvasToken : undefined,
+                                              canvas_url: canvasStatus === 'connected' ? canvasUrl : undefined,
+                                              selected_context: selectedContext.courses.length > 0 || selectedContext.assignments.length > 0 || selectedContext.modules.length > 0 ? selectedContext : undefined,
+                                              selected_system_prompt_ids: selectedSystemPromptIds.length > 0 ? selectedSystemPromptIds : undefined,
+                                            },
+                                            headers: currentSession?.id ? { 'X-Session-ID': currentSession.id } : undefined,
+                                          })
+                                        } catch (error) {
+                                          console.error('Error sending approve message:', error)
+                                        }
+                                      }}
+                                    />
                                 </div>
                               )
+                              }
                             }
 
                             return (
@@ -1082,7 +1231,37 @@ export default function ChatPage() {
                                       <ToolOutput className="min-w-0" output={null} errorText={String(tp.error)} />
                                     ) : (
                                       <div className="mt-2 min-w-0">
-                                        <ToolRenderer toolName={toolName} result={'output' in tp ? tp.output : undefined} />
+                                        <ToolRenderer 
+                                          toolName={toolName} 
+                                          result={
+                                            toolName === 'generate_quiz_plan' 
+                                              ? (tp.output || tp.input)
+                                              : ('output' in tp ? tp.output : (tp.state === 'approval-requested' || tp.state === 'input-available' ? tp.input : undefined))
+                                          }
+                                          toolPart={tp}
+                                          onApprove={() => {
+                                            // Simply send "approve" as a regular text message
+                                            try {
+                                              sendChatMessage({
+                                                role: 'user',
+                                                parts: [{ type: 'text', text: 'approve' }]
+                                              } as any, {
+                                                body: {
+                                                  model: selectedModel,
+                                                  webSearch,
+                                                  mode,
+                                                  canvas_token: canvasStatus === 'connected' ? canvasToken : undefined,
+                                                  canvas_url: canvasStatus === 'connected' ? canvasUrl : undefined,
+                                                  selected_context: selectedContext.courses.length > 0 || selectedContext.assignments.length > 0 || selectedContext.modules.length > 0 ? selectedContext : undefined,
+                                                  selected_system_prompt_ids: selectedSystemPromptIds.length > 0 ? selectedSystemPromptIds : undefined,
+                                                },
+                                                headers: currentSession?.id ? { 'X-Session-ID': currentSession.id } : undefined,
+                                              })
+                                            } catch (error) {
+                                              console.error('Error sending approve message:', error)
+                                            }
+                                          }}
+                                        />
                                       </div>
                                     )}
                                   </ToolContent>
@@ -1099,7 +1278,7 @@ export default function ChatPage() {
                               <MessageAction tooltip="Copy" onClick={() => { const text = textParts.map((p: any) => String(p.text || '')).join(''); navigator.clipboard.writeText(text); }}>
                                 <CopyIcon className="size-4" />
                               </MessageAction>
-                              <MessageAction tooltip="Regenerate" onClick={() => regenerate()}>
+                              <MessageAction tooltip="Regenerate" onClick={handleRegenerate}>
                                 <RefreshCcwIcon className="size-4" />
                               </MessageAction>
                             </MessageActions>
@@ -1369,7 +1548,7 @@ export default function ChatPage() {
                           <GraduationCap className="size-4" />
                         )}
                         <span className="ml-1 flex items-center gap-1.5">
-                          {mode === 'rubric' ? 'Rubric' : mode === 'quiz' ? 'Quiz' : mode === 'study-plan' ? 'Study Plan' : 'Generic'}
+                          {mode === 'rubric' ? 'Rubric' : mode === 'quiz' ? 'Quiz Generation' : mode === 'study-plan' ? 'Study Plan' : 'Generic'}
                           {(mode === 'rubric' || mode === 'quiz' || mode === 'study-plan') && (
                             <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-green-100 text-green-800 border-green-300 dark:bg-green-900 dark:text-green-200 dark:border-green-700">Beta</Badge>
                           )}
@@ -1416,7 +1595,7 @@ export default function ChatPage() {
                             >
                               <FileQuestion className="size-4" />
                               <span className="flex items-center gap-1.5">
-                                Quiz Analysis
+                                Quiz Generation
                                 <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-green-100 text-green-800 border-green-300 dark:bg-green-900 dark:text-green-200 dark:border-green-700">Beta</Badge>
                               </span>
                               {mode === 'quiz' && <CheckIcon className="ml-auto size-4" />}

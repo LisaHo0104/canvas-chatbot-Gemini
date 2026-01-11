@@ -1,13 +1,15 @@
 'use client'
 
 import { useState } from 'react'
-import { ChevronDown, ChevronUp, CheckCircle2, XCircle, AlertCircle, Target, TrendingUp } from 'lucide-react'
+import { ChevronDown, ChevronUp, CheckCircle2, XCircle, AlertCircle, Target, TrendingUp, Maximize2, Save } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Button } from '@/components/ui/button'
+import { SaveArtifactDialog } from '@/components/artifacts/SaveArtifactDialog'
 
 export interface RubricAnalysisOutput {
   assignmentName: string
@@ -57,9 +59,11 @@ export interface RubricAnalysisOutput {
 interface RubricAnalysisUIProps {
   data: RubricAnalysisOutput
   messageId?: string
+  compact?: boolean
+  onViewFull?: () => void
 }
 
-export function RubricAnalysisUI({ data, messageId }: RubricAnalysisUIProps) {
+export function RubricAnalysisUI({ data, messageId, compact = false, onViewFull }: RubricAnalysisUIProps) {
   const [expandedCriteria, setExpandedCriteria] = useState<Set<string>>(new Set())
   const [checkedItems, setCheckedItems] = useState<Set<string>>(() => {
     if (typeof window === 'undefined' || !messageId) return new Set()
@@ -93,6 +97,7 @@ export function RubricAnalysisUI({ data, messageId }: RubricAnalysisUIProps) {
   const completedChecklistItems = checkedItems.size
   const totalChecklistItems = data.actionChecklist.length
   const checklistProgress = totalChecklistItems > 0 ? (completedChecklistItems / totalChecklistItems) * 100 : 0
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false)
 
   const getPriorityColor = (priority: 'high' | 'medium' | 'low') => {
     switch (priority) {
@@ -122,18 +127,116 @@ export function RubricAnalysisUI({ data, messageId }: RubricAnalysisUIProps) {
     }
   }
 
+  // Compact view: Show only summary card with button
+  if (compact) {
+    return (
+      <>
+        <Card className="w-full">
+          <CardHeader>
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-1">
+                <CardTitle className="flex items-center gap-2">
+                  <Target className="size-5" />
+                  {data.assignmentName}
+                </CardTitle>
+                <CardDescription>
+                  Total Points: {data.totalPoints} | {data.criteria.length} Criteria
+                </CardDescription>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSaveDialogOpen(true)}
+                className="flex items-center gap-2"
+              >
+                <Save className="size-4" />
+                Save to Artifactory
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              <h4 className="font-semibold text-sm">Overview</h4>
+              <p className="text-sm text-muted-foreground line-clamp-3">{data.summary.overview}</p>
+              {data.summary.keyRequirements.length > 0 && (
+                <div className="mt-3">
+                  <h5 className="font-medium text-sm mb-2">Key Requirements:</h5>
+                  <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
+                    {data.summary.keyRequirements.slice(0, 3).map((req, i) => (
+                      <li key={i}>{req}</li>
+                    ))}
+                    {data.summary.keyRequirements.length > 3 && (
+                      <li className="text-muted-foreground/70">
+                        +{data.summary.keyRequirements.length - 3} more...
+                      </li>
+                    )}
+                  </ul>
+                </div>
+              )}
+              {data.summary.howToGetHD && (
+                <div className="mt-3 p-3 bg-purple-50 dark:bg-purple-950 rounded-md border border-purple-200 dark:border-purple-800">
+                  <h5 className="font-semibold text-sm mb-1 flex items-center gap-2">
+                    <span className="text-lg">🎓</span>
+                    How to Get HD
+                  </h5>
+                  <p className="text-sm text-muted-foreground line-clamp-2">
+                    {data.summary.howToGetHD}
+                  </p>
+                </div>
+              )}
+            </div>
+          </CardContent>
+          <CardContent>
+            <Button
+              onClick={onViewFull}
+              className="w-full sm:w-auto"
+              size="lg"
+            >
+              <Maximize2 className="size-4 mr-2" />
+              View Full Analysis
+            </Button>
+          </CardContent>
+        </Card>
+        <SaveArtifactDialog
+          open={saveDialogOpen}
+          onOpenChange={setSaveDialogOpen}
+          artifactType="rubric_analysis"
+          artifactData={data}
+          onSave={() => {
+            // Optionally show a success message or refresh
+          }}
+        />
+      </>
+    )
+  }
+
+  // Full view: Show complete rubric analysis interface
+
   return (
     <div className="w-full space-y-4">
       {/* Header */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Target className="size-5" />
-            {data.assignmentName}
-          </CardTitle>
-          <CardDescription>
-            Total Points: {data.totalPoints} | {data.criteria.length} Criteria
-          </CardDescription>
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              <CardTitle className="flex items-center gap-2">
+                <Target className="size-5" />
+                {data.assignmentName}
+              </CardTitle>
+              <CardDescription>
+                Total Points: {data.totalPoints} | {data.criteria.length} Criteria
+              </CardDescription>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSaveDialogOpen(true)}
+              className="flex items-center gap-2"
+            >
+              <Save className="size-4" />
+              Save to Artifactory
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="space-y-2">
@@ -172,11 +275,11 @@ export function RubricAnalysisUI({ data, messageId }: RubricAnalysisUIProps) {
 
       {/* Tabs for different views */}
       <Tabs defaultValue="criteria" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="criteria">Criteria</TabsTrigger>
-          <TabsTrigger value="checklist">Checklist</TabsTrigger>
-          <TabsTrigger value="mistakes">Mistakes</TabsTrigger>
-          <TabsTrigger value="scoring">Scoring</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-4 h-10 lg:h-11 gap-1">
+          <TabsTrigger value="criteria" className="text-sm lg:text-base px-2 lg:px-3">Criteria</TabsTrigger>
+          <TabsTrigger value="checklist" className="text-sm lg:text-base px-2 lg:px-3">Checklist</TabsTrigger>
+          <TabsTrigger value="mistakes" className="text-sm lg:text-base px-2 lg:px-3">Mistakes</TabsTrigger>
+          <TabsTrigger value="scoring" className="text-sm lg:text-base px-2 lg:px-3">Scoring</TabsTrigger>
         </TabsList>
 
         {/* Criteria Breakdown Tab */}
@@ -412,6 +515,15 @@ export function RubricAnalysisUI({ data, messageId }: RubricAnalysisUIProps) {
           )}
         </TabsContent>
       </Tabs>
+      <SaveArtifactDialog
+        open={saveDialogOpen}
+        onOpenChange={setSaveDialogOpen}
+        artifactType="rubric_analysis"
+        artifactData={data}
+        onSave={() => {
+          // Optionally show a success message or refresh
+        }}
+      />
     </div>
   )
 }

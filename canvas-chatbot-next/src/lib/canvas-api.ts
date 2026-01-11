@@ -405,10 +405,48 @@ export class CanvasAPIService {
 			includeItems?: boolean;
 			includeContentDetails?: boolean;
 			perPage?: number;
+			skipCourseCheck?: boolean;
 		},
 	) {
 		try {
-			await this.ensureCourseExists(courseId);
+			// First verify the course exists and is accessible
+			// Note: 403 and 404 errors are treated as warnings since Canvas may allow access to modules
+			// even if the course details endpoint is restricted or returns not found
+			// The modules endpoint might still work even if course endpoint doesn't
+			if (options?.skipCourseCheck !== true) {
+				try {
+					await this.ensureCourseExists(courseId);
+				} catch (courseError: any) {
+					const courseStatus = courseError?.response?.status;
+					const courseData = courseError?.response?.data;
+					const courseMessage =
+						(typeof courseData === 'string' ? courseData : courseData?.errors?.[0]?.message) ||
+						courseError?.message ||
+						'Unknown error';
+					
+					// 403 (Forbidden) and 404 (Not Found) might still allow modules access
+					// Canvas permissions can be granular - user might not have course access
+					// but still have module access. We'll proceed with a warning and try the modules endpoint.
+					if (courseStatus === 403 || courseStatus === 404) {
+						console.warn('CanvasAPIService:getModules - Course check returned ' + courseStatus + ', proceeding to try modules endpoint anyway', { 
+							courseId, 
+							status: courseStatus, 
+							message: courseMessage 
+						});
+						// Continue to try the modules endpoint
+					} else {
+						console.error('CanvasAPIService:getModules - Course check failed', { 
+							courseId, 
+							status: courseStatus, 
+							message: courseMessage 
+						});
+						throw new Error(
+							`Course ${courseId} not found or not accessible${courseStatus ? ` (${courseStatus})` : ''}: ${courseMessage}`,
+						);
+					}
+				}
+			}
+
 			const includeItems = options?.includeItems !== false;
 			const includeContentDetails = options?.includeContentDetails === true;
 			const perPage = options?.perPage ?? 50;
@@ -417,18 +455,76 @@ export class CanvasAPIService {
 			if (includeItems) include.push('items');
 			if (includeContentDetails) include.push('content_details');
 
+			const params: any = {
+				per_page: perPage,
+			};
+			if (include.length > 0) {
+				params['include[]'] = include;
+			}
+
 			const response = await this.withRetry(async () => {
 				return axios.get(`${this.baseURL}/courses/${courseId}/modules`, {
 					headers: this.getHeaders(),
-					params: {
-						per_page: perPage,
-						'include[]': include,
-					},
+					params,
 					timeout: 10000,
 				});
 			});
 
 			return (response as any).data as CanvasModule[];
+		} catch (error: any) {
+			// If error is already our custom error from course check, re-throw it
+			if (error?.message?.includes('Course') && error?.message?.includes('not found or not accessible')) {
+				throw error;
+			}
+			
+			const status = error?.response?.status;
+			const data = error?.response?.data;
+			const message =
+				(typeof data === 'string' ? data : data?.errors?.[0]?.message) ||
+				error?.message ||
+				'Unknown error';
+			console.error('CanvasAPIService:getModules', { 
+				courseId, 
+				status, 
+				message,
+				url: `${this.baseURL}/courses/${courseId}/modules`
+			});
+			throw new Error(
+				`Failed to fetch modules${status ? ` (${status})` : ''}: ${message}`,
+			);
+		}
+	}
+
+	async getModule(
+		courseId: number,
+		moduleId: number,
+		options?: {
+			includeItems?: boolean;
+			includeContentDetails?: boolean;
+		},
+	) {
+		try {
+			const includeItems = options?.includeItems !== false;
+			const includeContentDetails = options?.includeContentDetails === true;
+
+			const include: string[] = [];
+			if (includeItems) include.push('items');
+			if (includeContentDetails) include.push('content_details');
+
+			const params: any = {};
+			if (include.length > 0) {
+				params['include[]'] = include;
+			}
+
+			const response = await this.withRetry(async () => {
+				return axios.get(`${this.baseURL}/courses/${courseId}/modules/${moduleId}`, {
+					headers: this.getHeaders(),
+					params,
+					timeout: 10000,
+				});
+			});
+
+			return (response as any).data as CanvasModule;
 		} catch (error: any) {
 			const status = error?.response?.status;
 			const data = error?.response?.data;
@@ -436,9 +532,15 @@ export class CanvasAPIService {
 				(typeof data === 'string' ? data : data?.errors?.[0]?.message) ||
 				error?.message ||
 				'Unknown error';
-			console.error('CanvasAPIService:getModules', { status, message });
+			console.error('CanvasAPIService:getModule', { 
+				courseId, 
+				moduleId,
+				status, 
+				message,
+				url: `${this.baseURL}/courses/${courseId}/modules/${moduleId}`
+			});
 			throw new Error(
-				`Failed to fetch modules${status ? ` (${status})` : ''}: ${message}`,
+				`Failed to fetch module${status ? ` (${status})` : ''}: ${message}`,
 			);
 		}
 	}
@@ -494,6 +596,23 @@ export class CanvasAPIService {
 				}: ${message}`,
 			);
 		}
+	}
+
+	async getPageContents(courseId: number, pageUrls: string[]): Promise<CanvasPage[]> {
+		const results = await Promise.allSettled(
+			pageUrls.map((pageUrl) => this.getPageContent(courseId, pageUrl))
+		);
+
+		const pages: CanvasPage[] = [];
+		results.forEach((result, index) => {
+			if (result.status === 'fulfilled') {
+				pages.push(result.value);
+			} else {
+				console.error(`CanvasAPIService:getPageContents - Failed to fetch page ${index + 1} (${pageUrls[index]}):`, result.reason);
+			}
+		});
+
+		return pages;
 	}
 
 	async getFileContent(fileId: number) {
