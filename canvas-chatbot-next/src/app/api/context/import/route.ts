@@ -18,7 +18,9 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { selections, applyDirectly, presetName } = body
+    const { selections, applyDirectly, presetName, profileName } = body
+    // Support both presetName (legacy) and profileName
+    const nameToUse = profileName || presetName
 
     // Validate import data
     if (!selections || typeof selections !== 'object') {
@@ -68,30 +70,30 @@ export async function POST(request: NextRequest) {
         applied: true,
       })
     } else {
-      // Save as new preset
-      if (!presetName || typeof presetName !== 'string' || presetName.trim().length === 0) {
-        return NextResponse.json({ error: 'Preset name is required when saving as preset' }, { status: 400 })
+      // Save as new profile
+      if (!nameToUse || typeof nameToUse !== 'string' || nameToUse.trim().length === 0) {
+        return NextResponse.json({ error: 'Profile name is required when saving as profile' }, { status: 400 })
       }
 
-      // Check if preset with same name already exists
+      // Check if profile with same name already exists
       const { data: existing } = await supabase
-        .from('context_presets')
+        .from('context_profiles')
         .select('id')
         .eq('user_id', user.id)
-        .eq('name', presetName.trim())
+        .eq('name', nameToUse.trim())
         .single()
 
       if (existing) {
-        return NextResponse.json({ error: 'A preset with this name already exists' }, { status: 400 })
+        return NextResponse.json({ error: 'A profile with this name already exists' }, { status: 400 })
       }
 
-      // Create the preset
+      // Create the profile
       const { data, error } = await supabase
-        .from('context_presets')
+        .from('context_profiles')
         .insert({
           user_id: user.id,
-          name: presetName.trim(),
-          description: body.presetDescription?.trim() || null,
+          name: nameToUse.trim(),
+          description: (body.profileDescription || body.presetDescription)?.trim() || null,
           selected_courses: selectedCourses,
           selected_assignments: selectedAssignments,
           selected_modules: selectedModules,
@@ -100,12 +102,12 @@ export async function POST(request: NextRequest) {
         .single()
 
       if (error) {
-        console.error('Error creating preset from import:', error)
-        return NextResponse.json({ error: 'Failed to create preset from import' }, { status: 500 })
+        console.error('Error creating profile from import:', error)
+        return NextResponse.json({ error: 'Failed to create profile from import' }, { status: 500 })
       }
 
       return NextResponse.json({
-        preset: data,
+        profile: data,
         applied: false,
       })
     }

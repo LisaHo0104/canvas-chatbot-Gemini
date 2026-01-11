@@ -1,0 +1,7 @@
+---
+alwaysApply: true
+---
+# Overview
+
+## Supabase
+- Only create table in 'dev' schema

@@ -1,17 +1,19 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
-import { RefreshCw, Search, ChevronDown, ChevronRight, BookOpen, FileText, Layers, CheckCircle2, Loader2 } from 'lucide-react'
+import { RefreshCw, Search, ChevronDown, ChevronRight, BookOpen, FileText, Layers, CheckCircle2, Loader2, FileCode, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardAction } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Spinner } from '@/components/ui/spinner'
 import { Checkbox } from '@/components/ui/checkbox'
 import { createClient as createSupabaseClient } from '@/lib/supabase/client'
 import { SelectionSummary } from '@/components/context/SelectionSummary'
+import { SystemPromptListInline } from '@/components/context/SystemPromptListInline'
+import { toast } from 'sonner'
 
 interface Course {
   id: number
@@ -26,12 +28,18 @@ interface ContextData {
   last_synced_at: string | null
 }
 
+interface ContextItem {
+  id: number
+  name: string
+  code?: string
+}
+
 interface ContextSelections {
-  courses: number[]
-  assignments: number[]
-  modules: number[]
+  courses: number[] | ContextItem[]
+  assignments: number[] | ContextItem[]
+  modules: number[] | ContextItem[]
   last_synced_at: string | null
-  current_preset_id: string | null
+  current_profile_id: string | null
 }
 
 export default function ContextPage() {
@@ -46,27 +54,84 @@ export default function ContextPage() {
     assignments: [],
     modules: [],
     last_synced_at: null,
-    current_preset_id: null,
+    current_profile_id: null,
   })
   const [expandedCourses, setExpandedCourses] = useState<Set<number>>(new Set())
   const [searchQuery, setSearchQuery] = useState('')
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
-  const [currentPresetId, setCurrentPresetId] = useState<string | null>(null)
+  const [currentProfileId, setCurrentProfileId] = useState<string | null>(null)
+  const [enabledSystemPromptIds, setEnabledSystemPromptIds] = useState<string[]>([])
+  const [savingPrompts, setSavingPrompts] = useState(false)
+  const [creatingNewPrompt, setCreatingNewPrompt] = useState(false)
+  const hasAttemptedInitialAutoSelect = useRef(false)
+  const hasLoadedSelections = useRef(false) // Track if we've loaded selections from DB
+  const selectionsRef = useRef<ContextSelections>(selections) // Store latest selections for auto-save
+  const hasCheckedNamesRef = useRef(false) // Track if we've checked and updated names
 
   const supabase = createSupabaseClient()
+  
+  // Keep ref in sync with state
+  useEffect(() => {
+    selectionsRef.current = selections
+  }, [selections])
 
   // Debounced save function
   const saveSelections = useCallback(async (newSelections: ContextSelections) => {
     setSaving(true)
     setError(null)
     try {
+      // Convert IDs to objects with names for saving
+      const coursesWithNames: ContextItem[] = (newSelections.courses as number[]).map((id) => {
+        const course = contextData?.courses.find(c => c.id === id)
+        return {
+          id,
+          name: course?.name || `Course ${id}`,
+          code: course?.code,
+        }
+      })
+
+      const assignmentsWithNames: ContextItem[] = (newSelections.assignments as number[]).map((id) => {
+        // Find assignment across all courses
+        for (const course of contextData?.courses || []) {
+          const assignment = course.assignments.find(a => a.id === id)
+          if (assignment) {
+            return {
+              id,
+              name: assignment.name,
+            }
+          }
+        }
+        return {
+          id,
+          name: `Assignment ${id}`,
+        }
+      })
+
+      const modulesWithNames: ContextItem[] = (newSelections.modules as number[]).map((id) => {
+        // Find module across all courses
+        for (const course of contextData?.courses || []) {
+          const module = course.modules.find(m => m.id === id)
+          if (module) {
+            return {
+              id,
+              name: module.name,
+            }
+          }
+        }
+        return {
+          id,
+          name: `Module ${id}`,
+        }
+      })
+
       const response = await fetch('/api/context/selection', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          courses: newSelections.courses,
-          assignments: newSelections.assignments,
-          modules: newSelections.modules,
+          courses: coursesWithNames,
+          assignments: assignmentsWithNames,
+          modules: modulesWithNames,
+          current_profile_id: newSelections.current_profile_id, // Use profile ID from selections object
         }),
       })
 
@@ -76,15 +141,38 @@ export default function ContextPage() {
       }
 
       const data = await response.json()
-      setSelections({
-        ...newSelections,
-        last_synced_at: data.last_synced_at || selections.last_synced_at,
-        current_preset_id: data.current_preset_id || null,
+      // Update profile ID from response - always sync with database
+      const returnedProfileId = data.current_profile_id || null
+      setCurrentProfileId(returnedProfileId)
+      
+      // Only update state if something actually changed to avoid triggering unnecessary re-renders
+      setSelections(prev => {
+        const newLastSynced = data.last_synced_at || prev.last_synced_at
+        const newProfileId = returnedProfileId
+        
+        // Deep check if anything actually changed
+        const coursesChanged = prev.courses.length !== (newSelections.courses as number[]).length ||
+          !(newSelections.courses as number[]).every(id => prev.courses.includes(id))
+        const assignmentsChanged = prev.assignments.length !== (newSelections.assignments as number[]).length ||
+          !(newSelections.assignments as number[]).every(id => prev.assignments.includes(id))
+        const modulesChanged = prev.modules.length !== (newSelections.modules as number[]).length ||
+          !(newSelections.modules as number[]).every(id => prev.modules.includes(id))
+        const lastSyncedChanged = prev.last_synced_at !== newLastSynced
+        const profileIdChanged = prev.current_profile_id !== newProfileId
+        
+        // If nothing changed, return previous state to avoid unnecessary updates
+        if (!coursesChanged && !assignmentsChanged && !modulesChanged && !lastSyncedChanged && !profileIdChanged) {
+          return prev
+        }
+        
+        return {
+          ...newSelections,
+          last_synced_at: newLastSynced,
+          current_profile_id: newProfileId,
+        }
       })
-      // Clear preset ID when manually changing selections
-      if (data.current_preset_id === null) {
-        setCurrentPresetId(null)
-      }
+      
+      // Always set hasUnsavedChanges to false after saving
       setHasUnsavedChanges(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save selections')
@@ -92,7 +180,7 @@ export default function ContextPage() {
     } finally {
       setSaving(false)
     }
-  }, [selections.last_synced_at])
+  }, [contextData]) // Only depend on contextData, not on selections or profileId (we get those from the parameter)
 
   // Load context selections from database
   const loadSelections = useCallback(async () => {
@@ -102,17 +190,40 @@ export default function ContextPage() {
         throw new Error('Failed to load selections')
       }
       const data = await response.json()
-      setSelections({
-        courses: data.courses || [],
-        assignments: data.assignments || [],
-        modules: data.modules || [],
-        last_synced_at: data.last_synced_at || null,
-        current_preset_id: data.current_preset_id || null,
-      })
-      // Set the current preset ID from the loaded data
-      if (data.current_preset_id) {
-        setCurrentPresetId(data.current_preset_id)
+      // Convert objects to IDs for internal state (backward compatible)
+      const extractIds = (items: any[]): number[] => {
+        return items.map(item => typeof item === 'object' && item !== null ? item.id : item)
       }
+      const loadedCourses = extractIds(data.courses || [])
+      const loadedAssignments = extractIds(data.assignments || [])
+      const loadedModules = extractIds(data.modules || [])
+      
+      setSelections({
+        courses: loadedCourses,
+        assignments: loadedAssignments,
+        modules: loadedModules,
+        last_synced_at: data.last_synced_at || null,
+        current_profile_id: data.current_profile_id || null,
+      })
+      // Set the current profile ID from the loaded data
+      if (data.current_profile_id) {
+        setCurrentProfileId(data.current_profile_id)
+      } else {
+        setCurrentProfileId(null)
+      }
+      // Set enabled system prompt IDs
+      setEnabledSystemPromptIds(data.enabled_system_prompt_ids || [])
+      
+      // Mark that we've loaded data from the database
+      hasLoadedSelections.current = true
+      
+      // If user has a last_synced_at, they've used the system before - don't auto-select
+      // If no last_synced_at, it's a first-time user (no DB record) - allow auto-select
+      if (data.last_synced_at !== null) {
+        // User has used system before - never auto-select
+        hasAttemptedInitialAutoSelect.current = true
+      }
+      // If last_synced_at is null, it's first time - allow auto-select to run
     } catch (err) {
       console.error('Error loading selections:', err)
     }
@@ -167,6 +278,99 @@ export default function ContextPage() {
     }
   }, [])
 
+  // Auto-select all courses on initial load when no selections exist (default profile behavior)
+  // Only runs once on initial load for first-time users, not when user manually deselects everything
+  useEffect(() => {
+    if (!contextData || !contextData.courses.length || loading || saving) return
+    if (currentProfileId !== null) return // Don't auto-select if a profile is active
+    if (hasAttemptedInitialAutoSelect.current) return // Only attempt once
+    if (!hasLoadedSelections.current) return // Wait until we've loaded from DB to check
+    
+    // Use a function to get current selections state to avoid dependency issues
+    setSelections(prev => {
+      const hasNoSelections = prev.courses.length === 0 && 
+                             prev.assignments.length === 0 && 
+                             prev.modules.length === 0
+      
+      // Only auto-select if:
+      // 1. No selections exist
+      // 2. No last_synced_at (meaning no DB record exists - first-time user)
+      const isFirstTimeUser = !prev.last_synced_at
+      
+      if (hasNoSelections && isFirstTimeUser && !hasAttemptedInitialAutoSelect.current) {
+        hasAttemptedInitialAutoSelect.current = true // Mark as attempted
+        
+        const allCourseIds = contextData.courses.map(c => c.id)
+        const allAssignmentIds = contextData.courses.flatMap(c => c.assignments.map(a => a.id))
+        const allModuleIds = contextData.courses.flatMap(c => c.modules.map(m => m.id))
+        
+        if (allCourseIds.length > 0) {
+          // Avoid infinite loop: only update if we don't already have all courses selected
+          if (prev.courses.length === allCourseIds.length && 
+              allCourseIds.every(id => prev.courses.includes(id))) {
+            return prev
+          }
+          
+          setHasUnsavedChanges(true)
+          return {
+            ...prev,
+            courses: allCourseIds,
+            assignments: allAssignmentIds,
+            modules: allModuleIds,
+          }
+        }
+      } else if (prev.last_synced_at !== null) {
+        // If user has used system before (has last_synced_at), mark as attempted
+        // This prevents auto-select if user later deselects everything
+        hasAttemptedInitialAutoSelect.current = true
+      }
+      
+      return prev
+    })
+  }, [contextData, currentProfileId, loading, saving])
+
+  // Auto-update selections with names when contextData is available
+  // This ensures existing data without names gets updated
+  useEffect(() => {
+    if (!contextData || !contextData.courses.length || saving || loading) return
+    if (hasCheckedNamesRef.current) return // Only check once
+    
+    // Only check once after contextData is loaded, not on every selection change
+    const checkAndUpdateNames = async () => {
+      try {
+        const response = await fetch('/api/context/selection')
+        if (!response.ok) return
+        
+        const data = await response.json()
+        
+        // Check if any items have placeholder names (like "Item X" or "Course X")
+        const needsUpdate = 
+          data.courses.some((c: any) => !c.name || c.name.startsWith('Item ') || c.name.startsWith('Course ')) ||
+          data.assignments.some((a: any) => !a.name || a.name.startsWith('Item ') || a.name.startsWith('Assignment ')) ||
+          data.modules.some((m: any) => !m.name || m.name.startsWith('Item ') || m.name.startsWith('Module '))
+        
+        if (needsUpdate && !saving) {
+          hasCheckedNamesRef.current = true // Mark as checked before saving
+          // Re-save selections with proper names using the ref
+          // This will set hasUnsavedChanges to false after saving
+          await saveSelections(selectionsRef.current)
+        } else {
+          hasCheckedNamesRef.current = true // Mark as checked even if no update needed
+        }
+      } catch (err) {
+        console.error('Error checking names:', err)
+        hasCheckedNamesRef.current = true // Mark as checked even on error to prevent retries
+      }
+    }
+    
+    // Only run this check once when contextData is first loaded
+    const timeoutId = setTimeout(() => {
+      checkAndUpdateNames()
+    }, 2000) // Wait 2 seconds after contextData loads to avoid conflicts
+    
+    return () => clearTimeout(timeoutId)
+  }, [contextData, saving, loading, saveSelections])
+
   // Initial load
   useEffect(() => {
     const initialize = async () => {
@@ -192,14 +396,18 @@ export default function ContextPage() {
 
   // Auto-save with debounce
   useEffect(() => {
-    if (!hasUnsavedChanges) return
+    if (!hasUnsavedChanges || saving) return
 
     const timeoutId = setTimeout(() => {
-      saveSelections(selections)
+      // Use ref to get latest selections without adding it as dependency
+      // Only save if we're not already saving and there are actually unsaved changes
+      if (!saving && hasUnsavedChanges) {
+        saveSelections(selectionsRef.current)
+      }
     }, 1000) // 1 second debounce
 
     return () => clearTimeout(timeoutId)
-  }, [selections, hasUnsavedChanges, saveSelections])
+  }, [hasUnsavedChanges, saving, saveSelections])
 
   // Toggle course expansion
   const toggleCourse = (courseId: number) => {
@@ -233,6 +441,9 @@ export default function ContextPage() {
           courses: prev.courses.filter(id => id !== courseId),
           assignments: prev.assignments.filter(id => !assignmentIds.includes(id)),
           modules: prev.modules.filter(id => !moduleIds.includes(id)),
+          // Preserve profile ID and last_synced_at
+          last_synced_at: prev.last_synced_at,
+          current_profile_id: prev.current_profile_id,
         }
       } else {
         // Select course and all its assignments and modules
@@ -243,10 +454,13 @@ export default function ContextPage() {
           courses: [...prev.courses, courseId],
           assignments: [...prev.assignments, ...newAssignmentIds],
           modules: [...prev.modules, ...newModuleIds],
+          // Preserve profile ID and last_synced_at
+          last_synced_at: prev.last_synced_at,
+          current_profile_id: prev.current_profile_id,
         }
       }
     })
-    setCurrentPresetId(null) // Clear preset when manually changing selections
+    // Keep profile ID when manually changing selections - allows auto-sync to active profile
     setHasUnsavedChanges(true)
   }
 
@@ -257,7 +471,7 @@ export default function ContextPage() {
         ? prev.assignments.filter(id => id !== assignmentId)
         : [...prev.assignments, assignmentId],
     }))
-    setCurrentPresetId(null) // Clear preset when manually changing selections
+    // Keep profile ID when manually changing selections - allows auto-sync to active profile
     setHasUnsavedChanges(true)
   }
 
@@ -268,7 +482,7 @@ export default function ContextPage() {
         ? prev.modules.filter(id => id !== moduleId)
         : [...prev.modules, moduleId],
     }))
-    setCurrentPresetId(null) // Clear preset when manually changing selections
+    // Keep profile ID when manually changing selections - allows auto-sync to active profile
     setHasUnsavedChanges(true)
   }
 
@@ -300,7 +514,7 @@ export default function ContextPage() {
         }
       }
     })
-    setCurrentPresetId(null) // Clear preset when manually changing selections
+    // Keep profile ID when manually changing selections - allows auto-sync to active profile
     setHasUnsavedChanges(true)
   }
 
@@ -332,7 +546,7 @@ export default function ContextPage() {
         }
       }
     })
-    setCurrentPresetId(null) // Clear preset when manually changing selections
+    // Keep profile ID when manually changing selections - allows auto-sync to active profile
     setHasUnsavedChanges(true)
   }
 
@@ -349,7 +563,7 @@ export default function ContextPage() {
       assignments: allAssignmentIds,
       modules: allModuleIds,
     })
-    setCurrentPresetId(null) // Clear preset when manually changing selections
+    // Keep profile ID when manually changing selections - allows auto-sync to active profile
     setHasUnsavedChanges(true)
   }
 
@@ -360,7 +574,7 @@ export default function ContextPage() {
       assignments: [],
       modules: [],
     })
-    setCurrentPresetId(null) // Clear preset when manually changing selections
+    // Keep profile ID when manually changing selections - allows auto-sync to active profile
     setHasUnsavedChanges(true)
   }
 
@@ -431,33 +645,8 @@ export default function ContextPage() {
             </div>
           </div>
           <p className="text-muted-foreground mt-1">
-            Select courses, assignments, and modules to include in your chat context
+            Manage system prompts and Canvas context for chat sessions
           </p>
-          <div className="flex items-center gap-3 mt-2">
-            <Button
-              onClick={syncCanvas}
-              disabled={syncing}
-              variant="outline"
-              size="sm"
-            >
-              {syncing ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                  Syncing...
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  Refresh
-                </>
-              )}
-            </Button>
-            {selections.last_synced_at && (
-              <span className="text-sm text-muted-foreground whitespace-nowrap">
-                Last synced: {formatLastSync(selections.last_synced_at)}
-              </span>
-            )}
-          </div>
         </div>
 
         {/* Error message */}
@@ -481,36 +670,130 @@ export default function ContextPage() {
           </Card>
         )}
 
-        {/* Selection Summary with Integrated Presets */}
-        <SelectionSummary
-          currentPresetId={currentPresetId}
-          onPresetIdChange={setCurrentPresetId}
-          onPresetApplied={(presetId, newSelections) => {
-            setSelections({
-              courses: newSelections.courses,
-              assignments: newSelections.assignments,
-              modules: newSelections.modules,
-              last_synced_at: selections.last_synced_at,
-              current_preset_id: presetId,
-            })
-            setCurrentPresetId(presetId)
-            setHasUnsavedChanges(false)
-          }}
-          selections={{
-            courses: selections.courses,
-            assignments: selections.assignments,
-            modules: selections.modules,
-          }}
-          onPresetSaved={() => {
-            loadSelections()
-            setCurrentPresetId(null)
-          }}
-          onImportComplete={() => {
-            loadSelections()
-          }}
-        />
+        {/* System Prompt Management */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <FileCode className="w-5 h-5" />
+              System Prompts
+            </CardTitle>
+            <CardDescription>
+              Select which system prompts are available for chat sessions. Click Edit to modify a prompt.
+            </CardDescription>
+            <CardAction>
+              <Button
+                variant="default"
+                size="sm"
+                onClick={async () => {
+                  setCreatingNewPrompt(true)
+                  try {
+                    const response = await fetch('/api/system-prompts', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        name: 'New Prompt',
+                        description: 'A new custom system prompt',
+                        prompt_text: 'You are a helpful assistant.',
+                      }),
+                    })
 
-        {/* Context tree */}
+                    if (!response.ok) {
+                      const errorData = await response.json().catch(() => ({}))
+                      throw new Error(errorData.error || 'Failed to create prompt')
+                    }
+
+                    const data = await response.json()
+                    
+                    // Auto-enable the new prompt
+                    const newEnabledIds = [...enabledSystemPromptIds, data.prompt.id]
+                    setEnabledSystemPromptIds(newEnabledIds)
+                    
+                    try {
+                      await fetch('/api/context/selection', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          courses: selections.courses,
+                          assignments: selections.assignments,
+                          modules: selections.modules,
+                          enabled_system_prompt_ids: newEnabledIds,
+                        }),
+                      })
+                    } catch (error) {
+                      console.error('Error enabling new prompt:', error)
+                      // Don't fail the whole operation if enabling fails
+                    }
+                    
+                    toast.success('New prompt created!')
+                    router.push(`/protected/context/system-prompts?id=${data.prompt.id}`)
+                  } catch (error) {
+                    console.error('Error creating new prompt:', error)
+                    toast.error(error instanceof Error ? error.message : 'Failed to create prompt')
+                  } finally {
+                    setCreatingNewPrompt(false)
+                  }
+                }}
+                disabled={creatingNewPrompt}
+              >
+                {creatingNewPrompt ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Create New Prompt
+                  </>
+                )}
+              </Button>
+            </CardAction>
+          </CardHeader>
+          <CardContent>
+            <SystemPromptListInline
+              enabledPromptIds={enabledSystemPromptIds}
+              onToggleEnabled={async (promptId, enabled) => {
+                const newEnabledIds = enabled
+                  ? [...enabledSystemPromptIds, promptId]
+                  : enabledSystemPromptIds.filter((id) => id !== promptId)
+                
+                setEnabledSystemPromptIds(newEnabledIds)
+                setSavingPrompts(true)
+                
+                try {
+                  const response = await fetch('/api/context/selection', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      courses: selections.courses,
+                      assignments: selections.assignments,
+                      modules: selections.modules,
+                      enabled_system_prompt_ids: newEnabledIds,
+                    }),
+                  })
+                  
+                  if (!response.ok) {
+                    throw new Error('Failed to save enabled prompts')
+                  }
+                } catch (error) {
+                  console.error('Error saving enabled prompts:', error)
+                  // Revert on error
+                  setEnabledSystemPromptIds(enabledSystemPromptIds)
+                } finally {
+                  setSavingPrompts(false)
+                }
+              }}
+            />
+            {savingPrompts && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground mt-4">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Saving changes...</span>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Merged Canvas Context Card with Selection Summary */}
         <Card>
           <CardHeader>
             <CardTitle>
@@ -524,36 +807,135 @@ export default function ContextPage() {
             <CardDescription>
               Select items to make available in chat sessions. Changes are saved automatically.
             </CardDescription>
-            <div className="relative mt-4">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                type="text"
-                placeholder="Search courses, assignments, or modules..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-            <div className="flex items-center gap-2 mt-4">
+            <div className="flex items-center gap-2 mt-2">
               <Button
-                onClick={selectAllCourses}
+                onClick={syncCanvas}
+                disabled={syncing}
                 variant="outline"
                 size="sm"
-                disabled={!contextData || contextData.courses.length === 0}
               >
-                Select All
+                {syncing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                    Syncing...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Refresh
+                  </>
+                )}
               </Button>
-              <Button
-                onClick={deselectAllCourses}
-                variant="outline"
-                size="sm"
-                disabled={selections.courses.length === 0 && selections.assignments.length === 0 && selections.modules.length === 0}
-              >
-                Deselect All
-              </Button>
+              {selections.last_synced_at && (
+                <span className="text-sm text-muted-foreground whitespace-nowrap">
+                  Last synced: {formatLastSync(selections.last_synced_at)}
+                </span>
+              )}
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
+            {/* Compact Stats Bar */}
+            <div className="flex items-center gap-4 py-3 border-b flex-wrap">
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Courses:</span>
+                <span className="text-lg font-semibold">{selections.courses.length}</span>
+              </div>
+              <div className="h-6 w-px bg-border hidden sm:block" />
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Assignments:</span>
+                <span className="text-lg font-semibold">{selections.assignments.length}</span>
+              </div>
+              <div className="h-6 w-px bg-border hidden sm:block" />
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Modules:</span>
+                <span className="text-lg font-semibold">{selections.modules.length}</span>
+              </div>
+            </div>
+
+            {/* Action Toolbar */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <SelectionSummary
+                currentProfileId={selections.current_profile_id || currentProfileId}
+                onProfileIdChange={(profileId) => {
+                  setCurrentProfileId(profileId)
+                  // Also update in selections object to keep in sync
+                  setSelections(prev => ({
+                    ...prev,
+                    current_profile_id: profileId,
+                  }))
+                }}
+                onProfileApplied={(profileId, newSelections) => {
+                  // If default profile (null) and no selections provided, clear all selections
+                  if (profileId === null && newSelections.courses.length === 0) {
+                    setSelections({
+                      courses: [],
+                      assignments: [],
+                      modules: [],
+                      last_synced_at: selections.last_synced_at,
+                      current_profile_id: null,
+                    })
+                  } else {
+                    setSelections({
+                      courses: newSelections.courses,
+                      assignments: newSelections.assignments,
+                      modules: newSelections.modules,
+                      last_synced_at: selections.last_synced_at,
+                      current_profile_id: profileId,
+                    })
+                  }
+                  setCurrentProfileId(profileId)
+                  // Profile was already saved via API endpoint, so no need to save again
+                  setHasUnsavedChanges(false)
+                }}
+                selections={{
+                  courses: selections.courses,
+                  assignments: selections.assignments,
+                  modules: selections.modules,
+                }}
+                onProfileSaved={() => {
+                  loadSelections()
+                  // Don't clear currentProfileId - let loadSelections set it from database
+                }}
+                onImportComplete={() => {
+                  loadSelections()
+                }}
+                hideCard={true}
+              />
+            </div>
+
+            {/* Search & Bulk Actions Toolbar */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  type="text"
+                  placeholder="Search courses, assignments, or modules..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  onClick={selectAllCourses}
+                  variant="outline"
+                  size="sm"
+                  disabled={!contextData || contextData.courses.length === 0}
+                >
+                  Select All
+                </Button>
+                <Button
+                  onClick={deselectAllCourses}
+                  variant="outline"
+                  size="sm"
+                  disabled={selections.courses.length === 0 && selections.assignments.length === 0 && selections.modules.length === 0}
+                >
+                  Deselect All
+                </Button>
+              </div>
+            </div>
+
+            {/* Course Tree */}
             {!contextData || filteredCourses.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
                 {!contextData ? (
@@ -569,7 +951,7 @@ export default function ContextPage() {
                 )}
               </div>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-2 sm:space-y-3">
                 {filteredCourses.map((course) => {
                   const isExpanded = expandedCourses.has(course.id)
                   const isCourseSelected = selections.courses.includes(course.id)
@@ -583,18 +965,18 @@ export default function ContextPage() {
                   ).length
 
                   return (
-                    <div key={course.id} className="border rounded-lg p-4 space-y-3">
+                    <div key={course.id} className="border rounded-lg p-3 sm:p-4 space-y-2 sm:space-y-3">
                       {/* Course header */}
-                      <div className="flex items-start gap-3">
+                      <div className="flex items-start gap-2 sm:gap-3">
                         <button
                           onClick={() => toggleCourse(course.id)}
                           className="mt-1 text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
                           aria-label={isExpanded ? 'Collapse course' : 'Expand course'}
                         >
                           {isExpanded ? (
-                            <ChevronDown className="w-5 h-5" />
+                            <ChevronDown className="w-4 h-4 sm:w-5 sm:h-5" />
                           ) : (
-                            <ChevronRight className="w-5 h-5" />
+                            <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
                           )}
                         </button>
                         <Checkbox
@@ -607,10 +989,10 @@ export default function ContextPage() {
                           htmlFor={`course-${course.id}`}
                           className="flex-1 cursor-pointer min-w-0"
                         >
-                          <div className="flex flex-col gap-2">
+                          <div className="flex flex-col gap-1 sm:gap-2">
                             <div className="flex items-center gap-2 flex-wrap">
                               <BookOpen className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                              <span className="font-medium break-words">{course.name}</span>
+                              <span className="font-medium break-words text-sm sm:text-base">{course.name}</span>
                             </div>
                             <div className="flex items-center gap-2 flex-wrap">
                               <Badge variant="outline" className="text-xs flex-shrink-0">
@@ -628,7 +1010,7 @@ export default function ContextPage() {
 
                       {/* Course content (assignments and modules) */}
                       {isExpanded && (
-                        <div className="ml-8 space-y-4">
+                        <div className="ml-6 sm:ml-8 space-y-3 sm:space-y-4">
                           {/* Assignments */}
                           {courseAssignments.length > 0 && (
                             <div>
@@ -643,7 +1025,7 @@ export default function ContextPage() {
                                   Assignments ({courseAssignments.length})
                                 </h4>
                               </div>
-                              <div className="space-y-2 ml-6">
+                              <div className="space-y-1.5 sm:space-y-2 ml-4 sm:ml-6">
                                 {courseAssignments.map((assignment) => {
                                   const isSelected = selections.assignments.includes(assignment.id)
                                   return (
@@ -680,7 +1062,7 @@ export default function ContextPage() {
                                   Modules ({courseModules.length})
                                 </h4>
                               </div>
-                              <div className="space-y-2 ml-6">
+                              <div className="space-y-1.5 sm:space-y-2 ml-4 sm:ml-6">
                                 {courseModules.map((module) => {
                                   const isSelected = selections.modules.includes(module.id)
                                   return (
@@ -704,7 +1086,7 @@ export default function ContextPage() {
                           )}
 
                           {courseAssignments.length === 0 && courseModules.length === 0 && (
-                            <p className="text-sm text-muted-foreground ml-6">
+                            <p className="text-sm text-muted-foreground ml-4 sm:ml-6">
                               No assignments or modules available for this course.
                             </p>
                           )}

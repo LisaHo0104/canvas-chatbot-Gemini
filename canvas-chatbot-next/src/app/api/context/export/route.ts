@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
     const exportData = {
       version: '1.0',
       exported_at: new Date().toISOString(),
-      preset_name: null as string | null,
+      profile_name: null as string | null,
       selections: {
         courses,
         assignments,
@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
     return new NextResponse(JSON.stringify(exportData, null, 2), {
       headers: {
         'Content-Type': 'application/json',
-        'Content-Disposition': `attachment; filename="context-preset-${new Date().toISOString().split('T')[0]}.json"`,
+        'Content-Disposition': `attachment; filename="context-profile-${new Date().toISOString().split('T')[0]}.json"`,
       },
     })
   } catch (error) {

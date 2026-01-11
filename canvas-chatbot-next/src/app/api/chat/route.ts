@@ -22,7 +22,9 @@ export const runtime = 'nodejs';
 async function chatHandler(request: NextRequest) {
 	try {
 		const body = await request.json();
-		const { model, messages: incomingMessages, canvasContext, analysisMode } = body;
+		const { model, messages: incomingMessages, canvasContext, mode, selected_system_prompt_ids } = body;
+		// Backward compatibility: support old analysisMode parameter
+		const analysisMode = mode || (body as any).analysisMode;
 
 		if (
 			!incomingMessages ||
@@ -67,6 +69,61 @@ async function chatHandler(request: NextRequest) {
 			});
 		}
 
+		// Fetch user's system prompts from database
+		let activeSystemPrompt = SYSTEM_PROMPT; // Fallback to default
+		try {
+			// If selected_system_prompt_ids are provided in the request, use those
+			// Otherwise, fall back to the old behavior (current_system_prompt_id)
+			if (selected_system_prompt_ids && Array.isArray(selected_system_prompt_ids) && selected_system_prompt_ids.length > 0) {
+				// Fetch multiple system prompts
+				const { data: systemPrompts, error: promptsError } = await supabase
+					.from('system_prompts')
+					.select('id, name, prompt_text, is_template, user_id')
+					.in('id', selected_system_prompt_ids);
+
+				if (!promptsError && systemPrompts && systemPrompts.length > 0) {
+					// Filter to only accessible prompts (templates or user's own)
+					const accessiblePrompts = systemPrompts.filter(
+						(p) => p.is_template || p.user_id === user.id
+					);
+
+					if (accessiblePrompts.length > 0) {
+						// Combine multiple prompts with separators
+						if (accessiblePrompts.length === 1) {
+							activeSystemPrompt = accessiblePrompts[0].prompt_text;
+						} else {
+							activeSystemPrompt = accessiblePrompts
+								.map((p) => `=== ${p.name} ===\n\n${p.prompt_text}`)
+								.join('\n\n---\n\n');
+						}
+					}
+				}
+			} else {
+				// Fallback to old behavior: use current_system_prompt_id
+				const { data: contextSelection } = await supabase
+					.from('user_context_selections')
+					.select('current_system_prompt_id')
+					.eq('user_id', user.id)
+					.single();
+
+				if (contextSelection?.current_system_prompt_id) {
+					const { data: systemPrompt } = await supabase
+						.from('system_prompts')
+						.select('prompt_text, is_template, user_id')
+						.eq('id', contextSelection.current_system_prompt_id)
+						.single();
+
+					// Verify access: templates are accessible by all, user prompts only by owner
+					if (systemPrompt && (systemPrompt.is_template || systemPrompt.user_id === user.id)) {
+						activeSystemPrompt = systemPrompt.prompt_text;
+					}
+				}
+			}
+		} catch (error) {
+			console.error('Error fetching user system prompt, using default:', error);
+			// Continue with default SYSTEM_PROMPT if fetch fails
+		}
+
 		let canvasApiKey: string | undefined;
 		let canvasApiUrl: string | undefined;
 
@@ -99,7 +156,7 @@ async function chatHandler(request: NextRequest) {
 		const tavilyTool = tavilySearch();
 		console.log('[DEBUG] Initializing tools: webSearch enabled with strict mode');
 		
-		// Conditionally restrict tools for rubric analysis mode
+		// Conditionally restrict tools for rubric mode
 		// If rubric mode is active and analyze_rubric hasn't been called yet, only provide analyze_rubric
 		// This will be checked dynamically in prepareStep, but we prepare the base tools here
 		const baseTools = {
@@ -196,7 +253,7 @@ async function chatHandler(request: NextRequest) {
 		// Enhance system prompt when rubric mode is active
 		let rubricEnforcementPrompt = '';
 		if (analysisMode === 'rubric' && targetAssignment) {
-			rubricEnforcementPrompt = `\n\n⚠️ CRITICAL: RUBRIC ANALYSIS MODE IS ACTIVE
+			rubricEnforcementPrompt = `\n\n⚠️ CRITICAL: RUBRIC MODE IS ACTIVE
 			
 You MUST follow this sequence:
 1. Call 'analyze_rubric' tool immediately with:
@@ -217,8 +274,8 @@ This sequence is REQUIRED. Do not skip any step. The provide_rubric_analysis too
 
 		const systemText =
 			typeof canvasContext !== 'undefined' && canvasContext && formattedContext
-				? `${SYSTEM_PROMPT}${rubricEnforcementPrompt}\n\n${formattedContext}`
-				: `${SYSTEM_PROMPT}${rubricEnforcementPrompt}`;
+				? `${activeSystemPrompt}${rubricEnforcementPrompt}\n\n${formattedContext}`
+				: `${activeSystemPrompt}${rubricEnforcementPrompt}`;
 
 		const uiMessagesWithSystem: UIMessage[] = [
 			{ role: 'system', parts: [{ type: 'text', text: systemText }] } as any,
