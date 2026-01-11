@@ -18,7 +18,7 @@ export interface Preset {
 
 interface PresetSelectorProps {
   onPresetSelect: (presetId: string | null) => void
-  onPresetApplied?: (presetId: string, selections: {
+  onPresetApplied?: (presetId: string | null, selections: {
     courses: number[]
     assignments: number[]
     modules: number[]
