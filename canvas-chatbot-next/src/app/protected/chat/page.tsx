@@ -135,7 +135,6 @@ export default function ChatPage() {
   const [suggestionsVisible, setSuggestionsVisible] = useState<boolean>(true)
 
   useEffect(() => {
-    /*
     const lastAssistant = [...uiMessages].reverse().find((m) => m.role === 'assistant')
     const isIdle = status !== 'streaming' && status !== 'submitted'
     if (!lastAssistant || !isIdle) return
@@ -144,36 +143,35 @@ export default function ChatPage() {
     const hasFinalText = lastAssistant.parts.some((p: any) => p.type === 'text' && String((p as any).text || '').trim().length > 0)
     if (!hasFinalText) return
     setLoadingSuggestions(true)
-      ; (async () => {
-        try {
-          const res = await fetch('/api/suggestions', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              messages: uiMessages,
-              provider_id: activeProvider?.id,
-              model: selectedModel,
-              model_override: activeProvider?.provider_name === 'openrouter' ? selectedModel : undefined,
-              max_suggestions: 4,
-            }),
-          })
-          if (res.ok) {
-            const data = await res.json()
-            const suggestions = Array.isArray(data?.suggestions) ? data.suggestions : []
-            setDynamicSuggestions(suggestions)
-            lastAssistantIdRef.current = lastAssistant.id
-          }
-        } catch (e) {
-          console.error('Failed to load suggestions', e)
-        } finally {
-          setLoadingSuggestions(false)
+    setSuggestionsVisible(true)
+    ; (async () => {
+      try {
+        const res = await fetch('/api/suggestions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages: uiMessages,
+            provider_id: activeProvider?.id,
+            model: selectedModel,
+            model_override: activeProvider?.provider_name === 'openrouter' ? selectedModel : selectedModel,
+            max_suggestions: 4,
+          }),
+        })
+        if (res.ok) {
+          const data = await res.json()
+          const suggestions = Array.isArray(data?.suggestions) ? data.suggestions : []
+          setDynamicSuggestions(suggestions)
+          lastAssistantIdRef.current = lastAssistant.id
         }
-      })()
-      */
+      } catch (e) {
+        console.error('Failed to load suggestions', e)
+      } finally {
+        setLoadingSuggestions(false)
+      }
+    })()
   }, [uiMessages, status, selectedModel, activeProvider])
 
   const regenerateAllSuggestions = async () => {
-    /*
     setLoadingSuggestions(true)
     setSuggestionsVisible(true)
     try {
@@ -184,7 +182,7 @@ export default function ChatPage() {
           messages: uiMessages,
           provider_id: activeProvider?.id,
           model: selectedModel,
-          model_override: activeProvider?.provider_name === 'openrouter' ? selectedModel : undefined,
+          model_override: activeProvider?.provider_name === 'openrouter' ? selectedModel : selectedModel,
           max_suggestions: 4,
         }),
       })
@@ -198,7 +196,6 @@ export default function ChatPage() {
     } finally {
       setLoadingSuggestions(false)
     }
-      */
   }
 
   useEffect(() => {
@@ -243,8 +240,7 @@ export default function ChatPage() {
     const mappedMessages = mapUIMessagesToSessionMessages()
 
       ; (async () => {
-        const generatedTitle: string | null = null
-        /*
+        let generatedTitle: string | null = null
         const needsTitle = !currentSession?.title || currentSession?.title === 'New Chat'
         if (needsTitle) {
           try {
@@ -254,9 +250,8 @@ export default function ChatPage() {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 messages: uiMessages,
-                provider_id: activeProvider?.id,
                 model: selectedModel,
-                model_override: activeProvider?.provider_name === 'openrouter' ? selectedModel : undefined,
+                model_override: selectedModel,
               }),
             })
             if (res.ok) {
@@ -270,7 +265,6 @@ export default function ChatPage() {
             setTitleGenerating(false)
           }
         }
-        */
 
         const fallbackTitleBase = String(lastUserText || '').substring(0, 50)
         const fallbackTitle = fallbackTitleBase + (String(lastUserText || '').length > 50 ? '...' : '')
@@ -969,6 +963,8 @@ export default function ChatPage() {
                               'get_file',
                               'get_assignment_grade',
                               'get_assignment_feedback_and_rubric',
+                              'analyze_rubric',
+                              'provide_rubric_analysis',
                               'webSearch'
                             ].includes(toolName)
 

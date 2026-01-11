@@ -43,10 +43,20 @@ export class CanvasContextService {
 
   async buildStaticEntityMap(limitPerCourse: number = 30) {
     console.log('[DEBUG] Prefetch: building static entity map')
-    const courses = await this.canvasService.getCourses({
-      enrollmentState: 'active',
+    const allCourses = await this.canvasService.getCourses({
+      enrollmentState: 'all',
       enrollmentType: 'student',
       perPage: 100,
+    })
+    
+    // Filter to only active courses for entity map
+    const courses = allCourses.filter(course => {
+      if (course.end_at) {
+        const endDate = new Date(course.end_at)
+        const now = new Date()
+        return endDate >= now
+      }
+      return course.workflow_state !== 'completed'
     })
     const results: Array<{
       id: number
@@ -108,12 +118,34 @@ export class CanvasContextService {
       let context = ''
 
       // Fetch all courses
-      const [activeCourses, completedCourses] = await Promise.all([
-        this.canvasService.getCourses({ enrollmentState: 'active' }),
-        this.canvasService.getCourses({ enrollmentState: 'completed' }),
-      ])
-
-      const allCourses = [...activeCourses, ...completedCourses]
+      const allCourses = await this.canvasService.getCourses({ enrollmentState: 'all' })
+      
+      // Filter courses by enrollment state (active vs completed)
+      // Note: Canvas API returns courses with enrollment info, but we filter client-side
+      // Active courses are those not marked as completed
+      const activeCourses = allCourses.filter(course => {
+        // If course has end_at date and it's in the past, consider it completed
+        if (course.end_at) {
+          const endDate = new Date(course.end_at)
+          const now = new Date()
+          return endDate >= now
+        }
+        // If workflow_state is 'completed', it's completed
+        if (course.workflow_state === 'completed') {
+          return false
+        }
+        // Otherwise, consider it active
+        return true
+      })
+      
+      const completedCourses = allCourses.filter(course => {
+        if (course.end_at) {
+          const endDate = new Date(course.end_at)
+          const now = new Date()
+          return endDate < now
+        }
+        return course.workflow_state === 'completed'
+      })
 
       // Check for uploaded file
       // This will be handled by the API route and passed in the context
@@ -307,7 +339,7 @@ export class CanvasContextService {
       const gradeInfo = this.calculateRequiredGrade(assignments, query)
       
       let context = '🎓 GRADE CALCULATION:\n\n'
-      context += `📊 Course: ${(await this.canvasService.getCourses()).find(c => c.id === courseId)?.name}\n`
+      context += `📊 Course: ${(await this.canvasService.getCourses({ enrollmentState: 'all' })).find(c => c.id === courseId)?.name}\n`
       
       if (gradeInfo) {
         context += `🎯 Target Grade: ${gradeInfo.targetGrade}%\n\n`
@@ -567,7 +599,7 @@ export class CanvasContextService {
       const assignments = await this.canvasService.getAssignments(courseId, { includeSubmission: true })
       let context = '📊 YOUR GRADES & SUBMISSIONS:\n\n'
       
-      const courseName = (await this.canvasService.getCourses()).find(c => c.id === courseId)?.name
+      const courseName = (await this.canvasService.getCourses({ enrollmentState: 'all' })).find(c => c.id === courseId)?.name
       context += `${courseName}:\n`
       
       for (const assignment of assignments.slice(0, 10)) {
@@ -595,7 +627,16 @@ export class CanvasContextService {
 
   private async getUpcomingAssignments(daysAhead: number = 14): Promise<any[]> {
     try {
-      const activeCourses = await this.canvasService.getCourses({ enrollmentState: 'active' })
+      const allCourses = await this.canvasService.getCourses({ enrollmentState: 'all' })
+      // Filter to only active courses for upcoming assignments
+      const activeCourses = allCourses.filter(course => {
+        if (course.end_at) {
+          const endDate = new Date(course.end_at)
+          const now = new Date()
+          return endDate >= now
+        }
+        return course.workflow_state !== 'completed'
+      })
       const allAssignments = []
       const cutoffDate = new Date(Date.now() + daysAhead * 24 * 60 * 60 * 1000)
 
