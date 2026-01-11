@@ -376,7 +376,7 @@ export function createCanvasTools(token: string, url: string) {
 		}),
 
 		analyze_rubric: tool({
-			description: 'Systematically analyze a rubric for an assignment. This tool fetches the rubric and returns it in a structured format for comprehensive analysis. Use this when rubric analysis mode is enabled or when the user explicitly requests rubric analysis.',
+			description: 'Systematically analyze a rubric for an assignment. This tool fetches the rubric and returns it in a structured format for comprehensive analysis. Use this when rubric mode is enabled or when the user explicitly requests rubric analysis.',
 			inputSchema: z.object({
 				courseId: z.number().describe('The course ID containing the assignment'),
 				assignmentId: z.number().describe('The assignment ID to analyze'),

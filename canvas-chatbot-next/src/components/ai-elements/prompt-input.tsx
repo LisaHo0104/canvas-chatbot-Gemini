@@ -1332,7 +1332,7 @@ export const PromptInputSpeechButton = ({
         isListening && "animate-pulse bg-accent text-accent-foreground",
         className
       )}
-      disabled={!recognition}
+      disabled={props.disabled !== undefined ? props.disabled : !recognition}
       onClick={toggleListening}
       {...props}
     >

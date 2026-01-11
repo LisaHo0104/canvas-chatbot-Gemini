@@ -5,37 +5,39 @@ import { BookOpen, Loader2, Save, Settings } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Preset } from './PresetSelector'
-import { SavePresetDialog } from './SavePresetDialog'
-import { PresetManager } from './PresetManager'
+import { Profile } from './ProfileSelector'
+import { SaveProfileDialog } from './SaveProfileDialog'
+import { ProfileManager } from './ProfileManager'
 import { ExportImportButtons } from './ExportImportButtons'
 
 interface SelectionSummaryProps {
-  currentPresetId: string | null
-  onPresetApplied: (presetId: string | null, selections: {
+  currentProfileId: string | null
+  onProfileApplied: (profileId: string | null, selections: {
     courses: number[]
     assignments: number[]
     modules: number[]
   }) => void
-  onPresetIdChange: (presetId: string | null) => void
+  onProfileIdChange: (profileId: string | null) => void
   selections: {
     courses: number[]
     assignments: number[]
     modules: number[]
   }
-  onPresetSaved: () => void
+  onProfileSaved: () => void
   onImportComplete: () => void
+  hideCard?: boolean
 }
 
 export function SelectionSummary({
-  currentPresetId,
-  onPresetApplied,
-  onPresetIdChange,
+  currentProfileId,
+  onProfileApplied,
+  onProfileIdChange,
   selections,
-  onPresetSaved,
+  onProfileSaved,
   onImportComplete,
+  hideCard = false,
 }: SelectionSummaryProps) {
-  const [presets, setPresets] = useState<Preset[]>([])
+  const [profiles, setProfiles] = useState<Profile[]>([])
   const [loading, setLoading] = useState(true)
   const [applying, setApplying] = useState(false)
   const [saveDialogOpen, setSaveDialogOpen] = useState(false)
@@ -43,59 +45,60 @@ export function SelectionSummary({
   const [lastAppliedAt, setLastAppliedAt] = useState<Date | null>(null)
 
   useEffect(() => {
-    loadPresets()
+    loadProfiles()
   }, [])
 
-  const loadPresets = async () => {
+  const loadProfiles = async () => {
     try {
       setLoading(true)
-      const response = await fetch('/api/context/presets')
+      const response = await fetch('/api/context/profiles')
       if (!response.ok) {
-        throw new Error('Failed to load presets')
+        throw new Error('Failed to load profiles')
       }
       const data = await response.json()
-      setPresets(data.presets || [])
+      setProfiles(data.profiles || [])
     } catch (error) {
-      console.error('Error loading presets:', error)
+      console.error('Error loading profiles:', error)
     } finally {
       setLoading(false)
     }
   }
 
-  const handlePresetChange = async (presetId: string) => {
-    if (presetId === 'default') {
-      onPresetIdChange(null)
-      onPresetApplied(null, {
+  const handleProfileChange = async (profileId: string) => {
+    if (profileId === 'default') {
+      // Default profile: pass empty arrays, parent will handle selecting all courses
+      onProfileIdChange(null)
+      onProfileApplied(null, {
         courses: [],
         assignments: [],
         modules: [],
       })
-      setLastAppliedAt(null)
+      setLastAppliedAt(new Date())
       return
     }
 
     try {
       setApplying(true)
-      const response = await fetch(`/api/context/presets/${presetId}/apply`, {
+      const response = await fetch(`/api/context/profiles/${profileId}/apply`, {
         method: 'POST',
       })
 
       if (!response.ok) {
-        throw new Error('Failed to apply preset')
+        throw new Error('Failed to apply profile')
       }
 
       const data = await response.json()
-      onPresetIdChange(presetId)
-      onPresetApplied(presetId, {
+      onProfileIdChange(profileId)
+      onProfileApplied(profileId, {
         courses: data.courses || [],
         assignments: data.assignments || [],
         modules: data.modules || [],
       })
       setLastAppliedAt(new Date())
-      await loadPresets()
+      await loadProfiles()
     } catch (error) {
-      console.error('Error applying preset:', error)
-      alert('Failed to apply preset. Please try again.')
+      console.error('Error applying profile:', error)
+      alert('Failed to apply profile. Please try again.')
     } finally {
       setApplying(false)
     }
@@ -113,7 +116,124 @@ export function SelectionSummary({
     return `${Math.floor(diffMs / 86400000)} day${Math.floor(diffMs / 86400000) !== 1 ? 's' : ''} ago`
   }
 
-  const currentPreset = presets.find(p => p.id === currentPresetId)
+  const currentProfile = profiles.find(p => p.id === currentProfileId)
+
+  const actionButtonsContent = (
+    <div className="flex items-center gap-2 flex-wrap">
+      {/* Profile Selector */}
+      <Select
+        value={currentProfileId || 'default'}
+        onValueChange={handleProfileChange}
+        disabled={loading || applying}
+      >
+        <SelectTrigger className="w-[180px] sm:w-[200px]">
+          {applying ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              <span>Applying...</span>
+            </>
+          ) : loading ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              <span>Loading...</span>
+            </>
+          ) : (
+            <SelectValue>
+              <div className="flex items-center gap-2">
+                <BookOpen className="w-4 h-4" />
+                <span className="truncate">{currentProfile ? currentProfile.name : 'Default'}</span>
+              </div>
+            </SelectValue>
+          )}
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="default">Default</SelectItem>
+          {profiles.length > 0 && (
+            <>
+              {profiles.map((profile) => (
+                <SelectItem key={profile.id} value={profile.id}>
+                  <div className="flex items-center gap-2">
+                    <BookOpen className="w-4 h-4" />
+                    {profile.name}
+                  </div>
+                </SelectItem>
+              ))}
+            </>
+          )}
+        </SelectContent>
+      </Select>
+      <Button
+        onClick={() => setSaveDialogOpen(true)}
+        variant="outline"
+        size="sm"
+        disabled={selections.courses.length === 0 && selections.assignments.length === 0 && selections.modules.length === 0}
+      >
+        <Save className="w-4 h-4 mr-2" />
+        <span className="hidden sm:inline">Save as Profile</span>
+        <span className="sm:hidden">Save</span>
+      </Button>
+      <Button
+        onClick={() => setManagerOpen(true)}
+        variant="outline"
+        size="sm"
+      >
+        <Settings className="w-4 h-4 mr-2" />
+        Manage
+      </Button>
+      <ExportImportButtons onImportComplete={onImportComplete} />
+    </div>
+  )
+
+  if (hideCard) {
+    return (
+      <>
+        {actionButtonsContent}
+        <SaveProfileDialog
+          open={saveDialogOpen}
+          onOpenChange={setSaveDialogOpen}
+          selections={selections}
+          onSave={() => {
+            onProfileSaved()
+            loadProfiles()
+          }}
+        />
+        <ProfileManager
+          open={managerOpen}
+          onOpenChange={setManagerOpen}
+          onProfileApplied={async (profileId) => {
+            try {
+              const response = await fetch(`/api/context/profiles/${profileId}/apply`, {
+                method: 'POST',
+              })
+
+              if (!response.ok) {
+                throw new Error('Failed to apply profile')
+              }
+
+              const data = await response.json()
+              onProfileIdChange(profileId)
+              onProfileApplied(profileId, {
+                courses: data.courses || [],
+                assignments: data.assignments || [],
+                modules: data.modules || [],
+              })
+              setLastAppliedAt(new Date())
+              await loadProfiles()
+              setManagerOpen(false)
+            } catch (error) {
+              console.error('Error applying profile:', error)
+              alert('Failed to apply profile. Please try again.')
+            }
+          }}
+          onProfileCreated={() => {
+            setManagerOpen(false)
+            setSaveDialogOpen(true)
+          }}
+          currentProfileId={currentProfileId}
+        />
+      </>
+    )
+  }
 
   return (
     <>
@@ -138,119 +258,54 @@ export function SelectionSummary({
             </div>
           </div>
 
-          {/* Action Buttons with Preset Selector */}
-          <div className="flex items-center justify-between pt-2 gap-4">
-            <div className="flex items-center gap-2 flex-1">
-              {/* Preset Selector */}
-              <div className="flex items-center gap-2">
-                <Select
-                  value={currentPresetId || 'default'}
-                  onValueChange={handlePresetChange}
-                  disabled={loading || applying}
-                >
-                  <SelectTrigger className="w-[200px]">
-                    {applying ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                        <span>Applying...</span>
-                      </>
-                    ) : loading ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                        <span>Loading...</span>
-                      </>
-                    ) : (
-                      <SelectValue>
-                        <div className="flex items-center gap-2">
-                          <BookOpen className="w-4 h-4" />
-                          {currentPreset ? currentPreset.name : 'Default'}
-                        </div>
-                      </SelectValue>
-                    )}
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="default">Default</SelectItem>
-                    {presets.length > 0 && (
-                      <>
-                        {presets.map((preset) => (
-                          <SelectItem key={preset.id} value={preset.id}>
-                            <div className="flex items-center gap-2">
-                              <BookOpen className="w-4 h-4" />
-                              {preset.name}
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </>
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-              <Button
-                onClick={() => setSaveDialogOpen(true)}
-                variant="outline"
-                size="sm"
-                disabled={selections.courses.length === 0 && selections.assignments.length === 0 && selections.modules.length === 0}
-              >
-                <Save className="w-4 h-4 mr-2" />
-                Save as Preset
-              </Button>
-              <Button
-                onClick={() => setManagerOpen(true)}
-                variant="outline"
-                size="sm"
-              >
-                <Settings className="w-4 h-4 mr-2" />
-                Manage
-              </Button>
-            </div>
-            <ExportImportButtons onImportComplete={onImportComplete} />
-          </div>
+          {/* Action Buttons with Profile Selector */}
+          {actionButtonsContent}
         </CardContent>
       </Card>
 
-      <SavePresetDialog
+      <SaveProfileDialog
         open={saveDialogOpen}
         onOpenChange={setSaveDialogOpen}
         selections={selections}
         onSave={() => {
-          onPresetSaved()
-          loadPresets()
+          onProfileSaved()
+          loadProfiles()
         }}
       />
 
-      <PresetManager
+      <ProfileManager
         open={managerOpen}
         onOpenChange={setManagerOpen}
-        onPresetApplied={async (presetId) => {
+        onProfileApplied={async (profileId) => {
           try {
-            const response = await fetch(`/api/context/presets/${presetId}/apply`, {
+            const response = await fetch(`/api/context/profiles/${profileId}/apply`, {
               method: 'POST',
             })
 
             if (!response.ok) {
-              throw new Error('Failed to apply preset')
+              throw new Error('Failed to apply profile')
             }
 
             const data = await response.json()
-            onPresetIdChange(presetId)
-            onPresetApplied(presetId, {
+            onProfileIdChange(profileId)
+            onProfileApplied(profileId, {
               courses: data.courses || [],
               assignments: data.assignments || [],
               modules: data.modules || [],
             })
             setLastAppliedAt(new Date())
-            await loadPresets()
+            await loadProfiles()
             setManagerOpen(false)
           } catch (error) {
-            console.error('Error applying preset:', error)
-            alert('Failed to apply preset. Please try again.')
+            console.error('Error applying profile:', error)
+            alert('Failed to apply profile. Please try again.')
           }
         }}
-        onPresetCreated={() => {
+        onProfileCreated={() => {
           setManagerOpen(false)
           setSaveDialogOpen(true)
         }}
-        currentPresetId={currentPresetId}
+        currentProfileId={currentProfileId}
       />
     </>
   )

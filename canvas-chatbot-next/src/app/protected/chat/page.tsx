@@ -19,11 +19,14 @@ import { ToolRenderer } from '@/components/canvas-tools/tool-renderer'
 import type { ToolUIPart } from 'ai'
 import { Shimmer } from '@/components/ai-elements/shimmer'
 import EnhancedSidebar from '@/components/EnhancedSidebar'
+import { SystemPromptSelector } from '@/components/chat/SystemPromptSelector'
 import { AIProvider } from '@/types/ai-providers'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
+import { Spinner } from '@/components/ui/spinner'
+import { Badge } from '@/components/ui/badge'
 
 let supabase: any = null
 
@@ -67,8 +70,8 @@ export default function ChatPage() {
   const [canvasStatus, setCanvasStatus] = useState<'connected' | 'missing' | 'error'>('missing')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [webSearch, setWebSearch] = useState(false)
-  const [analysisMode, setAnalysisMode] = useState<string | null>(null)
-  const [analysisModeOpen, setAnalysisModeOpen] = useState(false)
+  const [mode, setMode] = useState<string | null>(null)
+  const [modeOpen, setModeOpen] = useState(false)
   const [modelSelectorOpen, setModelSelectorOpen] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [fetchingModels, setFetchingModels] = useState(false)
@@ -78,21 +81,43 @@ export default function ChatPage() {
     { id: 'google/gemini-2.0-flash-exp', name: 'Gemini 2.0 Flash', chef: 'Google', chefSlug: 'google', providers: ['google'] },
   ])
   const [titleGenerating, setTitleGenerating] = useState(false)
-  const [canvasContext, setCanvasContext] = useState<any | null>(null)
-  const [syncingCanvas, setSyncingCanvas] = useState(false)
-  // Items selected on context page (available pool)
-  const [availableContext, setAvailableContext] = useState<{ courses: number[]; assignments: number[]; modules: number[] }>({
+  // Items selected on context page (available pool) with names
+  const [availableContext, setAvailableContext] = useState<{
+    courses: Array<{ id: number; name: string; code?: string }>
+    assignments: Array<{ id: number; name: string }>
+    modules: Array<{ id: number; name: string }>
+  }>({
     courses: [],
     assignments: [],
     modules: []
   })
-  // Items selected for current chat session
+  // Items selected for current chat session (just IDs for internal state)
   const [selectedContext, setSelectedContext] = useState<{ courses: number[]; assignments: number[]; modules: number[] }>({
     courses: [],
     assignments: [],
     modules: []
   })
   const [contextSelectorOpen, setContextSelectorOpen] = useState(false)
+  // Selected system prompts for current chat session
+  const [selectedSystemPromptIds, setSelectedSystemPromptIds] = useState<string[]>([])
+  
+  // Mapping between modes and system prompt template types
+  const MODE_TO_TEMPLATE_TYPE: Record<string, string> = {
+    'rubric': 'rubric_analysis',
+    'quiz': 'quiz_generation',
+    'study-plan': 'study_plan',
+  }
+  
+  const TEMPLATE_TYPE_TO_MODE: Record<string, string | null> = {
+    'rubric_analysis': 'rubric',
+    'quiz_generation': 'quiz',
+    'study_plan': 'study-plan',
+    'default': null,
+  }
+  
+  // Store system prompt templates and user prompts for sync logic
+  const [systemPromptTemplates, setSystemPromptTemplates] = useState<Array<{ id: string; template_type: string }>>([])
+  const [userPrompts, setUserPrompts] = useState<Array<{ id: string; template_type: string | null }>>([])
   const { messages: uiMessages, sendMessage: sendChatMessage, status, regenerate, setMessages: setUIMessages } = useChat({
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
     onResponse: (response: Response) => {
@@ -390,45 +415,143 @@ export default function ChatPage() {
     checkAuth()
   }, [router])
 
+  // Load system prompt templates and user prompts for sync logic
   useEffect(() => {
-    const prefetchCanvas = async () => {
-      if (canvasStatus !== 'connected') return
+    const loadTemplates = async () => {
       try {
-        setSyncingCanvas(true)
-        console.log('[DEBUG] Prefetching Canvas context')
-        const res = await fetch('/api/canvas/prefetch', { method: 'GET' })
-        if (res.ok) {
-          const data = await res.json()
-          setCanvasContext(data)
+        const response = await fetch('/api/system-prompts')
+        if (response.ok) {
+          const data = await response.json()
+          const templates = (data.templates || []).map((t: any) => ({
+            id: t.id,
+            template_type: t.template_type,
+          }))
+          const userPromptsData = (data.userPrompts || []).map((p: any) => ({
+            id: p.id,
+            template_type: p.template_type,
+          }))
+          setSystemPromptTemplates(templates)
+          setUserPrompts(userPromptsData)
+          
+          // Ensure at least one prompt is selected on initial load
+          setSelectedSystemPromptIds((currentIds) => {
+            if (currentIds.length === 0 && templates.length > 0) {
+              const defaultTemplate = templates.find((t: any) => t.template_type === 'default')
+              if (defaultTemplate) {
+                return [defaultTemplate.id]
+              } else {
+                // Fallback to first template if default not found
+                return [templates[0].id]
+              }
+            }
+            return currentIds
+          })
         }
-      } catch (e) {
-        console.error('Canvas prefetch failed', e)
-      } finally {
-        setSyncingCanvas(false)
+      } catch (error) {
+        console.error('Failed to load system prompt templates:', error)
       }
     }
-    prefetchCanvas()
-  }, [canvasStatus])
+    loadTemplates()
+  }, [selectedSystemPromptIds])
+
+  // Wrapper for setMode that auto-syncs with system prompts
+  const handleModeChange = useCallback((newMode: string | null) => {
+    // Update mode state
+    setMode(newMode)
+    
+    // Get template types to identify Lulu prompts
+    const templateTypes = new Set(systemPromptTemplates.map(t => t.template_type).filter(Boolean))
+    
+    // Preserve custom user prompts (those without template_type or not matching a template)
+    const customPromptIds = selectedSystemPromptIds.filter(id => {
+      const userPrompt = userPrompts.find(p => p.id === id)
+      if (!userPrompt) return false
+      // It's a custom prompt if it doesn't have a template_type or the template_type doesn't match any template
+      return !userPrompt.template_type || !templateTypes.has(userPrompt.template_type)
+    })
+    
+    // Find the corresponding template for the new mode
+    if (newMode === null) {
+      // Generic mode - use default template, but preserve custom prompts
+      const defaultTemplate = systemPromptTemplates.find(t => t.template_type === 'default')
+      if (defaultTemplate) {
+        setSelectedSystemPromptIds([defaultTemplate.id, ...customPromptIds])
+      } else {
+        setSelectedSystemPromptIds(customPromptIds)
+      }
+    } else {
+      const templateType = MODE_TO_TEMPLATE_TYPE[newMode]
+      if (templateType) {
+        const template = systemPromptTemplates.find(t => t.template_type === templateType)
+        if (template) {
+          // Auto-select the corresponding Lulu template, but preserve custom prompts
+          setSelectedSystemPromptIds([template.id, ...customPromptIds])
+        } else {
+          // Template not found, just preserve custom prompts
+          setSelectedSystemPromptIds(customPromptIds)
+        }
+      } else {
+        // Unknown mode, just preserve custom prompts
+        setSelectedSystemPromptIds(customPromptIds)
+      }
+    }
+  }, [systemPromptTemplates, userPrompts, selectedSystemPromptIds])
+
+  // Wrapper for setSelectedSystemPromptIds that auto-syncs with mode
+  const handleSystemPromptChange = useCallback((newPromptIds: string[]) => {
+    // Ensure at least one prompt is always selected
+    // If trying to deselect all, keep at least the default template
+    let finalPromptIds = newPromptIds
+    if (newPromptIds.length === 0) {
+      const defaultTemplate = systemPromptTemplates.find(t => t.template_type === 'default')
+      if (defaultTemplate) {
+        finalPromptIds = [defaultTemplate.id]
+      } else if (systemPromptTemplates.length > 0) {
+        // Fallback to first template if default not found
+        finalPromptIds = [systemPromptTemplates[0].id]
+      }
+    }
+    
+    // Update system prompt selection
+    setSelectedSystemPromptIds(finalPromptIds)
+    
+    // Check if any selected prompt matches a mode template
+    if (finalPromptIds.length === 0) {
+      // No prompts selected, clear mode (shouldn't happen due to check above, but just in case)
+      setMode(null)
+      return
+    }
+    
+    // Check the first selected prompt (we only sync single selections for modes)
+    const firstPromptId = finalPromptIds[0]
+    const template = systemPromptTemplates.find(t => t.id === firstPromptId)
+    
+    if (template && template.template_type in TEMPLATE_TYPE_TO_MODE) {
+      // Auto-update mode to match
+      const correspondingMode = TEMPLATE_TYPE_TO_MODE[template.template_type]
+      setMode(correspondingMode)
+    } else {
+      // Custom prompt selected, clear mode
+      setMode(null)
+    }
+  }, [systemPromptTemplates])
 
   // Load available context items from database (selected on context page)
+  // These now include names stored in the database
   const loadAvailableContext = useCallback(async () => {
     if (canvasStatus !== 'connected') return
     try {
       const res = await fetch('/api/context/selection')
       if (res.ok) {
         const data = await res.json()
-        // These are the items selected on the context page (available pool)
-        const courses = (data.courses || []).map((id: any) => Number(id))
-        const assignments = (data.assignments || []).map((id: any) => Number(id))
-        const modules = (data.modules || []).map((id: any) => Number(id))
-        
-        console.log('[DEBUG] Loaded available context:', { courses, assignments, modules })
-        
+        // API now returns objects with {id, name, code?} format
         setAvailableContext({
-          courses,
-          assignments,
-          modules,
+          courses: data.courses || [],
+          assignments: data.assignments || [],
+          modules: data.modules || [],
         })
+        
+        console.log('[DEBUG] Loaded available context with names:', availableContext)
       } else {
         console.error('[DEBUG] Failed to load available context, status:', res.status)
       }
@@ -437,16 +560,30 @@ export default function ChatPage() {
     }
   }, [canvasStatus])
 
+  // Helper functions to get names from stored context data
+  const getCourseName = useCallback((courseId: number): string => {
+    const course = availableContext.courses.find(c => c.id === courseId)
+    return course?.name || `Course ${courseId}`
+  }, [availableContext])
+
+  const getCourseCode = useCallback((courseId: number): string | undefined => {
+    const course = availableContext.courses.find(c => c.id === courseId)
+    return course?.code
+  }, [availableContext])
+
+  const getAssignmentName = useCallback((assignmentId: number): string => {
+    const assignment = availableContext.assignments.find(a => a.id === assignmentId)
+    return assignment?.name || `Assignment ${assignmentId}`
+  }, [availableContext])
+
+  const getModuleName = useCallback((moduleId: number): string => {
+    const module = availableContext.modules.find(m => m.id === moduleId)
+    return module?.name || `Module ${moduleId}`
+  }, [availableContext])
+
   useEffect(() => {
     loadAvailableContext()
   }, [loadAvailableContext])
-
-  // Also reload available context when canvasContext is loaded to ensure they're in sync
-  useEffect(() => {
-    if (canvasContext && canvasStatus === 'connected') {
-      loadAvailableContext()
-    }
-  }, [canvasContext, canvasStatus, loadAvailableContext])
 
   // Reload available context when context selector popover opens to ensure latest data
   useEffect(() => {
@@ -613,127 +750,39 @@ export default function ChatPage() {
     } catch { }
   }
 
-  // Helper functions to extract context item data
-  const getCourseById = (courseId: number): any | null => {
-    if (!canvasContext?.courses) return null
-    return canvasContext.courses.find((c: any) => c.id === courseId) || null
-  }
-
-  const getAssignmentById = (assignmentId: number): { assignment: any; course: any } | null => {
-    if (!canvasContext?.courses) return null
-    for (const course of canvasContext.courses) {
-      const assignment = (course.assignments || []).find((a: any) => a.id === assignmentId)
-      if (assignment) {
-        return { assignment, course }
-      }
-    }
-    return null
-  }
-
-  const getModuleById = (moduleId: number): { module: any; course: any } | null => {
-    if (!canvasContext?.courses) return null
-    for (const course of canvasContext.courses) {
-      const module = (course.modules || []).find((m: any) => m.id === moduleId)
-      if (module) {
-        return { module, course }
-      }
-    }
-    return null
-  }
-
+  // Helper function to get selected context items (using IDs from Supabase)
   const getSelectedContextItems = (): Array<{ id: number; type: 'course' | 'assignment' | 'module'; name: string; code?: string }> => {
     const items: Array<{ id: number; type: 'course' | 'assignment' | 'module'; name: string; code?: string }> = []
 
     // Add courses
     selectedContext.courses.forEach((courseId) => {
-      const course = getCourseById(courseId)
-      if (course) {
-        items.push({
-          id: courseId,
-          type: 'course',
-          name: course.name || `Course ${courseId}`,
-          code: course.code || course.course_code
-        })
-      }
+      items.push({
+        id: courseId,
+        type: 'course',
+        name: getCourseName(courseId),
+        code: getCourseCode(courseId),
+      })
     })
 
     // Add assignments
     selectedContext.assignments.forEach((assignmentId) => {
-      const result = getAssignmentById(assignmentId)
-      if (result) {
-        items.push({
-          id: assignmentId,
-          type: 'assignment',
-          name: result.assignment.name || `Assignment ${assignmentId}`,
-          code: result.course.code || result.course.course_code
-        })
-      }
+      items.push({
+        id: assignmentId,
+        type: 'assignment',
+        name: getAssignmentName(assignmentId),
+      })
     })
 
     // Add modules
     selectedContext.modules.forEach((moduleId) => {
-      const result = getModuleById(moduleId)
-      if (result) {
-        items.push({
-          id: moduleId,
-          type: 'module',
-          name: result.module.name || `Module ${moduleId}`,
-          code: result.course.code || result.course.course_code
-        })
-      }
+      items.push({
+        id: moduleId,
+        type: 'module',
+        name: getModuleName(moduleId),
+      })
     })
 
     return items
-  }
-
-  const filterCanvasContext = (context: any, selected: { courses: number[]; assignments: number[]; modules: number[] }): any | null => {
-    if (!context || !context.courses || !Array.isArray(context.courses)) {
-      return context
-    }
-
-    // If nothing is selected, return all context (default behavior)
-    if (selected.courses.length === 0 && selected.assignments.length === 0 && selected.modules.length === 0) {
-      return context
-    }
-
-    const filteredCourses: any[] = []
-
-    // Process each course
-    for (const course of context.courses) {
-      const courseId = course.id
-      const isCourseSelected = selected.courses.includes(courseId)
-
-      // If entire course is selected, include it with all assignments/modules
-      if (isCourseSelected) {
-        filteredCourses.push({
-          ...course,
-          assignments: course.assignments || [],
-          modules: course.modules || []
-        })
-        continue
-      }
-
-      // Check if any assignments from this course are selected
-      const selectedAssignments = (course.assignments || []).filter((a: any) =>
-        selected.assignments.includes(a.id)
-      )
-
-      // Check if any modules from this course are selected
-      const selectedModules = (course.modules || []).filter((m: any) =>
-        selected.modules.includes(m.id)
-      )
-
-      // If specific assignments or modules are selected, include the course with filtered items
-      if (selectedAssignments.length > 0 || selectedModules.length > 0) {
-        filteredCourses.push({
-          ...course,
-          assignments: selectedAssignments,
-          modules: selectedModules
-        })
-      }
-    }
-
-    return filteredCourses.length > 0 ? { courses: filteredCourses } : null
   }
 
   const onSubmitAI = async (message: any) => {
@@ -745,11 +794,6 @@ export default function ChatPage() {
       if (!created) return
       sessionForSend = created
     }
-    // Filter context based on selections
-    const filteredContext = canvasContext
-      ? filterCanvasContext(canvasContext, selectedContext)
-      : null
-
     // Get selected context items to include in message parts
     const contextItems = getSelectedContextItems()
     const contextParts = contextItems.map((item) => ({
@@ -770,10 +814,11 @@ export default function ChatPage() {
         body: {
           model: selectedModel,
           webSearch,
-          analysisMode,
+          mode,
           canvas_token: canvasStatus === 'connected' ? canvasToken : undefined,
           canvas_url: canvasStatus === 'connected' ? canvasUrl : undefined,
-          canvasContext: filteredContext || undefined,
+          selected_context: selectedContext.courses.length > 0 || selectedContext.assignments.length > 0 || selectedContext.modules.length > 0 ? selectedContext : undefined,
+          selected_system_prompt_ids: selectedSystemPromptIds.length > 0 ? selectedSystemPromptIds : undefined,
         },
         headers: { 'X-Session-ID': sessionForSend.id },
       },
@@ -935,8 +980,7 @@ export default function ChatPage() {
                   <img src="/dog_chat.png" alt="Lulu chat assistant illustration" className="w-full h-auto" />
                 </div>
                 <h2 className="text-2xl font-semibold text-slate-900 mb-2">Start a conversation</h2>
-                <p className="text-slate-600 mb-8">Ask about your courses, assignments, modules, or Canvas announcements. I’ll guide you.</p>
-                {syncingCanvas && <p className="text-slate-500">Syncing Canvas data...</p>}
+                <p className="text-slate-600 mb-8">Ask about your courses, assignments, modules, or Canvas announcements. I'll guide you.</p>
               </div>
             ) : (
               uiMessages.map((message) => {
@@ -1099,7 +1143,7 @@ export default function ChatPage() {
                 ) : (
                   (dynamicSuggestions.length > 0 
                     ? dynamicSuggestions 
-                    : analysisMode === 'rubric'
+                    : mode === 'rubric'
                       ? rubricSuggestions 
                       : staticSuggestions
                   ).map((s, i) => (
@@ -1118,10 +1162,19 @@ export default function ChatPage() {
               onSubmit={onSubmitAI}
             >
               <PromptInputHeader>
-                {canvasContext && canvasContext.courses && (
+                <SystemPromptSelector
+                  selectedPromptIds={selectedSystemPromptIds}
+                  onSelectionChange={handleSystemPromptChange}
+                  mode={mode}
+                />
+                {canvasStatus === 'connected' && (
                   <Popover open={contextSelectorOpen} onOpenChange={setContextSelectorOpen}>
                     <PopoverTrigger asChild>
-                      <PromptInputButton type="button" size="sm" variant="outline">
+                      <PromptInputButton 
+                        type="button" 
+                        size="sm" 
+                        variant="outline"
+                      >
                         <FolderIcon className="text-muted-foreground" size={12} />
                         <span>
                           {selectedContext.courses.length + selectedContext.assignments.length + selectedContext.modules.length > 0
@@ -1145,32 +1198,32 @@ export default function ChatPage() {
                               {availableContext.courses.length > 0 && (
                                 <>
                                   <PromptInputCommandGroup heading="Courses">
-                                    {canvasContext.courses
-                                      .filter((course: any) => availableContext.courses.includes(Number(course.id)))
-                                      .map((course: any) => {
-                                        const isSelected = selectedContext.courses.includes(Number(course.id))
-                                        return (
-                                          <PromptInputCommandItem
-                                            key={`course-${course.id}`}
-                                            value={`course-${course.id}`}
-                                            onSelect={() => {
-                                              setSelectedContext(prev => ({
-                                                ...prev,
-                                                courses: isSelected
-                                                  ? prev.courses.filter(id => id !== course.id)
-                                                  : [...prev.courses, Number(course.id)]
-                                              }))
-                                            }}
-                                          >
-                                            <FolderIcon className="size-4" />
-                                            <div className="flex flex-col">
-                                              <span className="font-medium text-sm">{course.name}</span>
-                                              <span className="text-muted-foreground text-xs">{course.code}</span>
-                                            </div>
-                                            {isSelected && <CheckIcon className="ml-auto size-4" />}
-                                          </PromptInputCommandItem>
-                                        )
-                                      })}
+                                    {availableContext.courses.map((course) => {
+                                      const isSelected = selectedContext.courses.includes(course.id)
+                                      return (
+                                        <PromptInputCommandItem
+                                          key={`course-${course.id}`}
+                                          value={`course-${course.id}`}
+                                          onSelect={() => {
+                                            setSelectedContext(prev => ({
+                                              ...prev,
+                                              courses: isSelected
+                                                ? prev.courses.filter(id => id !== course.id)
+                                                : [...prev.courses, course.id]
+                                            }))
+                                          }}
+                                        >
+                                          <FolderIcon className="size-4" />
+                                          <div className="flex flex-col">
+                                            <span className="font-medium text-sm">{course.name}</span>
+                                            {course.code && (
+                                              <span className="text-xs text-muted-foreground">{course.code}</span>
+                                            )}
+                                          </div>
+                                          {isSelected && <CheckIcon className="ml-auto size-4" />}
+                                        </PromptInputCommandItem>
+                                      )
+                                    })}
                                   </PromptInputCommandGroup>
                                   {(availableContext.assignments.length > 0 || availableContext.modules.length > 0) && (
                                     <PromptInputCommandSeparator />
@@ -1180,34 +1233,29 @@ export default function ChatPage() {
                               {availableContext.assignments.length > 0 && (
                                 <>
                                   <PromptInputCommandGroup heading="Assignments">
-                                    {canvasContext.courses.flatMap((course: any) =>
-                                      (course.assignments || [])
-                                        .filter((assignment: any) => availableContext.assignments.includes(Number(assignment.id)))
-                                        .map((assignment: any) => {
-                                          const isSelected = selectedContext.assignments.includes(Number(assignment.id))
-                                          return (
-                                            <PromptInputCommandItem
-                                              key={`assignment-${assignment.id}`}
-                                              value={`assignment-${assignment.id}`}
-                                              onSelect={() => {
-                                                setSelectedContext(prev => ({
-                                                  ...prev,
-                                                  assignments: isSelected
-                                                    ? prev.assignments.filter(id => id !== assignment.id)
-                                                    : [...prev.assignments, Number(assignment.id)]
-                                                }))
-                                              }}
-                                            >
-                                              <FileText className="size-4" />
-                                              <div className="flex flex-col">
-                                                <span className="font-medium text-sm">{assignment.name}</span>
-                                                <span className="text-muted-foreground text-xs">{course.code}</span>
-                                              </div>
-                                              {isSelected && <CheckIcon className="ml-auto size-4" />}
-                                            </PromptInputCommandItem>
-                                          )
-                                        })
-                                    )}
+                                    {availableContext.assignments.map((assignment) => {
+                                      const isSelected = selectedContext.assignments.includes(assignment.id)
+                                      return (
+                                        <PromptInputCommandItem
+                                          key={`assignment-${assignment.id}`}
+                                          value={`assignment-${assignment.id}`}
+                                          onSelect={() => {
+                                            setSelectedContext(prev => ({
+                                              ...prev,
+                                              assignments: isSelected
+                                                ? prev.assignments.filter(id => id !== assignment.id)
+                                                : [...prev.assignments, assignment.id]
+                                            }))
+                                          }}
+                                        >
+                                          <FileText className="size-4" />
+                                          <div className="flex flex-col">
+                                            <span className="font-medium text-sm">{assignment.name}</span>
+                                          </div>
+                                          {isSelected && <CheckIcon className="ml-auto size-4" />}
+                                        </PromptInputCommandItem>
+                                      )
+                                    })}
                                   </PromptInputCommandGroup>
                                   {availableContext.modules.length > 0 && (
                                     <PromptInputCommandSeparator />
@@ -1215,36 +1263,33 @@ export default function ChatPage() {
                                 </>
                               )}
                               {availableContext.modules.length > 0 && (
-                                <PromptInputCommandGroup heading="Modules">
-                                  {canvasContext.courses.flatMap((course: any) =>
-                                    (course.modules || [])
-                                      .filter((module: any) => availableContext.modules.includes(Number(module.id)))
-                                      .map((module: any) => {
-                                        const isSelected = selectedContext.modules.includes(Number(module.id))
-                                        return (
-                                          <PromptInputCommandItem
-                                            key={`module-${module.id}`}
-                                            value={`module-${module.id}`}
-                                            onSelect={() => {
-                                              setSelectedContext(prev => ({
-                                                ...prev,
-                                                modules: isSelected
-                                                  ? prev.modules.filter(id => id !== module.id)
-                                                  : [...prev.modules, Number(module.id)]
-                                              }))
-                                            }}
-                                          >
-                                            <LayersIcon className="size-4" />
-                                            <div className="flex flex-col">
-                                              <span className="font-medium text-sm">{module.name}</span>
-                                              <span className="text-muted-foreground text-xs">{course.code}</span>
-                                            </div>
-                                            {isSelected && <CheckIcon className="ml-auto size-4" />}
-                                          </PromptInputCommandItem>
-                                        )
-                                      })
-                                  )}
-                                </PromptInputCommandGroup>
+                                <>
+                                  <PromptInputCommandGroup heading="Modules">
+                                    {availableContext.modules.map((module) => {
+                                      const isSelected = selectedContext.modules.includes(module.id)
+                                      return (
+                                        <PromptInputCommandItem
+                                          key={`module-${module.id}`}
+                                          value={`module-${module.id}`}
+                                          onSelect={() => {
+                                            setSelectedContext(prev => ({
+                                              ...prev,
+                                              modules: isSelected
+                                                ? prev.modules.filter(id => id !== module.id)
+                                                : [...prev.modules, module.id]
+                                            }))
+                                          }}
+                                        >
+                                          <LayersIcon className="size-4" />
+                                          <div className="flex flex-col">
+                                            <span className="font-medium text-sm">{module.name}</span>
+                                          </div>
+                                          {isSelected && <CheckIcon className="ml-auto size-4" />}
+                                        </PromptInputCommandItem>
+                                      )
+                                    })}
+                                  </PromptInputCommandGroup>
+                                </>
                               )}
                             </>
                           )}
@@ -1284,88 +1329,111 @@ export default function ChatPage() {
                       <PromptInputActionAddAttachments />
                     </PromptInputActionMenuContent>
                   </PromptInputActionMenu>
-                  <PromptInputSpeechButton textareaRef={textareaRef} />
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <PromptInputButton 
-                        type="button" 
-                        onClick={() => setWebSearch(v => !v)}
-                      >
-                        <GlobeIcon className={`size-4 ${webSearch ? 'text-blue-500 dark:text-blue-400' : ''}`} />
-                      </PromptInputButton>
+                      <div className="inline-flex">
+                        <PromptInputSpeechButton textareaRef={textareaRef} disabled className="cursor-not-allowed" />
+                      </div>
                     </TooltipTrigger>
                     <TooltipContent>
-                      {webSearch 
-                        ? 'Web Search enabled - AI will search the web for current information'
-                        : 'Enable Web Search to allow AI to search the web for current information'}
+                      This feature will be ready soon
                     </TooltipContent>
                   </Tooltip>
-                  <Popover open={analysisModeOpen} onOpenChange={setAnalysisModeOpen}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="inline-flex">
+                        <PromptInputButton 
+                          type="button" 
+                          onClick={() => setWebSearch(v => !v)}
+                          disabled
+                          className="cursor-not-allowed"
+                        >
+                          <GlobeIcon className={`size-4 ${webSearch ? 'text-blue-500 dark:text-blue-400' : ''}`} />
+                        </PromptInputButton>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      This feature will be ready soon
+                    </TooltipContent>
+                  </Tooltip>
+                  <Popover open={modeOpen} onOpenChange={setModeOpen}>
                     <PopoverTrigger asChild>
                       <PromptInputButton type="button">
-                        {analysisMode === 'rubric' ? (
+                        {mode === 'rubric' ? (
                           <FileText className="size-4" />
-                        ) : analysisMode === 'quiz' ? (
+                        ) : mode === 'quiz' ? (
                           <FileQuestion className="size-4" />
-                        ) : analysisMode === 'study-plan' ? (
+                        ) : mode === 'study-plan' ? (
                           <BookOpen className="size-4" />
                         ) : (
                           <GraduationCap className="size-4" />
                         )}
-                        <span className="ml-1">
-                          {analysisMode === 'rubric' ? 'Rubric' : analysisMode === 'quiz' ? 'Quiz' : analysisMode === 'study-plan' ? 'Study Plan' : 'Generic'}
+                        <span className="ml-1 flex items-center gap-1.5">
+                          {mode === 'rubric' ? 'Rubric' : mode === 'quiz' ? 'Quiz' : mode === 'study-plan' ? 'Study Plan' : 'Generic'}
+                          {(mode === 'rubric' || mode === 'quiz' || mode === 'study-plan') && (
+                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-green-100 text-green-800 border-green-300 dark:bg-green-900 dark:text-green-200 dark:border-green-700">Beta</Badge>
+                          )}
                         </span>
                       </PromptInputButton>
                     </PopoverTrigger>
                     <PopoverContent className="w-64 p-0" align="start">
                       <PromptInputCommand>
-                        <PromptInputCommandInput placeholder="Search analysis modes..." />
+                        <PromptInputCommandInput placeholder="Search modes..." />
                         <PromptInputCommandList>
-                          <PromptInputCommandEmpty>No analysis mode found.</PromptInputCommandEmpty>
-                          <PromptInputCommandGroup heading="Analysis Modes">
+                          <PromptInputCommandEmpty>No mode found.</PromptInputCommandEmpty>
+                          <PromptInputCommandGroup heading="Modes">
                             <PromptInputCommandItem
                               value="generic"
                               onSelect={() => {
-                                setAnalysisMode(null)
-                                setAnalysisModeOpen(false)
+                                handleModeChange(null)
+                                setModeOpen(false)
                               }}
                             >
                               <GraduationCap className="size-4" />
                               <span>Generic</span>
-                              {analysisMode === null && <CheckIcon className="ml-auto size-4" />}
+                              {mode === null && <CheckIcon className="ml-auto size-4" />}
                             </PromptInputCommandItem>
                             <PromptInputCommandItem
                               value="rubric"
                               onSelect={() => {
-                                setAnalysisMode('rubric')
-                                setAnalysisModeOpen(false)
+                                handleModeChange('rubric')
+                                setModeOpen(false)
                               }}
                             >
                               <FileText className="size-4" />
-                              <span>Rubric Analysis</span>
-                              {analysisMode === 'rubric' && <CheckIcon className="ml-auto size-4" />}
+                              <span className="flex items-center gap-1.5">
+                                Rubric Analysis
+                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-green-100 text-green-800 border-green-300 dark:bg-green-900 dark:text-green-200 dark:border-green-700">Beta</Badge>
+                              </span>
+                              {mode === 'rubric' && <CheckIcon className="ml-auto size-4" />}
                             </PromptInputCommandItem>
                             <PromptInputCommandItem
                               value="quiz"
                               onSelect={() => {
-                                setAnalysisMode('quiz')
-                                setAnalysisModeOpen(false)
+                                handleModeChange('quiz')
+                                setModeOpen(false)
                               }}
                             >
                               <FileQuestion className="size-4" />
-                              <span>Quiz Analysis</span>
-                              {analysisMode === 'quiz' && <CheckIcon className="ml-auto size-4" />}
+                              <span className="flex items-center gap-1.5">
+                                Quiz Analysis
+                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-green-100 text-green-800 border-green-300 dark:bg-green-900 dark:text-green-200 dark:border-green-700">Beta</Badge>
+                              </span>
+                              {mode === 'quiz' && <CheckIcon className="ml-auto size-4" />}
                             </PromptInputCommandItem>
                             <PromptInputCommandItem
                               value="study-plan"
                               onSelect={() => {
-                                setAnalysisMode('study-plan')
-                                setAnalysisModeOpen(false)
+                                handleModeChange('study-plan')
+                                setModeOpen(false)
                               }}
                             >
                               <BookOpen className="size-4" />
-                              <span>Study Plan</span>
-                              {analysisMode === 'study-plan' && <CheckIcon className="ml-auto size-4" />}
+                              <span className="flex items-center gap-1.5">
+                                Study Plan
+                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-green-100 text-green-800 border-green-300 dark:bg-green-900 dark:text-green-200 dark:border-green-700">Beta</Badge>
+                              </span>
+                              {mode === 'study-plan' && <CheckIcon className="ml-auto size-4" />}
                             </PromptInputCommandItem>
                           </PromptInputCommandGroup>
                         </PromptInputCommandList>

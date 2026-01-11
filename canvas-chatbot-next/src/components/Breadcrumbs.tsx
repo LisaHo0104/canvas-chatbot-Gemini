@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { Badge } from '@/components/ui/badge'
 
 export default function Breadcrumbs() {
   const pathname = usePathname()
@@ -10,7 +11,8 @@ export default function Breadcrumbs() {
     const href = '/' + parts.slice(0, idx + 1).join('/')
     const label = part.replace(/-/g, ' ')
     const isLast = idx === parts.length - 1
-    return { href, label, isLast }
+    const isBeta = part === 'quiz' || part === 'rubric' || part === 'study-plan'
+    return { href, label, isLast, isBeta }
   })
 
   if (items.length <= 1) return null
@@ -25,10 +27,14 @@ export default function Breadcrumbs() {
           <li key={idx} className="flex items-center gap-1">
             <span className="text-muted-foreground">/</span>
             {item.isLast ? (
-              <span className="text-foreground">{item.label}</span>
-            ) : (
-              <Link href={item.href} className="text-muted-foreground hover:text-foreground">
+              <span className="text-foreground flex items-center gap-1.5">
                 {item.label}
+                {item.isBeta && <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">Beta</Badge>}
+              </span>
+            ) : (
+              <Link href={item.href} className="text-muted-foreground hover:text-foreground flex items-center gap-1.5">
+                {item.label}
+                {item.isBeta && <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">Beta</Badge>}
               </Link>
             )}
           </li>

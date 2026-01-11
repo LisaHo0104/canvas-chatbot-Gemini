@@ -22,8 +22,8 @@ export function ExportImportButtons({ onImportComplete }: ExportImportButtonsPro
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [importDialogOpen, setImportDialogOpen] = useState(false)
   const [importOption, setImportOption] = useState<'apply' | 'save'>('save')
-  const [presetName, setPresetName] = useState('')
-  const [presetDescription, setPresetDescription] = useState('')
+  const [profileName, setProfileName] = useState('')
+  const [profileDescription, setProfileDescription] = useState('')
   const [importData, setImportData] = useState<any>(null)
   const [importing, setImporting] = useState(false)
   const [exporting, setExporting] = useState(false)
@@ -41,14 +41,14 @@ export function ExportImportButtons({ onImportComplete }: ExportImportButtonsPro
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `context-preset-${new Date().toISOString().split('T')[0]}.json`
+      a.download = `context-profile-${new Date().toISOString().split('T')[0]}.json`
       document.body.appendChild(a)
       a.click()
       window.URL.revokeObjectURL(url)
       document.body.removeChild(a)
     } catch (error) {
       console.error('Error exporting:', error)
-      alert('Failed to export preset. Please try again.')
+      alert('Failed to export profile. Please try again.')
     } finally {
       setExporting(false)
     }
@@ -68,8 +68,8 @@ export function ExportImportButtons({ onImportComplete }: ExportImportButtonsPro
       }
 
       setImportData(data)
-      setPresetName(data.preset_name || 'Imported Preset')
-      setPresetDescription(data.metadata?.description || '')
+      setProfileName(data.profile_name || data.preset_name || 'Imported Profile')
+      setProfileDescription(data.metadata?.description || '')
       setImportDialogOpen(true)
     } catch (error) {
       console.error('Error parsing import file:', error)
@@ -85,8 +85,8 @@ export function ExportImportButtons({ onImportComplete }: ExportImportButtonsPro
   const handleImport = async () => {
     if (!importData) return
 
-    if (importOption === 'save' && !presetName.trim()) {
-      setError('Preset name is required when saving as preset')
+    if (importOption === 'save' && !profileName.trim()) {
+      setError('Profile name is required when saving as profile')
       return
     }
 
@@ -100,8 +100,11 @@ export function ExportImportButtons({ onImportComplete }: ExportImportButtonsPro
         body: JSON.stringify({
           selections: importData.selections,
           applyDirectly: importOption === 'apply',
-          presetName: importOption === 'save' ? presetName.trim() : null,
-          presetDescription: importOption === 'save' ? presetDescription.trim() || null : null,
+          profileName: importOption === 'save' ? profileName.trim() : null,
+          profileDescription: importOption === 'save' ? profileDescription.trim() || null : null,
+          // Legacy support
+          presetName: importOption === 'save' ? profileName.trim() : null,
+          presetDescription: importOption === 'save' ? profileDescription.trim() || null : null,
         }),
       })
 
@@ -113,15 +116,15 @@ export function ExportImportButtons({ onImportComplete }: ExportImportButtonsPro
       onImportComplete()
       setImportDialogOpen(false)
       setImportData(null)
-      setPresetName('')
-      setPresetDescription('')
+      setProfileName('')
+      setProfileDescription('')
       setImportOption('save')
 
       if (importOption === 'apply') {
         window.location.reload()
       }
     } catch (error) {
-      setError(error instanceof Error ? error.message : 'Failed to import preset')
+      setError(error instanceof Error ? error.message : 'Failed to import profile')
     } finally {
       setImporting(false)
     }
@@ -163,9 +166,9 @@ export function ExportImportButtons({ onImportComplete }: ExportImportButtonsPro
       <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Import Preset</DialogTitle>
+            <DialogTitle>Import Profile</DialogTitle>
             <DialogDescription>
-              Choose how to import the preset from the selected file.
+              Choose how to import the profile from the selected file.
             </DialogDescription>
           </DialogHeader>
 
@@ -173,7 +176,7 @@ export function ExportImportButtons({ onImportComplete }: ExportImportButtonsPro
             {importData && (
               <>
                 <div className="space-y-2">
-                  <Label>File: {importData.preset_name || 'Untitled Preset'}</Label>
+                  <Label>File: {importData.profile_name || importData.preset_name || 'Untitled Profile'}</Label>
                   {importData.metadata && (
                     <div className="rounded-md border bg-muted/50 p-3 space-y-1 text-sm">
                       {importData.metadata.total_courses !== undefined && (
@@ -214,7 +217,7 @@ export function ExportImportButtons({ onImportComplete }: ExportImportButtonsPro
                         className="w-4 h-4"
                         disabled={importing}
                       />
-                      <span className="text-sm">Save as new preset</span>
+                      <span className="text-sm">Save as new profile</span>
                     </label>
                   </div>
                 </div>
@@ -223,12 +226,12 @@ export function ExportImportButtons({ onImportComplete }: ExportImportButtonsPro
                   <>
                     <div className="space-y-2">
                       <Label htmlFor="import-name">
-                        Preset Name <span className="text-destructive">*</span>
+                        Profile Name <span className="text-destructive">*</span>
                       </Label>
                       <Input
                         id="import-name"
-                        value={presetName}
-                        onChange={(e) => setPresetName(e.target.value)}
+                        value={profileName}
+                        onChange={(e) => setProfileName(e.target.value)}
                         placeholder="e.g., Current Semester"
                         disabled={importing}
                       />
@@ -238,8 +241,8 @@ export function ExportImportButtons({ onImportComplete }: ExportImportButtonsPro
                       <Label htmlFor="import-description">Description (optional)</Label>
                       <Input
                         id="import-description"
-                        value={presetDescription}
-                        onChange={(e) => setPresetDescription(e.target.value)}
+                        value={profileDescription}
+                        onChange={(e) => setProfileDescription(e.target.value)}
                         placeholder="e.g., Fall 2024 courses"
                         disabled={importing}
                       />
@@ -262,7 +265,7 @@ export function ExportImportButtons({ onImportComplete }: ExportImportButtonsPro
             </Button>
             <Button
               onClick={handleImport}
-              disabled={importing || (importOption === 'save' && !presetName.trim())}
+              disabled={importing || (importOption === 'save' && !profileName.trim())}
             >
               {importing ? (
                 <>
