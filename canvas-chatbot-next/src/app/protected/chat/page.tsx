@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient as createSupabaseClient } from '@/lib/supabase/client'
 import { X, CopyIcon, RefreshCcwIcon, GlobeIcon, CheckIcon, SparklesIcon, FolderIcon, LayersIcon, FileText, BookOpen, GraduationCap, FileQuestion } from 'lucide-react'
@@ -80,6 +80,13 @@ export default function ChatPage() {
   const [titleGenerating, setTitleGenerating] = useState(false)
   const [canvasContext, setCanvasContext] = useState<any | null>(null)
   const [syncingCanvas, setSyncingCanvas] = useState(false)
+  // Items selected on context page (available pool)
+  const [availableContext, setAvailableContext] = useState<{ courses: number[]; assignments: number[]; modules: number[] }>({
+    courses: [],
+    assignments: [],
+    modules: []
+  })
+  // Items selected for current chat session
   const [selectedContext, setSelectedContext] = useState<{ courses: number[]; assignments: number[]; modules: number[] }>({
     courses: [],
     assignments: [],
@@ -402,6 +409,51 @@ export default function ChatPage() {
     }
     prefetchCanvas()
   }, [canvasStatus])
+
+  // Load available context items from database (selected on context page)
+  const loadAvailableContext = useCallback(async () => {
+    if (canvasStatus !== 'connected') return
+    try {
+      const res = await fetch('/api/context/selection')
+      if (res.ok) {
+        const data = await res.json()
+        // These are the items selected on the context page (available pool)
+        const courses = (data.courses || []).map((id: any) => Number(id))
+        const assignments = (data.assignments || []).map((id: any) => Number(id))
+        const modules = (data.modules || []).map((id: any) => Number(id))
+        
+        console.log('[DEBUG] Loaded available context:', { courses, assignments, modules })
+        
+        setAvailableContext({
+          courses,
+          assignments,
+          modules,
+        })
+      } else {
+        console.error('[DEBUG] Failed to load available context, status:', res.status)
+      }
+    } catch (e) {
+      console.error('Failed to load available context', e)
+    }
+  }, [canvasStatus])
+
+  useEffect(() => {
+    loadAvailableContext()
+  }, [loadAvailableContext])
+
+  // Also reload available context when canvasContext is loaded to ensure they're in sync
+  useEffect(() => {
+    if (canvasContext && canvasStatus === 'connected') {
+      loadAvailableContext()
+    }
+  }, [canvasContext, canvasStatus, loadAvailableContext])
+
+  // Reload available context when context selector popover opens to ensure latest data
+  useEffect(() => {
+    if (contextSelectorOpen && canvasStatus === 'connected') {
+      loadAvailableContext()
+    }
+  }, [contextSelectorOpen, canvasStatus, loadAvailableContext])
 
   useEffect(() => {
     const handleStorage = (event: StorageEvent) => {
@@ -1082,91 +1134,120 @@ export default function ChatPage() {
                       <PromptInputCommand>
                         <PromptInputCommandInput placeholder="Search courses, assignments, modules..." />
                         <PromptInputCommandList>
-                          <PromptInputCommandEmpty>No context found.</PromptInputCommandEmpty>
-                          <PromptInputCommandGroup heading="Courses">
-                            {canvasContext.courses.map((course: any) => {
-                              const isSelected = selectedContext.courses.includes(course.id)
-                              return (
-                                <PromptInputCommandItem
-                                  key={`course-${course.id}`}
-                                  value={`course-${course.id}`}
-                                  onSelect={() => {
-                                    setSelectedContext(prev => ({
-                                      ...prev,
-                                      courses: isSelected
-                                        ? prev.courses.filter(id => id !== course.id)
-                                        : [...prev.courses, course.id]
-                                    }))
-                                  }}
-                                >
-                                  <FolderIcon className="size-4" />
-                                  <div className="flex flex-col">
-                                    <span className="font-medium text-sm">{course.name}</span>
-                                    <span className="text-muted-foreground text-xs">{course.code}</span>
-                                  </div>
-                                  {isSelected && <CheckIcon className="ml-auto size-4" />}
-                                </PromptInputCommandItem>
-                              )
-                            })}
-                          </PromptInputCommandGroup>
-                          <PromptInputCommandSeparator />
-                          <PromptInputCommandGroup heading="Assignments">
-                            {canvasContext.courses.flatMap((course: any) =>
-                              (course.assignments || []).map((assignment: any) => {
-                                const isSelected = selectedContext.assignments.includes(assignment.id)
-                                return (
-                                  <PromptInputCommandItem
-                                    key={`assignment-${assignment.id}`}
-                                    value={`assignment-${assignment.id}`}
-                                    onSelect={() => {
-                                      setSelectedContext(prev => ({
-                                        ...prev,
-                                        assignments: isSelected
-                                          ? prev.assignments.filter(id => id !== assignment.id)
-                                          : [...prev.assignments, assignment.id]
-                                      }))
-                                    }}
-                                  >
-                                    <FileText className="size-4" />
-                                    <div className="flex flex-col">
-                                      <span className="font-medium text-sm">{assignment.name}</span>
-                                      <span className="text-muted-foreground text-xs">{course.code}</span>
-                                    </div>
-                                    {isSelected && <CheckIcon className="ml-auto size-4" />}
-                                  </PromptInputCommandItem>
-                                )
-                              })
-                            )}
-                          </PromptInputCommandGroup>
-                          <PromptInputCommandSeparator />
-                          <PromptInputCommandGroup heading="Modules">
-                            {canvasContext.courses.flatMap((course: any) =>
-                              (course.modules || []).map((module: any) => {
-                                const isSelected = selectedContext.modules.includes(module.id)
-                                return (
-                                  <PromptInputCommandItem
-                                    key={`module-${module.id}`}
-                                    value={`module-${module.id}`}
-                                    onSelect={() => {
-                                      setSelectedContext(prev => ({
-                                        ...prev,
-                                        modules: isSelected
-                                          ? prev.modules.filter(id => id !== module.id)
-                                          : [...prev.modules, module.id]
-                                      }))
-                                    }}
-                                  >
-                                    <LayersIcon className="size-4" />
-                                    <div className="flex flex-col">
-                                      <span className="font-medium text-sm">{module.name}</span>
-                                      <span className="text-muted-foreground text-xs">{course.code}</span>
-                                    </div>
-                                    {isSelected && <CheckIcon className="ml-auto size-4" />}
-                                  </PromptInputCommandItem>
-                                )
-                              })
-                            )}
-                          </PromptInputCommandGroup>
+                          {availableContext.courses.length === 0 && 
+                           availableContext.assignments.length === 0 && 
+                           availableContext.modules.length === 0 ? (
+                            <PromptInputCommandEmpty>
+                              No context available. Go to the Context page to select items.
+                            </PromptInputCommandEmpty>
+                          ) : (
+                            <>
+                              {availableContext.courses.length > 0 && (
+                                <>
+                                  <PromptInputCommandGroup heading="Courses">
+                                    {canvasContext.courses
+                                      .filter((course: any) => availableContext.courses.includes(Number(course.id)))
+                                      .map((course: any) => {
+                                        const isSelected = selectedContext.courses.includes(Number(course.id))
+                                        return (
+                                          <PromptInputCommandItem
+                                            key={`course-${course.id}`}
+                                            value={`course-${course.id}`}
+                                            onSelect={() => {
+                                              setSelectedContext(prev => ({
+                                                ...prev,
+                                                courses: isSelected
+                                                  ? prev.courses.filter(id => id !== course.id)
+                                                  : [...prev.courses, Number(course.id)]
+                                              }))
+                                            }}
+                                          >
+                                            <FolderIcon className="size-4" />
+                                            <div className="flex flex-col">
+                                              <span className="font-medium text-sm">{course.name}</span>
+                                              <span className="text-muted-foreground text-xs">{course.code}</span>
+                                            </div>
+                                            {isSelected && <CheckIcon className="ml-auto size-4" />}
+                                          </PromptInputCommandItem>
+                                        )
+                                      })}
+                                  </PromptInputCommandGroup>
+                                  {(availableContext.assignments.length > 0 || availableContext.modules.length > 0) && (
+                                    <PromptInputCommandSeparator />
+                                  )}
+                                </>
+                              )}
+                              {availableContext.assignments.length > 0 && (
+                                <>
+                                  <PromptInputCommandGroup heading="Assignments">
+                                    {canvasContext.courses.flatMap((course: any) =>
+                                      (course.assignments || [])
+                                        .filter((assignment: any) => availableContext.assignments.includes(Number(assignment.id)))
+                                        .map((assignment: any) => {
+                                          const isSelected = selectedContext.assignments.includes(Number(assignment.id))
+                                          return (
+                                            <PromptInputCommandItem
+                                              key={`assignment-${assignment.id}`}
+                                              value={`assignment-${assignment.id}`}
+                                              onSelect={() => {
+                                                setSelectedContext(prev => ({
+                                                  ...prev,
+                                                  assignments: isSelected
+                                                    ? prev.assignments.filter(id => id !== assignment.id)
+                                                    : [...prev.assignments, Number(assignment.id)]
+                                                }))
+                                              }}
+                                            >
+                                              <FileText className="size-4" />
+                                              <div className="flex flex-col">
+                                                <span className="font-medium text-sm">{assignment.name}</span>
+                                                <span className="text-muted-foreground text-xs">{course.code}</span>
+                                              </div>
+                                              {isSelected && <CheckIcon className="ml-auto size-4" />}
+                                            </PromptInputCommandItem>
+                                          )
+                                        })
+                                    )}
+                                  </PromptInputCommandGroup>
+                                  {availableContext.modules.length > 0 && (
+                                    <PromptInputCommandSeparator />
+                                  )}
+                                </>
+                              )}
+                              {availableContext.modules.length > 0 && (
+                                <PromptInputCommandGroup heading="Modules">
+                                  {canvasContext.courses.flatMap((course: any) =>
+                                    (course.modules || [])
+                                      .filter((module: any) => availableContext.modules.includes(Number(module.id)))
+                                      .map((module: any) => {
+                                        const isSelected = selectedContext.modules.includes(Number(module.id))
+                                        return (
+                                          <PromptInputCommandItem
+                                            key={`module-${module.id}`}
+                                            value={`module-${module.id}`}
+                                            onSelect={() => {
+                                              setSelectedContext(prev => ({
+                                                ...prev,
+                                                modules: isSelected
+                                                  ? prev.modules.filter(id => id !== module.id)
+                                                  : [...prev.modules, Number(module.id)]
+                                              }))
+                                            }}
+                                          >
+                                            <LayersIcon className="size-4" />
+                                            <div className="flex flex-col">
+                                              <span className="font-medium text-sm">{module.name}</span>
+                                              <span className="text-muted-foreground text-xs">{course.code}</span>
+                                            </div>
+                                            {isSelected && <CheckIcon className="ml-auto size-4" />}
+                                          </PromptInputCommandItem>
+                                        )
+                                      })
+                                  )}
+                                </PromptInputCommandGroup>
+                              )}
+                            </>
+                          )}
                         </PromptInputCommandList>
                       </PromptInputCommand>
                     </PopoverContent>

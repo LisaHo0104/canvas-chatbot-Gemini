@@ -8,6 +8,7 @@ import { LogoutButton } from '@/components/logout-button'
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { Menu } from 'lucide-react'
 import { NavigationMenu, NavigationMenuList, NavigationMenuItem, NavigationMenuLink } from '@/components/ui/navigation-menu'
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { createClient as createSupabaseClient } from '@/lib/supabase/client'
 
@@ -79,12 +80,28 @@ export default function MainNavBar() {
                       <NavigationMenuLink
                         asChild
                         className={cn(
-                          pathname === '/protected/quiz' ? 'bg-accent text-accent-foreground' : ''
+                          pathname === '/protected/context' ? 'bg-accent text-accent-foreground' : ''
                         )}
-                        aria-current={pathname === '/protected/quiz' ? 'page' : undefined}
+                        aria-current={pathname === '/protected/context' ? 'page' : undefined}
                       >
-                        <Link href="/protected/quiz">Quiz</Link>
+                        <Link href="/protected/context">Context</Link>
                       </NavigationMenuLink>
+                    </NavigationMenuItem>
+                    <NavigationMenuItem>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <NavigationMenuLink
+                            className={cn(
+                              'inline-flex items-center rounded-md px-3 py-2 text-sm text-muted-foreground opacity-50 cursor-not-allowed',
+                              pathname === '/protected/quiz' ? 'bg-accent text-accent-foreground' : ''
+                            )}
+                            aria-disabled="true"
+                          >
+                            Quiz
+                          </NavigationMenuLink>
+                        </TooltipTrigger>
+                        <TooltipContent>This feature will be ready soon</TooltipContent>
+                      </Tooltip>
                     </NavigationMenuItem>
                     <NavigationMenuItem>
                       <NavigationMenuLink
@@ -98,26 +115,20 @@ export default function MainNavBar() {
                       </NavigationMenuLink>
                     </NavigationMenuItem>
                     <NavigationMenuItem>
-                      <NavigationMenuLink
-                        asChild
-                        className={cn(
-                          pathname.startsWith('/help') ? 'bg-accent text-accent-foreground' : ''
-                        )}
-                        aria-current={pathname.startsWith('/help') ? 'page' : undefined}
-                      >
-                        <Link href="/help">Help</Link>
-                      </NavigationMenuLink>
-                    </NavigationMenuItem>
-                    <NavigationMenuItem>
-                      <NavigationMenuLink
-                        asChild
-                        className={cn(
-                          pathname.startsWith('/account/billing') ? 'bg-accent text-accent-foreground' : ''
-                        )}
-                        aria-current={pathname.startsWith('/account/billing') ? 'page' : undefined}
-                      >
-                        <Link href="/account/billing">Billing</Link>
-                      </NavigationMenuLink>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <NavigationMenuLink
+                            className={cn(
+                              'inline-flex items-center rounded-md px-3 py-2 text-sm text-muted-foreground opacity-50 cursor-not-allowed',
+                              pathname.startsWith('/account/billing') ? 'bg-accent text-accent-foreground' : ''
+                            )}
+                            aria-disabled="true"
+                          >
+                            Billing
+                          </NavigationMenuLink>
+                        </TooltipTrigger>
+                        <TooltipContent>Not ready for public use</TooltipContent>
+                      </Tooltip>
                     </NavigationMenuItem>
                   </NavigationMenuList>
                 </NavigationMenu>
@@ -133,17 +144,17 @@ export default function MainNavBar() {
                     <DropdownMenuItem asChild>
                       <Link href="/protected/chat">Chat</Link>
                     </DropdownMenuItem>
+                    <DropdownMenuItem disabled title="This feature will be ready soon">
+                      Quiz
+                    </DropdownMenuItem>
                     <DropdownMenuItem asChild>
-                      <Link href="/protected/quiz">Quiz</Link>
+                      <Link href="/protected/context">Context</Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
                       <Link href="/protected/settings">Settings</Link>
                     </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <Link href="/help">Help</Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <Link href="/account/billing">Billing</Link>
+                    <DropdownMenuItem disabled title="Not ready for public use">
+                      Billing
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
                       <LogoutButton />
