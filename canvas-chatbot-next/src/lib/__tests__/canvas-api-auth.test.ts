@@ -27,7 +27,7 @@ describe('CanvasAPIService auth headers', () => {
     await service.getAssignment(1, 2, { includeRubric: true })
     const [, options] = spy.mock.calls.at(-1) as any
     expect(options.headers.Authorization).toBe(`Bearer ${token}`)
-    expect(options.params.include).toEqual(['rubric'])
+    expect(options.params['include[]']).toEqual(['rubric'])
   })
 
   test('getAssignmentSubmission sets Authorization Bearer header', async () => {

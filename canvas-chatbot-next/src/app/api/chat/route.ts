@@ -14,6 +14,7 @@ import { createOpenRouterProvider } from '@/lib/ai-sdk/openrouter';
 import { getDefaultModelId } from '@/lib/ai-sdk/openrouter';
 import { tavilySearch } from '@tavily/ai-sdk';
 import { SYSTEM_PROMPT } from '@/lib/system-prompt';
+import { CanvasContextService, type CanvasContextAttachment } from '@/lib/canvas-context';
 
 export const maxDuration = 300;
 export const runtime = 'nodejs';
@@ -21,7 +22,7 @@ export const runtime = 'nodejs';
 async function chatHandler(request: NextRequest) {
 	try {
 		const body = await request.json();
-		const { model, messages: incomingMessages, canvasContext } = body;
+		const { model, messages: incomingMessages, canvasContext, analysisMode } = body;
 
 		if (
 			!incomingMessages ||
@@ -35,15 +36,23 @@ async function chatHandler(request: NextRequest) {
 		}
 
 		// Extract the text content of the last user message for processing
+		const lastUserMessage = (incomingMessages as UIMessage[])
+			.slice()
+			.reverse()
+			.find((m) => m.role === 'user');
+		
 		const currentMessageContent = String(
-			(incomingMessages as UIMessage[])
-				.slice()
-				.reverse()
-				.find((m) => m.role === 'user')
+			lastUserMessage
 				?.parts.filter((p: any) => p.type === 'text')
 				.map((p: any) => String(p.text || ''))
 				.join('') || '',
 		);
+
+		// Extract context attachments from the last user message
+		const contextAttachments: CanvasContextAttachment[] = lastUserMessage
+			?.parts.filter((p: any) => p.type === 'context')
+			.map((p: any) => p.context as CanvasContextAttachment)
+			|| [];
 
 		const supabase = createRouteHandlerClient(request);
 
@@ -89,7 +98,11 @@ async function chatHandler(request: NextRequest) {
 
 		const tavilyTool = tavilySearch();
 		console.log('[DEBUG] Initializing tools: webSearch enabled with strict mode');
-		const tools = {
+		
+		// Conditionally restrict tools for rubric analysis mode
+		// If rubric mode is active and analyze_rubric hasn't been called yet, only provide analyze_rubric
+		// This will be checked dynamically in prepareStep, but we prepare the base tools here
+		const baseTools = {
 			...canvasTools,
 			webSearch: {
 				...tavilyTool,
@@ -98,6 +111,8 @@ async function chatHandler(request: NextRequest) {
 					'Search the web for up-to-date facts and sources when Canvas data is insufficient',
 			},
 		};
+		
+		const tools = baseTools;
 
 		const shouldUseCanvasTools = Boolean(canvasApiKey && canvasApiUrl);
 
@@ -141,39 +156,69 @@ async function chatHandler(request: NextRequest) {
 		// Manual filtering is unnecessary and can cause issues (e.g. missing tool contexts).
 		const uiMessages = incomingMessages;
 
-		const formatCanvasContext = (ctx: any): string => {
-			try {
-				if (!ctx || !Array.isArray(ctx?.courses)) return '';
-				const lines: string[] = [];
-				lines.push('[Canvas Context]');
-				lines.push(`User is enrolled in ${ctx.courses.length} courses:`);
-				lines.push('');
-				for (const course of ctx.courses.slice(0, 20)) {
-					lines.push(`${course.name} (${course.code})`);
-					const assigns = Array.isArray(course.assignments) ? course.assignments.slice(0, 30) : [];
-					const mods = Array.isArray(course.modules) ? course.modules.slice(0, 30) : [];
-					if (assigns.length > 0) {
-						lines.push(`  - Assignments: ${assigns.map((a: any) => `${a.name} (ID:${a.id})`).join(', ')}`);
-					} else {
-						lines.push(`  - Assignments: none`);
+		// Extract assignment info from context attachments for rubric analysis
+		const assignmentAttachments = contextAttachments.filter(
+			(att) => att.type === 'assignment'
+		);
+		
+		// Find assignment details from canvas context
+		const findTargetAssignment = (): { courseId: number; assignmentId: number } | null => {
+			if (analysisMode === 'rubric' && assignmentAttachments.length > 0 && canvasContext) {
+				const assignmentId = assignmentAttachments[0].id;
+				// Find the assignment in canvas context
+				if (canvasContext.courses && Array.isArray(canvasContext.courses)) {
+					for (const course of canvasContext.courses) {
+						if (course.assignments && Array.isArray(course.assignments)) {
+							const assignment = course.assignments.find(
+								(a: any) => a.id === assignmentId
+							);
+							if (assignment) {
+								return {
+									courseId: course.id,
+									assignmentId: assignment.id,
+								};
+							}
+						}
 					}
-					if (mods.length > 0) {
-						lines.push(`  - Modules: ${mods.map((m: any) => `${m.name} (ID:${m.id})`).join(', ')}`);
-					} else {
-						lines.push(`  - Modules: none`);
-					}
-					lines.push('');
 				}
-				return lines.join('\n');
-			} catch {
-				return '';
 			}
+			return null;
 		};
+		
+		const targetAssignment = findTargetAssignment();
+
+		// Format Canvas context using the clean template-based formatter
+		const formattedContext = CanvasContextService.formatAttachedContext(
+			canvasContext,
+			contextAttachments
+		);
+
+		// Enhance system prompt when rubric mode is active
+		let rubricEnforcementPrompt = '';
+		if (analysisMode === 'rubric' && targetAssignment) {
+			rubricEnforcementPrompt = `\n\n⚠️ CRITICAL: RUBRIC ANALYSIS MODE IS ACTIVE
+			
+You MUST follow this sequence:
+1. Call 'analyze_rubric' tool immediately with:
+   - courseId: ${targetAssignment.courseId}
+   - assignmentId: ${targetAssignment.assignmentId}
+
+2. After receiving the rubric data, systematically analyze it following the framework:
+   - Map ratings to grade levels (HD/D/C/P/F)
+   - Identify requirements for each grade level
+   - Generate common mistakes
+   - Create actionable checklist items
+   - Calculate scoring breakdown
+
+3. Call 'provide_rubric_analysis' with the complete analyzed structure matching RubricAnalysisOutput format.
+
+This sequence is REQUIRED. Do not skip any step. The provide_rubric_analysis tool is essential for rendering the generative UI component.`;
+		}
 
 		const systemText =
-			typeof canvasContext !== 'undefined' && canvasContext
-				? `${SYSTEM_PROMPT}\n\n${formatCanvasContext(canvasContext)}`
-				: SYSTEM_PROMPT;
+			typeof canvasContext !== 'undefined' && canvasContext && formattedContext
+				? `${SYSTEM_PROMPT}${rubricEnforcementPrompt}\n\n${formattedContext}`
+				: `${SYSTEM_PROMPT}${rubricEnforcementPrompt}`;
 
 		const uiMessagesWithSystem: UIMessage[] = [
 			{ role: 'system', parts: [{ type: 'text', text: systemText }] } as any,
@@ -199,6 +244,7 @@ async function chatHandler(request: NextRequest) {
 			typeof (body as any)?.smooth_delay_ms === 'number'
 				? (body as any).smooth_delay_ms
 				: 20;
+		
 		const agent = new ToolLoopAgent({
 			model: openrouter.chat(selectedModel),
 			tools,
@@ -206,9 +252,75 @@ async function chatHandler(request: NextRequest) {
 				console.log(
 					`[DEBUG] Step ${stepNumber}: Input messages count: ${messages.length}`,
 				);
+				
+				// Check if analyze_rubric has been called in previous steps or current messages
+				const checkForToolCall = (toolName: string, inSteps: any[], inMessages: any[]) => {
+					// Check in previous steps
+					const inStepsResult = inSteps.some((step: any) => {
+						const stepMessages = step.messages || [];
+						return stepMessages.some((msg: any) => {
+							if (Array.isArray(msg.content)) {
+								return msg.content.some((part: any) => {
+									return (
+										part.type === 'tool-call' &&
+										part.toolName === toolName
+									);
+							});
+							}
+							return false;
+						});
+					});
+					
+					// Check in current messages
+					const inMessagesResult = inMessages.some((msg: any) => {
+						if (Array.isArray(msg.content)) {
+							return msg.content.some((part: any) => {
+								return (
+									part.type === 'tool-call' &&
+									part.toolName === toolName
+								);
+							});
+						}
+						return false;
+					});
+					
+					return inStepsResult || inMessagesResult;
+				};
+				
+				const hasAnalyzedRubric = checkForToolCall('analyze_rubric', steps, messages);
+				const hasProvidedAnalysis = checkForToolCall('provide_rubric_analysis', steps, messages);
+				
+				// Log rubric analysis progress for debugging
+				let reminderInjected = false;
+				if (analysisMode === 'rubric' && targetAssignment) {
+					console.log(
+						`[DEBUG] Step ${stepNumber}: Rubric analysis progress - analyze_rubric: ${hasAnalyzedRubric}, provide_rubric_analysis: ${hasProvidedAnalysis}`,
+					);
+					
+					// If analyze_rubric was called but provide_rubric_analysis hasn't been called yet,
+					// inject a reminder message to force the call
+					if (hasAnalyzedRubric && !hasProvidedAnalysis) {
+						console.log(
+							`[DEBUG] Step ${stepNumber}: analyze_rubric completed, injecting reminder for provide_rubric_analysis call`,
+						);
+						
+						// Inject a system message reminder
+						const reminderMessage: any = {
+							role: 'system',
+							content: '⚠️ CRITICAL REMINDER: You have called analyze_rubric but have NOT yet called provide_rubric_analysis. You MUST call provide_rubric_analysis NOW with the fully analyzed rubric data. Do not generate any text - just call the tool immediately.',
+						};
+						
+						// Add the reminder to the messages
+						messages = [...messages, reminderMessage];
+						reminderInjected = true;
+					}
+				}
+				
 				const contextUpdate =
 					messages.length > 20
 						? { messages: [messages[0], ...messages.slice(-10)] }
+						: reminderInjected
+						? { messages }
 						: {};
 
 				const simplifyContent = (content: any) => {

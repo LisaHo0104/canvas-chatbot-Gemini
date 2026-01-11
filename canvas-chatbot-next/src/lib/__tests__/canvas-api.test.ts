@@ -34,7 +34,7 @@ describe('CanvasAPIService assignments and submissions', () => {
     const [url] = spy.mock.calls.at(-1) as any
     expect(url).toMatch(/courses\/123\/assignments\/456$/)
     const [, options] = spy.mock.calls.at(-1) as any
-    expect(options.params.include).toEqual(['rubric'])
+    expect(options.params['include[]']).toEqual(['rubric'])
   })
 
   it('getAssignmentSubmission requests submission for self when userId omitted', async () => {

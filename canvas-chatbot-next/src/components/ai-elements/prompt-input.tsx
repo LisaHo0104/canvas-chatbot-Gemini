@@ -45,6 +45,9 @@ import {
   PlusIcon,
   SquareIcon,
   XIcon,
+  FolderIcon,
+  FileText,
+  LayersIcon,
 } from "lucide-react";
 import { nanoid } from "nanoid";
 import {
@@ -397,6 +400,135 @@ export function PromptInputAttachments({
     >
       {attachments.files.map((file) => (
         <Fragment key={file.id}>{children(file)}</Fragment>
+      ))}
+    </div>
+  );
+}
+
+// ============================================================================
+// Context Components
+// ============================================================================
+
+export type ContextItem = {
+  id: number;
+  type: 'course' | 'assignment' | 'module';
+  name: string;
+  code?: string; // Course code for courses, or course code for assignments/modules
+};
+
+export type PromptInputContextChipProps = HTMLAttributes<HTMLDivElement> & {
+  context: ContextItem;
+  onRemove: () => void;
+  className?: string;
+};
+
+export function PromptInputContextChip({
+  context,
+  onRemove,
+  className,
+  ...props
+}: PromptInputContextChipProps) {
+  const getIcon = () => {
+    switch (context.type) {
+      case 'course':
+        return <FolderIcon className="size-3" />;
+      case 'assignment':
+        return <FileText className="size-3" />;
+      case 'module':
+        return <LayersIcon className="size-3" />;
+    }
+  };
+
+  const displayName = context.code 
+    ? `${context.name} (${context.code})`
+    : context.name;
+
+  return (
+    <PromptInputHoverCard>
+      <HoverCardTrigger asChild>
+        <div
+          className={cn(
+            "group relative flex h-8 cursor-pointer select-none items-center gap-1.5 rounded-md border border-border px-1.5 font-medium text-sm transition-all hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
+            className
+          )}
+          {...props}
+        >
+          <div className="relative size-5 shrink-0">
+            <div className="absolute inset-0 flex size-5 items-center justify-center overflow-hidden rounded bg-background transition-opacity group-hover:opacity-0">
+              <div className="flex size-5 items-center justify-center text-muted-foreground">
+                {getIcon()}
+              </div>
+            </div>
+            <Button
+              aria-label="Remove context"
+              className="absolute inset-0 size-5 cursor-pointer rounded p-0 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 [&>svg]:size-2.5"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRemove();
+              }}
+              type="button"
+              variant="ghost"
+            >
+              <XIcon />
+              <span className="sr-only">Remove</span>
+            </Button>
+          </div>
+
+          <span className="flex-1 truncate">{displayName}</span>
+        </div>
+      </HoverCardTrigger>
+      <PromptInputHoverCardContent className="w-auto p-2">
+        <div className="w-auto space-y-3">
+          <div className="flex items-center gap-2.5">
+            <div className="min-w-0 flex-1 space-y-1 px-0.5">
+              <h4 className="truncate font-semibold text-sm leading-none">
+                {context.name}
+              </h4>
+              {context.code && (
+                <p className="truncate font-mono text-muted-foreground text-xs">
+                  {context.code}
+                </p>
+              )}
+              <p className="truncate text-muted-foreground text-xs capitalize">
+                {context.type}
+              </p>
+            </div>
+          </div>
+        </div>
+      </PromptInputHoverCardContent>
+    </PromptInputHoverCard>
+  );
+}
+
+export type PromptInputContextsProps = Omit<
+  HTMLAttributes<HTMLDivElement>,
+  "children"
+> & {
+  contexts: ContextItem[];
+  onRemove: (id: number, type: 'course' | 'assignment' | 'module') => void;
+};
+
+export function PromptInputContexts({
+  contexts,
+  onRemove,
+  className,
+  ...props
+}: PromptInputContextsProps) {
+  if (!contexts.length) {
+    return null;
+  }
+
+  return (
+    <div
+      className={cn("flex flex-wrap items-center gap-2 p-3 w-full", className)}
+      {...props}
+    >
+      {contexts.map((context) => (
+        <PromptInputContextChip
+          key={`${context.type}-${context.id}`}
+          context={context}
+          onRemove={() => onRemove(context.id, context.type)}
+        />
       ))}
     </div>
   );

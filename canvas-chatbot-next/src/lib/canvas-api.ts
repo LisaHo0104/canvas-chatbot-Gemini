@@ -326,7 +326,7 @@ export class CanvasAPIService {
     try {
       const includeRubric = options?.includeRubric === true;
       const params: any = {};
-      if (includeRubric) params.include = ['rubric'];
+      if (includeRubric) params['include[]'] = ['rubric'];
       const response = await axios.get(
         `${this.baseURL}/courses/${courseId}/assignments/${assignmentId}`,
         {
@@ -335,7 +335,19 @@ export class CanvasAPIService {
           timeout: 10000,
         },
       );
-      return response.data as CanvasAssignment;
+      const assignment = response.data as CanvasAssignment;
+      // Debug logging to help diagnose rubric issues
+      if (includeRubric) {
+        console.log('[CanvasAPI] Assignment rubric check', {
+          assignmentId,
+          courseId,
+          hasRubric: !!assignment.rubric,
+          rubricType: typeof assignment.rubric,
+          rubricIsArray: Array.isArray(assignment.rubric),
+          rubricLength: Array.isArray(assignment.rubric) ? assignment.rubric.length : 'N/A',
+        });
+      }
+      return assignment;
     } catch (error: any) {
       const status = error?.response?.status;
       const data = error?.response?.data;

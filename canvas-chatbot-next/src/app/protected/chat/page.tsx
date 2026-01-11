@@ -3,13 +3,13 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient as createSupabaseClient } from '@/lib/supabase/client'
-import { X, CopyIcon, RefreshCcwIcon, GlobeIcon, CheckIcon, SparklesIcon } from 'lucide-react'
+import { X, CopyIcon, RefreshCcwIcon, GlobeIcon, CheckIcon, SparklesIcon, FolderIcon, LayersIcon, FileText, BookOpen, GraduationCap, FileQuestion } from 'lucide-react'
 import { useChat } from '@ai-sdk/react'
 import { lastAssistantMessageIsCompleteWithApprovalResponses } from 'ai'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Conversation, ConversationContent, ConversationScrollButton } from '@/components/ai-elements/conversation'
-import { Message as AIMessage, MessageContent as AIMessageContent, MessageAction, MessageActions, MessageResponse, MessageAttachments, MessageAttachment } from '@/components/ai-elements/message'
-import { PromptInput, PromptInputActionMenu, PromptInputActionMenuContent, PromptInputActionMenuTrigger, PromptInputActionMenuItem, PromptInputActionAddAttachments, PromptInputBody, PromptInputFooter, PromptInputProvider, PromptInputSubmit, PromptInputTextarea, PromptInputTools, PromptInputButton, PromptInputSpeechButton, PromptInputAttachments, PromptInputAttachment } from '@/components/ai-elements/prompt-input'
+import { Message as AIMessage, MessageContent as AIMessageContent, MessageAction, MessageActions, MessageResponse, MessageAttachments, MessageAttachment, MessageContextAttachment } from '@/components/ai-elements/message'
+import { PromptInput, PromptInputActionMenu, PromptInputActionMenuContent, PromptInputActionMenuTrigger, PromptInputActionMenuItem, PromptInputActionAddAttachments, PromptInputBody, PromptInputFooter, PromptInputProvider, PromptInputSubmit, PromptInputTextarea, PromptInputTools, PromptInputButton, PromptInputSpeechButton, PromptInputAttachments, PromptInputAttachment, PromptInputCommand, PromptInputCommandInput, PromptInputCommandList, PromptInputCommandEmpty, PromptInputCommandGroup, PromptInputCommandItem, PromptInputCommandSeparator, PromptInputHeader, PromptInputContexts } from '@/components/ai-elements/prompt-input'
 import { ModelSelector, ModelSelectorContent, ModelSelectorEmpty, ModelSelectorGroup, ModelSelectorInput, ModelSelectorItem, ModelSelectorList, ModelSelectorLogo, ModelSelectorLogoGroup, ModelSelectorName, ModelSelectorTrigger } from '@/components/ai-elements/model-selector'
 import { Sources, SourcesContent, SourcesTrigger, Source } from '@/components/ai-elements/sources'
 import { Suggestions, Suggestion } from '@/components/ai-elements/suggestion'
@@ -23,6 +23,7 @@ import { AIProvider } from '@/types/ai-providers'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 
 let supabase: any = null
 
@@ -66,6 +67,8 @@ export default function ChatPage() {
   const [canvasStatus, setCanvasStatus] = useState<'connected' | 'missing' | 'error'>('missing')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [webSearch, setWebSearch] = useState(false)
+  const [analysisMode, setAnalysisMode] = useState<string | null>(null)
+  const [analysisModeOpen, setAnalysisModeOpen] = useState(false)
   const [modelSelectorOpen, setModelSelectorOpen] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [fetchingModels, setFetchingModels] = useState(false)
@@ -77,6 +80,12 @@ export default function ChatPage() {
   const [titleGenerating, setTitleGenerating] = useState(false)
   const [canvasContext, setCanvasContext] = useState<any | null>(null)
   const [syncingCanvas, setSyncingCanvas] = useState(false)
+  const [selectedContext, setSelectedContext] = useState<{ courses: number[]; assignments: number[]; modules: number[] }>({
+    courses: [],
+    assignments: [],
+    modules: []
+  })
+  const [contextSelectorOpen, setContextSelectorOpen] = useState(false)
   const { messages: uiMessages, sendMessage: sendChatMessage, status, regenerate, setMessages: setUIMessages } = useChat({
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
     onResponse: (response: Response) => {
@@ -111,6 +120,13 @@ export default function ChatPage() {
     'Summarize latest Canvas announcements',
     'What modules need attention this week?',
   ], [])
+
+  const rubricSuggestions = useMemo(() => [
+    'Analyze the rubric for my latest assignment',
+    'What are the key criteria I need to meet?',
+    'Help me understand the rubric requirements',
+    'Show me examples for each criterion',
+  ], [])
   const [dynamicSuggestions, setDynamicSuggestions] = useState<string[]>([])
   const [loadingSuggestions, setLoadingSuggestions] = useState(false)
   const lastAssistantIdRef = useRef<string | null>(null)
@@ -119,7 +135,6 @@ export default function ChatPage() {
   const [suggestionsVisible, setSuggestionsVisible] = useState<boolean>(true)
 
   useEffect(() => {
-    /*
     const lastAssistant = [...uiMessages].reverse().find((m) => m.role === 'assistant')
     const isIdle = status !== 'streaming' && status !== 'submitted'
     if (!lastAssistant || !isIdle) return
@@ -128,36 +143,35 @@ export default function ChatPage() {
     const hasFinalText = lastAssistant.parts.some((p: any) => p.type === 'text' && String((p as any).text || '').trim().length > 0)
     if (!hasFinalText) return
     setLoadingSuggestions(true)
-      ; (async () => {
-        try {
-          const res = await fetch('/api/suggestions', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              messages: uiMessages,
-              provider_id: activeProvider?.id,
-              model: selectedModel,
-              model_override: activeProvider?.provider_name === 'openrouter' ? selectedModel : undefined,
-              max_suggestions: 4,
-            }),
-          })
-          if (res.ok) {
-            const data = await res.json()
-            const suggestions = Array.isArray(data?.suggestions) ? data.suggestions : []
-            setDynamicSuggestions(suggestions)
-            lastAssistantIdRef.current = lastAssistant.id
-          }
-        } catch (e) {
-          console.error('Failed to load suggestions', e)
-        } finally {
-          setLoadingSuggestions(false)
+    setSuggestionsVisible(true)
+    ; (async () => {
+      try {
+        const res = await fetch('/api/suggestions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages: uiMessages,
+            provider_id: activeProvider?.id,
+            model: selectedModel,
+            model_override: activeProvider?.provider_name === 'openrouter' ? selectedModel : selectedModel,
+            max_suggestions: 4,
+          }),
+        })
+        if (res.ok) {
+          const data = await res.json()
+          const suggestions = Array.isArray(data?.suggestions) ? data.suggestions : []
+          setDynamicSuggestions(suggestions)
+          lastAssistantIdRef.current = lastAssistant.id
         }
-      })()
-      */
+      } catch (e) {
+        console.error('Failed to load suggestions', e)
+      } finally {
+        setLoadingSuggestions(false)
+      }
+    })()
   }, [uiMessages, status, selectedModel, activeProvider])
 
   const regenerateAllSuggestions = async () => {
-    /*
     setLoadingSuggestions(true)
     setSuggestionsVisible(true)
     try {
@@ -168,7 +182,7 @@ export default function ChatPage() {
           messages: uiMessages,
           provider_id: activeProvider?.id,
           model: selectedModel,
-          model_override: activeProvider?.provider_name === 'openrouter' ? selectedModel : undefined,
+          model_override: activeProvider?.provider_name === 'openrouter' ? selectedModel : selectedModel,
           max_suggestions: 4,
         }),
       })
@@ -182,7 +196,6 @@ export default function ChatPage() {
     } finally {
       setLoadingSuggestions(false)
     }
-      */
   }
 
   useEffect(() => {
@@ -227,8 +240,7 @@ export default function ChatPage() {
     const mappedMessages = mapUIMessagesToSessionMessages()
 
       ; (async () => {
-        const generatedTitle: string | null = null
-        /*
+        let generatedTitle: string | null = null
         const needsTitle = !currentSession?.title || currentSession?.title === 'New Chat'
         if (needsTitle) {
           try {
@@ -238,9 +250,8 @@ export default function ChatPage() {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 messages: uiMessages,
-                provider_id: activeProvider?.id,
                 model: selectedModel,
-                model_override: activeProvider?.provider_name === 'openrouter' ? selectedModel : undefined,
+                model_override: selectedModel,
               }),
             })
             if (res.ok) {
@@ -254,7 +265,6 @@ export default function ChatPage() {
             setTitleGenerating(false)
           }
         }
-        */
 
         const fallbackTitleBase = String(lastUserText || '').substring(0, 50)
         const fallbackTitle = fallbackTitleBase + (String(lastUserText || '').length > 50 ? '...' : '')
@@ -551,6 +561,129 @@ export default function ChatPage() {
     } catch { }
   }
 
+  // Helper functions to extract context item data
+  const getCourseById = (courseId: number): any | null => {
+    if (!canvasContext?.courses) return null
+    return canvasContext.courses.find((c: any) => c.id === courseId) || null
+  }
+
+  const getAssignmentById = (assignmentId: number): { assignment: any; course: any } | null => {
+    if (!canvasContext?.courses) return null
+    for (const course of canvasContext.courses) {
+      const assignment = (course.assignments || []).find((a: any) => a.id === assignmentId)
+      if (assignment) {
+        return { assignment, course }
+      }
+    }
+    return null
+  }
+
+  const getModuleById = (moduleId: number): { module: any; course: any } | null => {
+    if (!canvasContext?.courses) return null
+    for (const course of canvasContext.courses) {
+      const module = (course.modules || []).find((m: any) => m.id === moduleId)
+      if (module) {
+        return { module, course }
+      }
+    }
+    return null
+  }
+
+  const getSelectedContextItems = (): Array<{ id: number; type: 'course' | 'assignment' | 'module'; name: string; code?: string }> => {
+    const items: Array<{ id: number; type: 'course' | 'assignment' | 'module'; name: string; code?: string }> = []
+
+    // Add courses
+    selectedContext.courses.forEach((courseId) => {
+      const course = getCourseById(courseId)
+      if (course) {
+        items.push({
+          id: courseId,
+          type: 'course',
+          name: course.name || `Course ${courseId}`,
+          code: course.code || course.course_code
+        })
+      }
+    })
+
+    // Add assignments
+    selectedContext.assignments.forEach((assignmentId) => {
+      const result = getAssignmentById(assignmentId)
+      if (result) {
+        items.push({
+          id: assignmentId,
+          type: 'assignment',
+          name: result.assignment.name || `Assignment ${assignmentId}`,
+          code: result.course.code || result.course.course_code
+        })
+      }
+    })
+
+    // Add modules
+    selectedContext.modules.forEach((moduleId) => {
+      const result = getModuleById(moduleId)
+      if (result) {
+        items.push({
+          id: moduleId,
+          type: 'module',
+          name: result.module.name || `Module ${moduleId}`,
+          code: result.course.code || result.course.course_code
+        })
+      }
+    })
+
+    return items
+  }
+
+  const filterCanvasContext = (context: any, selected: { courses: number[]; assignments: number[]; modules: number[] }): any | null => {
+    if (!context || !context.courses || !Array.isArray(context.courses)) {
+      return context
+    }
+
+    // If nothing is selected, return all context (default behavior)
+    if (selected.courses.length === 0 && selected.assignments.length === 0 && selected.modules.length === 0) {
+      return context
+    }
+
+    const filteredCourses: any[] = []
+
+    // Process each course
+    for (const course of context.courses) {
+      const courseId = course.id
+      const isCourseSelected = selected.courses.includes(courseId)
+
+      // If entire course is selected, include it with all assignments/modules
+      if (isCourseSelected) {
+        filteredCourses.push({
+          ...course,
+          assignments: course.assignments || [],
+          modules: course.modules || []
+        })
+        continue
+      }
+
+      // Check if any assignments from this course are selected
+      const selectedAssignments = (course.assignments || []).filter((a: any) =>
+        selected.assignments.includes(a.id)
+      )
+
+      // Check if any modules from this course are selected
+      const selectedModules = (course.modules || []).filter((m: any) =>
+        selected.modules.includes(m.id)
+      )
+
+      // If specific assignments or modules are selected, include the course with filtered items
+      if (selectedAssignments.length > 0 || selectedModules.length > 0) {
+        filteredCourses.push({
+          ...course,
+          assignments: selectedAssignments,
+          modules: selectedModules
+        })
+      }
+    }
+
+    return filteredCourses.length > 0 ? { courses: filteredCourses } : null
+  }
+
   const onSubmitAI = async (message: any) => {
     if (!message.text) return
     if (!user) return
@@ -560,15 +693,35 @@ export default function ChatPage() {
       if (!created) return
       sessionForSend = created
     }
+    // Filter context based on selections
+    const filteredContext = canvasContext
+      ? filterCanvasContext(canvasContext, selectedContext)
+      : null
+
+    // Get selected context items to include in message parts
+    const contextItems = getSelectedContextItems()
+    const contextParts = contextItems.map((item) => ({
+      type: 'context',
+      context: item,
+    }))
+
     await sendChatMessage(
-      { role: 'user', parts: [{ type: 'text', text: message.text }, ...(Array.isArray(message.files) ? message.files : [])] } as any,
+      { 
+        role: 'user', 
+        parts: [
+          { type: 'text', text: message.text }, 
+          ...(Array.isArray(message.files) ? message.files : []),
+          ...contextParts,
+        ] 
+      } as any,
       {
         body: {
           model: selectedModel,
           webSearch,
+          analysisMode,
           canvas_token: canvasStatus === 'connected' ? canvasToken : undefined,
           canvas_url: canvasStatus === 'connected' ? canvasUrl : undefined,
-          canvasContext: canvasContext || undefined,
+          canvasContext: filteredContext || undefined,
         },
         headers: { 'X-Session-ID': sessionForSend.id },
       },
@@ -736,6 +889,7 @@ export default function ChatPage() {
             ) : (
               uiMessages.map((message) => {
                 const fileParts = message.parts.filter((p) => p.type === 'file') as any[]
+                const contextParts = message.parts.filter((p) => (p as any).type === 'context') as any[]
                 const textParts = message.parts.filter((p) => p.type === 'text') as any[]
                 const textDeltaParts = message.parts.filter((p) => (p as any).type === 'text-delta') as any[]
                 const toolParts = message.parts.filter((p) => typeof (p as any).type === 'string' && (p as any).type.startsWith('tool-')) as ToolUIPart[]
@@ -757,10 +911,16 @@ export default function ChatPage() {
                       </Sources>
                     )}
                     <AIMessage from={message.role}>
-                      {fileParts.length > 0 && (
+                      {(fileParts.length > 0 || contextParts.length > 0) && (
                         <MessageAttachments className="mb-2">
                           {fileParts.map((fp, idx) => (
                             <MessageAttachment key={`${message.id}-file-${idx}`} data={fp} />
+                          ))}
+                          {contextParts.map((cp, idx) => (
+                            <MessageContextAttachment 
+                              key={`${message.id}-context-${idx}`} 
+                              context={cp.context} 
+                            />
                           ))}
                         </MessageAttachments>
                       )}
@@ -803,6 +963,8 @@ export default function ChatPage() {
                               'get_file',
                               'get_assignment_grade',
                               'get_assignment_feedback_and_rubric',
+                              'analyze_rubric',
+                              'provide_rubric_analysis',
                               'webSearch'
                             ].includes(toolName)
 
@@ -883,7 +1045,12 @@ export default function ChatPage() {
                     <Skeleton className="h-8 w-36 rounded-full" />
                   </div>
                 ) : (
-                  (dynamicSuggestions.length > 0 ? dynamicSuggestions : staticSuggestions).map((s, i) => (
+                  (dynamicSuggestions.length > 0 
+                    ? dynamicSuggestions 
+                    : analysisMode === 'rubric'
+                      ? rubricSuggestions 
+                      : staticSuggestions
+                  ).map((s, i) => (
                     <Suggestion key={`${s}-${i}`} suggestion={s} disabled={status !== 'ready'} onClick={() => { onSubmitAI({ text: s }) }} />
                   ))
                 )
@@ -898,11 +1065,133 @@ export default function ChatPage() {
               maxFileSize={10 * 1024 * 1024}
               onSubmit={onSubmitAI}
             >
-              <PromptInputAttachments>
-                {(file) => (
-                  <PromptInputAttachment data={file} />
+              <PromptInputHeader>
+                {canvasContext && canvasContext.courses && (
+                  <Popover open={contextSelectorOpen} onOpenChange={setContextSelectorOpen}>
+                    <PopoverTrigger asChild>
+                      <PromptInputButton type="button" size="sm" variant="outline">
+                        <FolderIcon className="text-muted-foreground" size={12} />
+                        <span>
+                          {selectedContext.courses.length + selectedContext.assignments.length + selectedContext.modules.length > 0
+                            ? `${selectedContext.courses.length + selectedContext.assignments.length + selectedContext.modules.length}`
+                            : 'Context'}
+                        </span>
+                      </PromptInputButton>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[400px] p-0" align="start">
+                      <PromptInputCommand>
+                        <PromptInputCommandInput placeholder="Search courses, assignments, modules..." />
+                        <PromptInputCommandList>
+                          <PromptInputCommandEmpty>No context found.</PromptInputCommandEmpty>
+                          <PromptInputCommandGroup heading="Courses">
+                            {canvasContext.courses.map((course: any) => {
+                              const isSelected = selectedContext.courses.includes(course.id)
+                              return (
+                                <PromptInputCommandItem
+                                  key={`course-${course.id}`}
+                                  value={`course-${course.id}`}
+                                  onSelect={() => {
+                                    setSelectedContext(prev => ({
+                                      ...prev,
+                                      courses: isSelected
+                                        ? prev.courses.filter(id => id !== course.id)
+                                        : [...prev.courses, course.id]
+                                    }))
+                                  }}
+                                >
+                                  <FolderIcon className="size-4" />
+                                  <div className="flex flex-col">
+                                    <span className="font-medium text-sm">{course.name}</span>
+                                    <span className="text-muted-foreground text-xs">{course.code}</span>
+                                  </div>
+                                  {isSelected && <CheckIcon className="ml-auto size-4" />}
+                                </PromptInputCommandItem>
+                              )
+                            })}
+                          </PromptInputCommandGroup>
+                          <PromptInputCommandSeparator />
+                          <PromptInputCommandGroup heading="Assignments">
+                            {canvasContext.courses.flatMap((course: any) =>
+                              (course.assignments || []).map((assignment: any) => {
+                                const isSelected = selectedContext.assignments.includes(assignment.id)
+                                return (
+                                  <PromptInputCommandItem
+                                    key={`assignment-${assignment.id}`}
+                                    value={`assignment-${assignment.id}`}
+                                    onSelect={() => {
+                                      setSelectedContext(prev => ({
+                                        ...prev,
+                                        assignments: isSelected
+                                          ? prev.assignments.filter(id => id !== assignment.id)
+                                          : [...prev.assignments, assignment.id]
+                                      }))
+                                    }}
+                                  >
+                                    <FileText className="size-4" />
+                                    <div className="flex flex-col">
+                                      <span className="font-medium text-sm">{assignment.name}</span>
+                                      <span className="text-muted-foreground text-xs">{course.code}</span>
+                                    </div>
+                                    {isSelected && <CheckIcon className="ml-auto size-4" />}
+                                  </PromptInputCommandItem>
+                                )
+                              })
+                            )}
+                          </PromptInputCommandGroup>
+                          <PromptInputCommandSeparator />
+                          <PromptInputCommandGroup heading="Modules">
+                            {canvasContext.courses.flatMap((course: any) =>
+                              (course.modules || []).map((module: any) => {
+                                const isSelected = selectedContext.modules.includes(module.id)
+                                return (
+                                  <PromptInputCommandItem
+                                    key={`module-${module.id}`}
+                                    value={`module-${module.id}`}
+                                    onSelect={() => {
+                                      setSelectedContext(prev => ({
+                                        ...prev,
+                                        modules: isSelected
+                                          ? prev.modules.filter(id => id !== module.id)
+                                          : [...prev.modules, module.id]
+                                      }))
+                                    }}
+                                  >
+                                    <LayersIcon className="size-4" />
+                                    <div className="flex flex-col">
+                                      <span className="font-medium text-sm">{module.name}</span>
+                                      <span className="text-muted-foreground text-xs">{course.code}</span>
+                                    </div>
+                                    {isSelected && <CheckIcon className="ml-auto size-4" />}
+                                  </PromptInputCommandItem>
+                                )
+                              })
+                            )}
+                          </PromptInputCommandGroup>
+                        </PromptInputCommandList>
+                      </PromptInputCommand>
+                    </PopoverContent>
+                  </Popover>
                 )}
-              </PromptInputAttachments>
+                <PromptInputAttachments>
+                  {(file) => (
+                    <PromptInputAttachment data={file} />
+                  )}
+                </PromptInputAttachments>
+                <PromptInputContexts
+                  contexts={getSelectedContextItems()}
+                  onRemove={(id, type) => {
+                    setSelectedContext(prev => {
+                      if (type === 'course') {
+                        return { ...prev, courses: prev.courses.filter(cId => cId !== id) }
+                      } else if (type === 'assignment') {
+                        return { ...prev, assignments: prev.assignments.filter(aId => aId !== id) }
+                      } else {
+                        return { ...prev, modules: prev.modules.filter(mId => mId !== id) }
+                      }
+                    })
+                  }}
+                />
+              </PromptInputHeader>
               <PromptInputBody>
                 <PromptInputTextarea ref={textareaRef} placeholder="Ask about your courses, assignments, modules..." className="w-full" />
               </PromptInputBody>
@@ -912,16 +1201,96 @@ export default function ChatPage() {
                     <PromptInputActionMenuTrigger />
                     <PromptInputActionMenuContent>
                       <PromptInputActionAddAttachments />
-                      <PromptInputActionMenuItem onSelect={(e) => { e.preventDefault(); setWebSearch(v => !v) }}>
-                        {webSearch ? 'Disable Web Search' : 'Enable Web Search'}
-                      </PromptInputActionMenuItem>
                     </PromptInputActionMenuContent>
                   </PromptInputActionMenu>
                   <PromptInputSpeechButton textareaRef={textareaRef} />
-                  <PromptInputButton type="button" onClick={() => setWebSearch(v => !v)}>
-                    <GlobeIcon className="size-4" />
-                    <span className="ml-1">{webSearch ? 'Search: On' : 'Search: Off'}</span>
-                  </PromptInputButton>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <PromptInputButton 
+                        type="button" 
+                        onClick={() => setWebSearch(v => !v)}
+                      >
+                        <GlobeIcon className={`size-4 ${webSearch ? 'text-blue-500 dark:text-blue-400' : ''}`} />
+                      </PromptInputButton>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      {webSearch 
+                        ? 'Web Search enabled - AI will search the web for current information'
+                        : 'Enable Web Search to allow AI to search the web for current information'}
+                    </TooltipContent>
+                  </Tooltip>
+                  <Popover open={analysisModeOpen} onOpenChange={setAnalysisModeOpen}>
+                    <PopoverTrigger asChild>
+                      <PromptInputButton type="button">
+                        {analysisMode === 'rubric' ? (
+                          <FileText className="size-4" />
+                        ) : analysisMode === 'quiz' ? (
+                          <FileQuestion className="size-4" />
+                        ) : analysisMode === 'study-plan' ? (
+                          <BookOpen className="size-4" />
+                        ) : (
+                          <GraduationCap className="size-4" />
+                        )}
+                        <span className="ml-1">
+                          {analysisMode === 'rubric' ? 'Rubric' : analysisMode === 'quiz' ? 'Quiz' : analysisMode === 'study-plan' ? 'Study Plan' : 'Generic'}
+                        </span>
+                      </PromptInputButton>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-64 p-0" align="start">
+                      <PromptInputCommand>
+                        <PromptInputCommandInput placeholder="Search analysis modes..." />
+                        <PromptInputCommandList>
+                          <PromptInputCommandEmpty>No analysis mode found.</PromptInputCommandEmpty>
+                          <PromptInputCommandGroup heading="Analysis Modes">
+                            <PromptInputCommandItem
+                              value="generic"
+                              onSelect={() => {
+                                setAnalysisMode(null)
+                                setAnalysisModeOpen(false)
+                              }}
+                            >
+                              <GraduationCap className="size-4" />
+                              <span>Generic</span>
+                              {analysisMode === null && <CheckIcon className="ml-auto size-4" />}
+                            </PromptInputCommandItem>
+                            <PromptInputCommandItem
+                              value="rubric"
+                              onSelect={() => {
+                                setAnalysisMode('rubric')
+                                setAnalysisModeOpen(false)
+                              }}
+                            >
+                              <FileText className="size-4" />
+                              <span>Rubric Analysis</span>
+                              {analysisMode === 'rubric' && <CheckIcon className="ml-auto size-4" />}
+                            </PromptInputCommandItem>
+                            <PromptInputCommandItem
+                              value="quiz"
+                              onSelect={() => {
+                                setAnalysisMode('quiz')
+                                setAnalysisModeOpen(false)
+                              }}
+                            >
+                              <FileQuestion className="size-4" />
+                              <span>Quiz Analysis</span>
+                              {analysisMode === 'quiz' && <CheckIcon className="ml-auto size-4" />}
+                            </PromptInputCommandItem>
+                            <PromptInputCommandItem
+                              value="study-plan"
+                              onSelect={() => {
+                                setAnalysisMode('study-plan')
+                                setAnalysisModeOpen(false)
+                              }}
+                            >
+                              <BookOpen className="size-4" />
+                              <span>Study Plan</span>
+                              {analysisMode === 'study-plan' && <CheckIcon className="ml-auto size-4" />}
+                            </PromptInputCommandItem>
+                          </PromptInputCommandGroup>
+                        </PromptInputCommandList>
+                      </PromptInputCommand>
+                    </PopoverContent>
+                  </Popover>
                   <ModelSelector open={modelSelectorOpen} onOpenChange={setModelSelectorOpen}>
                     <ModelSelectorTrigger asChild>
                       <PromptInputButton type="button">
