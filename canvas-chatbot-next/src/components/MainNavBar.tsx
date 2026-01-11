@@ -79,6 +79,17 @@ export default function MainNavBar() {
                       <NavigationMenuLink
                         asChild
                         className={cn(
+                          pathname === '/protected/context' ? 'bg-accent text-accent-foreground' : ''
+                        )}
+                        aria-current={pathname === '/protected/context' ? 'page' : undefined}
+                      >
+                        <Link href="/protected/context">Context</Link>
+                      </NavigationMenuLink>
+                    </NavigationMenuItem>
+                    <NavigationMenuItem>
+                      <NavigationMenuLink
+                        asChild
+                        className={cn(
                           pathname === '/protected/quiz' ? 'bg-accent text-accent-foreground' : ''
                         )}
                         aria-current={pathname === '/protected/quiz' ? 'page' : undefined}
@@ -135,6 +146,9 @@ export default function MainNavBar() {
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
                       <Link href="/protected/quiz">Quiz</Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/protected/context">Context</Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
                       <Link href="/protected/settings">Settings</Link>
