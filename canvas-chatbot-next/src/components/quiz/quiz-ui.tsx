@@ -274,7 +274,7 @@ export function QuizUI({ data, messageId, compact = false, onViewFull, onSaveCli
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-2 lg:mb-3 flex-wrap">
                         <CardTitle className="text-base lg:text-lg">Question {data.questions.indexOf(question) + 1}</CardTitle>
-                        <Badge className={getQuestionTypeColor(question.type)} variant="outline" className="text-xs lg:text-sm">
+                        <Badge className={`${getQuestionTypeColor(question.type)} text-xs lg:text-sm`} variant="outline">
                           {question.type.replace('_', ' ')}
                         </Badge>
                         {question.topic && (
@@ -449,7 +449,7 @@ export function QuizUI({ data, messageId, compact = false, onViewFull, onSaveCli
                   {questions.map((question) => (
                     <div key={question.id} className="p-3 lg:p-4 border rounded-md">
                       <p className="text-sm lg:text-base font-medium mb-2 lg:mb-3">{question.question}</p>
-                      <Badge className={getQuestionTypeColor(question.type)} variant="outline" className="text-xs lg:text-sm">
+                      <Badge className={`${getQuestionTypeColor(question.type)} text-xs lg:text-sm`} variant="outline">
                         {question.type.replace('_', ' ')}
                       </Badge>
                     </div>

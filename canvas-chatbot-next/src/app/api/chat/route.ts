@@ -20,9 +20,11 @@ export const maxDuration = 300;
 export const runtime = 'nodejs';
 
 async function chatHandler(request: NextRequest) {
+	let modelName: string | undefined;
 	try {
 		const body = await request.json();
 		const { model, messages: incomingMessages, mode, selected_system_prompt_ids } = body;
+		modelName = typeof model === 'string' ? model : undefined;
 		// Support both canvasContext and selected_context (frontend sends selected_context)
 		const canvasContext = (body as any).canvasContext || (body as any).selected_context;
 		// Backward compatibility: support old analysisMode parameter
@@ -853,7 +855,7 @@ This sequence is REQUIRED. Do not skip any step. The generate_quiz_plan and prov
 		    errorString.includes('No endpoints found that support tool use')) {
 			return new Response(
 				JSON.stringify({
-					error: `The selected model (${selectedModel}) does not support tool use, which is required for quiz generation and other advanced features. Please select a model that supports tool use, such as:\n- google/gemini-2.0-flash-exp\n- anthropic/claude-3.5-sonnet\n- openai/gpt-4o`,
+					error: `The selected model (${modelName || 'unknown'}) does not support tool use, which is required for quiz generation and other advanced features. Please select a model that supports tool use, such as:\n- google/gemini-2.0-flash-exp\n- anthropic/claude-3.5-sonnet\n- openai/gpt-4o`,
 					errorCode: 'MODEL_NO_TOOL_SUPPORT',
 					suggestedModels: ['google/gemini-2.0-flash-exp', 'anthropic/claude-3.5-sonnet', 'openai/gpt-4o']
 				}),

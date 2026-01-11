@@ -132,7 +132,7 @@ export function ToolRenderer({ toolName, result, toolPart, onApprove, onReject }
         const firstCriterion = result.criteria[0]
         if (firstCriterion && 'gradeLevels' in firstCriterion && 'commonMistakes' in firstCriterion) {
           // Fully analyzed data - render with compact RubricAnalysisUI and modal
-          return <RubricOutputRenderer rubricData={result as any} messageId={toolPart?.id} />
+          return <RubricOutputRenderer rubricData={result as any} messageId={(toolPart as any)?.toolCallId} />
         }
       }
       // If structure is incomplete, show a message
@@ -248,7 +248,7 @@ export function ToolRenderer({ toolName, result, toolPart, onApprove, onReject }
             {toolPart?.state === 'approval-requested' && toolPart.approval && 'id' in toolPart.approval && onApprove && (
               <PlanFooter>
                 <div className="flex items-center justify-end gap-2 w-full">
-                  <PlanAction asChild>
+                  <PlanAction>
                     <Button
                       onClick={(e) => {
                         e.preventDefault();
@@ -295,7 +295,7 @@ export function ToolRenderer({ toolName, result, toolPart, onApprove, onReject }
             {toolPart?.state === 'approval-requested' && toolPart.approval && 'id' in toolPart.approval && onApprove && (
               <PlanFooter>
                 <div className="flex items-center justify-end gap-2 w-full">
-                  <PlanAction asChild>
+                  <PlanAction>
                     <Button
                       onClick={(e) => {
                         e.preventDefault();

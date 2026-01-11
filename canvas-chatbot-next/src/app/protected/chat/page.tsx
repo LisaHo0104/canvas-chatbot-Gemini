@@ -84,8 +84,8 @@ export default function ChatPage() {
   // Items selected on context page (available pool) with names
   const [availableContext, setAvailableContext] = useState<{
     courses: Array<{ id: number; name: string; code?: string }>
-    assignments: Array<{ id: number; name: string }>
-    modules: Array<{ id: number; name: string }>
+    assignments: Array<{ id: number; name: string; course_id?: number }>
+    modules: Array<{ id: number; name: string; course_id?: number }>
   }>({
     courses: [],
     assignments: [],
@@ -118,7 +118,7 @@ export default function ChatPage() {
   // Store system prompt templates and user prompts for sync logic
   const [systemPromptTemplates, setSystemPromptTemplates] = useState<Array<{ id: string; template_type: string }>>([])
   const [userPrompts, setUserPrompts] = useState<Array<{ id: string; template_type: string | null }>>([])
-  const { messages: uiMessages, sendMessage: sendChatMessage, status, regenerate, setMessages: setUIMessages, addToolApprovalResponse, respondToConfirmationRequest, error } = useChat({
+  const { messages: uiMessages, sendMessage: sendChatMessage, status, regenerate, setMessages: setUIMessages, addToolApprovalResponse, error } = useChat({
     api: '/api/chat',
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
     onResponse: (response: Response) => {
