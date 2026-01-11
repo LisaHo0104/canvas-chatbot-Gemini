@@ -905,7 +905,7 @@ The user has attached ${courseCount} course(s) to this conversation.`
    2. You MUST use Canvas tools to fetch detailed content:
       - get_modules(course_id) - to get module structure and items
       - get_assignments(course_id) - to get assignment details and descriptions
-      - get_page_content(course_id, page_url) - to get page/lecture content
+      - get_page_contents(course_id, page_urls[]) - to get multiple page/lecture contents at once
       - get_file(course_id, file_id) - to get file content (PDFs, etc.)
    3. When the user asks about these courses, IMMEDIATELY fetch the relevant content
    4. Do NOT just reference course names - fetch and use the actual content!
@@ -957,7 +957,7 @@ The user has attached ${courseCount} course(s) to this conversation.`
     if (assignments.length > 0) {
       parts.push(`   📝 Assignments (${assignments.length}):`)
       assignments.forEach((a: any) => {
-        parts.push(`      - ${a.name} (ID: ${a.id})`)
+        parts.push(`      - ${a.name} (Assignment ID: ${a.id})`)
       })
     } else {
       parts.push(`   📝 Assignments: none`)
@@ -966,7 +966,7 @@ The user has attached ${courseCount} course(s) to this conversation.`
     if (modules.length > 0) {
       parts.push(`   📦 Modules (${modules.length}):`)
       modules.forEach((m: any) => {
-        parts.push(`      - ${m.name} (ID: ${m.id})`)
+        parts.push(`      - ${m.name} (Module ID: ${m.id})`)
       })
     } else {
       parts.push(`   📦 Modules: none`)
@@ -974,9 +974,16 @@ The user has attached ${courseCount} course(s) to this conversation.`
 
     parts.push('')
     parts.push('   💡 To get detailed content for this course:')
-    parts.push(`      - Use get_modules(course_id: ${courseId}) to fetch module details`)
+    if (modules.length > 0) {
+      const moduleIds = modules.map((m: any) => m.id).join(', ');
+      parts.push(`      - PREFERRED: Use get_module(courseId: ${courseId}, moduleId: ${moduleIds}) to fetch specific modules`)
+      parts.push(`      - IMPORTANT: Course ID ${courseId} and Module ID ${moduleIds} are DIFFERENT - use BOTH parameters`)
+      parts.push(`      - Alternative: Use get_modules(courseId: ${courseId}) to fetch all modules, then filter`)
+    } else {
+      parts.push(`      - Use get_modules(courseId: ${courseId}) to fetch module details`)
+    }
     parts.push(`      - Use get_assignments(course_id: ${courseId}) to fetch assignment details`)
-    parts.push('      - Use get_page_content(course_id, page_url) for page content')
+    parts.push('      - Use get_page_contents(course_id, page_urls[]) to fetch multiple page contents at once')
     parts.push('      - Use get_file(course_id, file_id) for file content')
     parts.push('')
 

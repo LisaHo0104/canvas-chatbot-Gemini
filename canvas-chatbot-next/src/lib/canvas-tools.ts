@@ -7,7 +7,7 @@ export function createCanvasTools(token: string, url: string) {
 
 	return {
 		list_courses: tool({
-			description: 'List user courses from Canvas',
+			description: 'List user courses from Canvas. Defaults to all courses (active and completed). Use enrollmentState: "active" to get only active courses.',
 			inputSchema: z
 				.object({
 					enrollmentState: z.enum(['active', 'completed', 'all']).optional(),
@@ -18,7 +18,7 @@ export function createCanvasTools(token: string, url: string) {
 					perPage: z.number().int().min(1).max(100).optional(),
 					searchTerm: z.string().optional(),
 				})
-				.default({ enrollmentState: 'active' }),
+				.default({ enrollmentState: 'all' }),
 			execute: async ({
 				enrollmentState,
 				enrollmentType,
@@ -33,7 +33,7 @@ export function createCanvasTools(token: string, url: string) {
 				searchTerm?: string;
 			}) => {
 				return api.getCourses({
-					enrollmentState: enrollmentState ?? 'active',
+					enrollmentState: enrollmentState ?? 'all',
 					enrollmentType,
 					include,
 					perPage,
@@ -80,22 +80,48 @@ export function createCanvasTools(token: string, url: string) {
 		}),
 
 		get_modules: tool({
-			description: 'Get modules for a course',
+			description: 'Get all modules for a course. IMPORTANT: courseId parameter must be the Course ID (not Module ID). Course IDs are different from Module IDs. Use the Course ID from list_courses or from context labeled as "Course ID:". If you know the specific module ID, use get_module instead.',
 			inputSchema: z.object({
-				courseId: z.number(),
+				courseId: z.number().describe('The Course ID (NOT Module ID). This is the ID of the course that contains the modules. Get this from list_courses or from context labeled "Course ID:".'),
 				includeContentDetails: z.boolean().optional(),
 				perPage: z.number().int().min(1).max(100).optional(),
+				skipCourseCheck: z.boolean().optional().describe('Skip the course existence check and directly try the modules endpoint. Useful when course endpoint returns 404 but modules might still be accessible.'),
 			}),
 			execute: async ({
 				courseId,
 				includeContentDetails,
 				perPage,
+				skipCourseCheck,
 			}: {
 				courseId: number;
 				includeContentDetails?: boolean;
 				perPage?: number;
+				skipCourseCheck?: boolean;
 			}) => {
-				return api.getModules(courseId, { includeContentDetails, perPage });
+				return api.getModules(courseId, { includeContentDetails, perPage, skipCourseCheck });
+			},
+		}),
+
+		get_module: tool({
+			description: 'Get a specific module by its Module ID. REQUIRES BOTH courseId (Course ID) and moduleId (Module ID) - these are DIFFERENT numbers. Use this when you know the exact module ID from context. The courseId is the Course ID (labeled "Course ID:" in context), and moduleId is the Module ID (labeled "Module ID:" in context).',
+			inputSchema: z.object({
+				courseId: z.number().describe('The Course ID (NOT Module ID). This is the ID of the course that contains the module. Get this from list_courses or from context labeled "Course ID:".'),
+				moduleId: z.number().describe('The Module ID (NOT Course ID). This is the ID of the specific module you want to retrieve. Get this from context labeled "Module ID:".'),
+				includeContentDetails: z.boolean().optional(),
+				includeItems: z.boolean().optional(),
+			}),
+			execute: async ({
+				courseId,
+				moduleId,
+				includeContentDetails,
+				includeItems,
+			}: {
+				courseId: number;
+				moduleId: number;
+				includeContentDetails?: boolean;
+				includeItems?: boolean;
+			}) => {
+				return api.getModule(courseId, moduleId, { includeContentDetails, includeItems });
 			},
 		}),
 
@@ -133,20 +159,20 @@ export function createCanvasTools(token: string, url: string) {
 			},
 		}),
 
-		get_page_content: tool({
-			description: 'Get Canvas page content by URL or slug',
+		get_page_contents: tool({
+			description: 'Get multiple Canvas page contents by URLs or slugs. Use this when you need to fetch several pages at once. Returns an array of page objects.',
 			inputSchema: z.object({
 				courseId: z.number(),
-				pageUrl: z.string(),
+				pageUrls: z.array(z.string()).min(1),
 			}),
 			execute: async ({
 				courseId,
-				pageUrl,
+				pageUrls,
 			}: {
 				courseId: number;
-				pageUrl: string;
+				pageUrls: string[];
 			}) => {
-				return api.getPageContent(courseId, pageUrl);
+				return api.getPageContents(courseId, pageUrls);
 			},
 		}),
 
@@ -537,6 +563,85 @@ export function createCanvasTools(token: string, url: string) {
 				// This tool exists to allow the AI to provide structured output
 				// that will be rendered by the RubricAnalysisUI component
 				return analysisData;
+			},
+		}),
+
+		generate_quiz_plan: tool({
+			description: 'Generate a detailed plan for quiz generation based on provided context (modules, assignments, or courses). This tool gathers information from the context and creates a structured plan that the user must approve before quiz generation. Call this tool when quiz mode is enabled and the user has provided context and a prompt.',
+			needsApproval: true,
+			inputSchema: z.object({
+				sources: z.object({
+					courses: z.array(z.object({
+						id: z.number().describe('Course ID'),
+						name: z.string().describe('Course name'),
+					})).optional().describe('Courses to use as sources'),
+					modules: z.array(z.object({
+						id: z.number().describe('Module ID'),
+						name: z.string().describe('Module name'),
+						courseId: z.number().describe('Course ID containing this module'),
+					})).optional().describe('Modules to use as sources'),
+					assignments: z.array(z.object({
+						id: z.number().describe('Assignment ID'),
+						name: z.string().describe('Assignment name'),
+						courseId: z.number().describe('Course ID containing this assignment'),
+					})).optional().describe('Assignments to use as sources'),
+				}).describe('Sources to gather information from'),
+				questionCount: z.number().int().min(1).max(50).describe('Total number of questions to generate'),
+				questionTypes: z.object({
+					multipleChoice: z.number().int().min(0).describe('Number of multiple choice questions'),
+					trueFalse: z.number().int().min(0).describe('Number of true/false questions'),
+					shortAnswer: z.number().int().min(0).describe('Number of short answer questions'),
+				}).describe('Breakdown of question types'),
+				topics: z.array(z.string()).describe('Topics that will be covered in the quiz'),
+				difficulty: z.enum(['easy', 'medium', 'hard', 'mixed']).describe('Estimated difficulty level'),
+				userPrompt: z.string().optional().describe('The user\'s specific prompt or requirements for the quiz'),
+			}),
+			execute: async (planData: any) => {
+				// Simply return the plan data as-is
+				// This tool exists to allow the AI to provide structured plan output
+				// that will be rendered by the Plan component for user approval
+				return planData;
+			},
+		}),
+
+		provide_quiz_output: tool({
+			description: 'CRITICAL: After the user approves the quiz plan from generate_quiz_plan, you MUST call this tool with the fully generated quiz data. This tool provides the structured quiz data for rendering in the QuizUI component. DO NOT generate text responses before calling this tool - call it immediately after quiz generation completes. This tool accepts the complete quiz structure matching the QuizOutput interface.',
+			inputSchema: z.object({
+				title: z.string().describe('Title of the quiz'),
+				description: z.string().optional().describe('Description of the quiz'),
+				totalQuestions: z.number().describe('Total number of questions'),
+				topics: z.array(z.string()).describe('Topics covered in the quiz'),
+				difficulty: z.enum(['easy', 'medium', 'hard', 'mixed']).describe('Overall difficulty level'),
+				questions: z.array(
+					z.object({
+						id: z.string().describe('Unique identifier for the question'),
+						question: z.string().describe('The question text'),
+						type: z.enum(['multiple_choice', 'true_false', 'short_answer']).describe('Type of question'),
+						options: z.array(z.string()).optional().describe('Answer options (for multiple choice and true/false)'),
+						correctAnswer: z.union([
+							z.string(),
+							z.number(),
+							z.boolean(),
+						]).describe('The correct answer (string for short answer, number for multiple choice index, boolean for true/false)'),
+						explanation: z.string().describe('Explanation of why the answer is correct'),
+						sourceReference: z.object({
+							type: z.enum(['module', 'assignment', 'course', 'page', 'file']).describe('Type of source'),
+							name: z.string().describe('Name of the source'),
+							url: z.string().optional().describe('URL to the source if available'),
+						}).optional().describe('Reference to the source material'),
+						topic: z.string().optional().describe('Topic this question covers'),
+					})
+				).describe('Array of quiz questions'),
+				metadata: z.object({
+					estimatedTime: z.number().optional().describe('Estimated time to complete in minutes'),
+					sourcesUsed: z.array(z.string()).optional().describe('List of sources used to generate the quiz'),
+				}).optional().describe('Additional metadata about the quiz'),
+			}),
+			execute: async (quizData: any) => {
+				// Simply return the quiz data as-is
+				// This tool exists to allow the AI to provide structured output
+				// that will be rendered by the QuizUI component
+				return quizData;
 			},
 		}),
 	};

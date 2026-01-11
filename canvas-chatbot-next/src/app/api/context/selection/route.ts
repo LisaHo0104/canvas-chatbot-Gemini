@@ -5,18 +5,19 @@ export const runtime = 'nodejs'
 export const maxDuration = 30
 
 // Helper function to normalize response items (handles both legacy number format and new object format)
-function normalizeResponseItems(items: any): Array<{ id: number; name: string; code?: string }> {
+function normalizeResponseItems(items: any): Array<{ id: number; name: string; code?: string; course_id?: number }> {
   if (!Array.isArray(items)) return []
   return items.map(item => {
     if (typeof item === 'number') {
       // Legacy format: just an ID
       return { id: item, name: `Item ${item}` }
     } else if (typeof item === 'object' && item !== null) {
-      // New format: object with id, name, code?
+      // New format: object with id, name, code?, course_id?
       return {
         id: item.id || item,
         name: item.name || `Item ${item.id || item}`,
         code: item.code,
+        course_id: item.course_id, // Preserve course_id if present
       }
     }
     return { id: item, name: `Item ${item}` }
@@ -101,23 +102,24 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Normalize to objects with {id, name, code?} format
+    // Normalize to objects with {id, name, code?, course_id?} format
     // Support both number arrays (backward compatibility) and object arrays
-    const normalizeToObjects = (items: any[]): Array<{ id: number; name: string; code?: string }> => {
+    const normalizeToObjects = (items: any[]): Array<{ id: number; name: string; code?: string; course_id?: number }> => {
       return items.map(item => {
         if (typeof item === 'number') {
           // Legacy format: just an ID
           return { id: item, name: `Item ${item}` }
         } else if (typeof item === 'object' && item !== null && typeof item.id === 'number') {
-          // New format: object with id, name, code?
+          // New format: object with id, name, code?, course_id?
           return {
             id: item.id,
             name: item.name || `Item ${item.id}`,
             code: item.code,
+            course_id: item.course_id, // Preserve course_id if present
           }
         }
         return null
-      }).filter((item): item is { id: number; name: string; code?: string } => item !== null)
+      }).filter((item): item is { id: number; name: string; code?: string; course_id?: number } => item !== null)
     }
 
     const selectedCourses = normalizeToObjects(courses)

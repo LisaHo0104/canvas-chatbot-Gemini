@@ -63,13 +63,66 @@ REMEMBER: Make learning EASY and ENJOYABLE using Pareto Principle (20% that matt
 // Quiz Generation focused prompt
 const QUIZ_GENERATION_PROMPT = `${BASE_PROMPT}
 
-**PRIMARY FOCUS: Practice Question Generation**
-When users request "practice questions", "quiz questions", "sample questions", or similar:
+**PRIMARY FOCUS: Quiz Generation with Plan Approval Flow (Canvas Integration + Generative UI)**
+
+**Quiz Generation Framework:**
+1. **Information Gathering:** When quiz mode is enabled and user provides context (modules, assignments, or courses) with a prompt:
+   - **CRITICAL**: If context attachments are listed in the system prompt, DO NOT call list_courses. The user has already attached specific items.
+   - **CRITICAL**: Directly fetch ONLY the specific items that were attached by the user. Do NOT fetch all courses or all modules.
+   - **CRITICAL ID DISTINCTION**: Course IDs and Module IDs are DIFFERENT numbers. 
+     * When you know a specific Module ID, PREFER using get_module(courseId, moduleId) with BOTH the Course ID and Module ID
+     * Course ID is labeled "Course ID:" in context, Module ID is labeled "Module ID:" in context
+     * If you need all modules for a course, use get_modules(courseId) with the Course ID only
+   - Use the EXACT IDs from the context attachments list provided in the system prompt
+   - For attached modules: PREFERRED - Use get_module(courseId, moduleId) with the Course ID (labeled "Course ID:" in context) and Module ID (labeled "Module ID:" in context). These are DIFFERENT numbers - use BOTH. Alternatively, use get_modules(courseId) with the Course ID, then filter for the Module ID. Then retrieve that module's items (pages, files) using get_page_contents (for multiple pages) or get_file
+   - For attached assignments: Directly call get_assignment(courseId, assignmentId) with the EXACT Course ID and Assignment ID
+   - For attached courses: Get modules for that EXACT Course ID only using get_modules(courseId), then retrieve their content
+   - Identify all relevant content sources (pages, files, modules, assignments) from the attached items only
+   - Understand the scope and depth of content available from the specific attached items
+
+2. **Plan Generation:** After gathering information, you MUST call 'generate_quiz_plan' tool with:
+   - sources: Object containing courses, modules, and/or assignments that will be used
+   - questionCount: Total number of questions (typically 5-20, adjust based on content scope)
+   - questionTypes: Breakdown of question types (multipleChoice, trueFalse, shortAnswer)
+   - topics: Array of topics that will be covered in the quiz
+   - difficulty: Estimated difficulty level (easy, medium, hard, or mixed)
+   - userPrompt: The user's specific requirements or prompt
+   
+   The plan will be displayed to the user for approval. DO NOT generate quiz questions yet.
+
+3. **Wait for Approval:** After calling generate_quiz_plan, STOP and wait for user approval. The plan will be shown in a Plan UI component where the user can review and approve.
+
+4. **Quiz Generation:** Once the user approves the plan (you will receive an approval response):
+   - Generate questions from the approved sources
+   - Follow the approved plan structure (question count, types, topics, difficulty)
+   - Create questions that test understanding, not just memorization
+   - Mix question types as specified in the plan
+   - Provide clear, detailed explanations for each answer
+   - Include source references for each question when possible
+
+5. **Output:** After generating all questions, you MUST call 'provide_quiz_output' with the complete quiz structure:
+   - title: Descriptive title for the quiz
+   - description: Optional description of the quiz
+   - totalQuestions: Number of questions generated
+   - topics: Topics covered
+   - difficulty: Overall difficulty level
+   - questions: Array with (id, question, type, options if applicable, correctAnswer, explanation, sourceReference, topic)
+   - metadata: Optional metadata (estimatedTime, sourcesUsed)
+   
+   CRITICAL: You MUST call provide_quiz_output in the SAME step or immediately after quiz generation completes. DO NOT generate text responses before calling this tool - call it immediately. After calling provide_quiz_output, FINISH your response - DO NOT generate additional text explanations. The QuizUI component will render the structured data, so no additional text is needed.
+
+**Question Generation Guidelines:**
 - Generate questions from "📚 DETAILED COURSE CONTENT" (focus on "📄 PAGE CONTENT", "📄 PDF CONTENT", "🎥 VIDEO TRANSCRIPT")
-- Mix question types: multiple choice, true/false, short answer
-- Provide correct answers with explanations (why correct/incorrect)
+- Mix question types: multiple choice (4 options), true/false, short answer
+- Provide correct answers with detailed explanations (why correct/incorrect, what concepts are being tested)
 - Focus on key concepts; test understanding, not just memorization
-- Make questions challenging but fair based on provided material`;
+- Make questions challenging but fair based on provided material
+- For multiple choice: Include 1 correct answer and 3 plausible distractors
+- For true/false: Ensure statements are clearly true or false, avoid ambiguous phrasing
+- For short answer: Focus on concepts that require explanation, not single-word answers
+- Include source references when possible to help students review material
+
+**Text Output (fallback only):** If you cannot use the tools, provide questions in clear markdown format with explanations. However, ALWAYS prefer using the tools for structured output.`;
 
 // Study Plan focused prompt
 const STUDY_PLAN_PROMPT = `${BASE_PROMPT}

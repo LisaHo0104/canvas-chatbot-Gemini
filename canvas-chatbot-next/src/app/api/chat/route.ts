@@ -22,7 +22,9 @@ export const runtime = 'nodejs';
 async function chatHandler(request: NextRequest) {
 	try {
 		const body = await request.json();
-		const { model, messages: incomingMessages, canvasContext, mode, selected_system_prompt_ids } = body;
+		const { model, messages: incomingMessages, mode, selected_system_prompt_ids } = body;
+		// Support both canvasContext and selected_context (frontend sends selected_context)
+		const canvasContext = (body as any).canvasContext || (body as any).selected_context;
 		// Backward compatibility: support old analysisMode parameter
 		const analysisMode = mode || (body as any).analysisMode;
 
@@ -218,12 +220,22 @@ async function chatHandler(request: NextRequest) {
 			(att) => att.type === 'assignment'
 		);
 		
-		// Find assignment details from canvas context
+		// Find assignment details from canvas context or attachments
 		const findTargetAssignment = (): { courseId: number; assignmentId: number } | null => {
-			if (analysisMode === 'rubric' && assignmentAttachments.length > 0 && canvasContext) {
-				const assignmentId = assignmentAttachments[0].id;
-				// Find the assignment in canvas context
-				if (canvasContext.courses && Array.isArray(canvasContext.courses)) {
+			if (analysisMode === 'rubric' && assignmentAttachments.length > 0) {
+				const assignmentAttachment = assignmentAttachments[0];
+				const assignmentId = assignmentAttachment.id;
+				
+				// First, try to get courseId from the attachment itself (if stored)
+				if ((assignmentAttachment as any).course_id && typeof (assignmentAttachment as any).course_id === 'number') {
+					return {
+						courseId: (assignmentAttachment as any).course_id,
+						assignmentId: assignmentId,
+					};
+				}
+				
+				// Fallback: find the assignment in canvas context
+				if (canvasContext && canvasContext.courses && Array.isArray(canvasContext.courses)) {
 					for (const course of canvasContext.courses) {
 						if (course.assignments && Array.isArray(course.assignments)) {
 							const assignment = course.assignments.find(
@@ -250,6 +262,60 @@ async function chatHandler(request: NextRequest) {
 			contextAttachments
 		);
 
+		// Build context information from attachments when canvasContext is missing but attachments exist
+		const buildContextFromAttachments = (attachments: CanvasContextAttachment[]): string => {
+			if (attachments.length === 0) return '';
+			
+			const courses = attachments.filter((a) => a.type === 'course');
+			const assignments = attachments.filter((a) => a.type === 'assignment');
+			const modules = attachments.filter((a) => a.type === 'module');
+			
+			const parts: string[] = ['\n\n📚 ATTACHED CONTEXT ITEMS:'];
+			
+			if (courses.length > 0) {
+				parts.push('   📚 Courses:');
+				courses.forEach((c) => {
+					parts.push(`      - Course ID: ${c.id}, Name: "${c.name}"${c.code ? `, Code: ${c.code}` : ''}`);
+				});
+			}
+			
+			if (assignments.length > 0) {
+				parts.push('   📝 Assignments:');
+				assignments.forEach((a) => {
+					const courseId = (a as any).course_id;
+					if (courseId) {
+						parts.push(`      - Assignment ID: ${a.id}, Name: "${a.name}", Course ID: ${courseId}`);
+					} else {
+						parts.push(`      - Assignment ID: ${a.id}, Name: "${a.name}"`);
+					}
+				});
+			}
+			
+			if (modules.length > 0) {
+				parts.push('   📦 Modules:');
+				modules.forEach((m) => {
+					const courseId = (m as any).course_id;
+					if (courseId) {
+						parts.push(`      - Module ID: ${m.id}, Name: "${m.name}", Course ID: ${courseId}`);
+					} else {
+						parts.push(`      - Module ID: ${m.id}, Name: "${m.name}"`);
+					}
+				});
+			}
+			
+			parts.push('\n⚠️ IMPORTANT: Use Canvas tools to fetch detailed content for these attached items.');
+			parts.push('   - For assignments: Use get_assignment(courseId, assignmentId)');
+			parts.push('   - For modules: Use get_module(courseId, moduleId) or get_modules(courseId)');
+			parts.push('   - For courses: Use get_modules(courseId) to get all modules');
+			
+			return parts.join('\n');
+		};
+
+		// Build context info from attachments if formattedContext is empty but attachments exist
+		const contextFromAttachments = (!formattedContext && contextAttachments.length > 0)
+			? buildContextFromAttachments(contextAttachments)
+			: '';
+
 		// Inject tool call instructions programmatically (hidden from static prompts)
 		let toolUsageInstructions = '';
 		
@@ -257,14 +323,15 @@ async function chatHandler(request: NextRequest) {
 		if (shouldUseCanvasTools) {
 			toolUsageInstructions = `\n\n**TOOL USAGE INSTRUCTIONS:**
 - Web Search: For topics/facts not in Canvas data, call 'webSearch' with concise queries. Synthesize findings with source links.
-- Summaries: When summarizing modules, call tools in sequence: list_courses → get_modules → get_page_content/get_file/get_file_text for all items. Retrieve ALL items before producing Pareto summary.
+- Summaries: When summarizing modules, call tools in sequence: list_courses → get_modules → get_page_contents (for multiple pages at once)/get_file/get_file_text for all items. Retrieve ALL items before producing Pareto summary.
 - Always provide comprehensive, student-friendly explanations after tool calls. Never return raw JSON. Synthesize into clear guidance with clickable links.`;
 		}
 
 		// Enhance system prompt when rubric mode is active
 		let rubricEnforcementPrompt = '';
-		if (analysisMode === 'rubric' && targetAssignment) {
-			rubricEnforcementPrompt = `\n\n⚠️ CRITICAL: RUBRIC MODE IS ACTIVE
+		if (analysisMode === 'rubric') {
+			if (targetAssignment) {
+				rubricEnforcementPrompt = `\n\n⚠️ CRITICAL: RUBRIC MODE IS ACTIVE
 			
 You MUST follow this sequence:
 1. Call 'analyze_rubric' tool immediately with:
@@ -281,12 +348,203 @@ You MUST follow this sequence:
 3. Call 'provide_rubric_analysis' with the complete analyzed structure matching RubricAnalysisOutput format.
 
 This sequence is REQUIRED. Do not skip any step. The provide_rubric_analysis tool is essential for rendering the generative UI component.`;
+			} else if (contextAttachments.length > 0) {
+				// If rubric mode is active but we don't have target assignment yet, 
+				// provide context about attached items so LLM can find the assignment
+				const assignmentAttachments = contextAttachments.filter((a) => a.type === 'assignment');
+				if (assignmentAttachments.length > 0) {
+					const assignmentList = assignmentAttachments.map((a) => {
+						const courseId = (a as any).course_id;
+						return courseId 
+							? `Assignment ID: ${a.id}, Name: "${a.name}", Course ID: ${courseId}`
+							: `Assignment ID: ${a.id}, Name: "${a.name}"`;
+					}).join('\n      - ');
+					
+					rubricEnforcementPrompt = `\n\n⚠️ CRITICAL: RUBRIC MODE IS ACTIVE
+			
+The user has attached assignment(s) for rubric analysis:
+   - ${assignmentList}
+
+You MUST:
+1. First, identify the assignment the user wants to analyze (from the attached assignments above)
+2. If you need the courseId, use the information provided in the context below or call get_assignment to find it
+3. Call 'analyze_rubric' tool with the correct courseId and assignmentId
+4. After receiving the rubric data, systematically analyze it following the framework
+5. Call 'provide_rubric_analysis' with the complete analyzed structure
+
+This sequence is REQUIRED. The provide_rubric_analysis tool is essential for rendering the generative UI component.`;
+				} else {
+					rubricEnforcementPrompt = `\n\n⚠️ CRITICAL: RUBRIC MODE IS ACTIVE
+			
+The user has enabled rubric mode. You need to:
+1. Identify which assignment the user wants to analyze (check attached context items below)
+2. Call 'analyze_rubric' tool with the correct courseId and assignmentId
+3. After receiving the rubric data, systematically analyze it
+4. Call 'provide_rubric_analysis' with the complete analyzed structure
+
+This sequence is REQUIRED. The provide_rubric_analysis tool is essential for rendering the generative UI component.`;
+				}
+			}
 		}
 
-		const systemText =
-			typeof canvasContext !== 'undefined' && canvasContext && formattedContext
-				? `${activeSystemPrompt}${toolUsageInstructions}${rubricEnforcementPrompt}\n\n${formattedContext}`
-				: `${activeSystemPrompt}${toolUsageInstructions}${rubricEnforcementPrompt}`;
+		// Enhance system prompt when quiz mode is active
+		let quizEnforcementPrompt = '';
+		if (analysisMode === 'quiz' && (contextAttachments.length > 0 || canvasContext)) {
+			// Check if we have context (courses, modules, or assignments)
+			const hasContext = contextAttachments.some(
+				(att: any) => att.type === 'course' || att.type === 'module' || att.type === 'assignment'
+			) || (canvasContext && formattedContext);
+
+			if (hasContext) {
+				// Helper to find course_id for a module or assignment
+				// First try from attachment object (if course_id was stored), then fallback to canvas context
+				const findCourseId = (itemId: number, itemType: 'module' | 'assignment', attachment?: any): number | null => {
+					// First check if course_id is already in the attachment object (from stored data)
+					if (attachment?.course_id && typeof attachment.course_id === 'number') {
+						return attachment.course_id;
+					}
+					// Fallback: search in canvas context
+					if (!canvasContext?.courses || !Array.isArray(canvasContext.courses)) {
+						return null;
+					}
+					for (const course of canvasContext.courses) {
+						const items = itemType === 'module' ? course.modules : course.assignments;
+						if (Array.isArray(items)) {
+							const found = items.find((item: any) => item.id === itemId);
+							if (found) {
+								return course.id;
+							}
+						}
+					}
+					return null;
+				};
+
+				// Build explicit list of context attachments for the agent
+				let contextAttachmentsList = '';
+				if (contextAttachments.length > 0) {
+					const courses = contextAttachments.filter((att: any) => att.type === 'course');
+					const modules = contextAttachments.filter((att: any) => att.type === 'module');
+					const assignments = contextAttachments.filter((att: any) => att.type === 'assignment');
+
+					const parts: string[] = ['\n\n🎯 CONTEXT ATTACHMENTS PROVIDED BY USER:'];
+					
+					if (courses.length > 0) {
+						parts.push('   📚 Courses:');
+						courses.forEach((c: any) => {
+							parts.push(`      - Course ID: ${c.id}, Name: "${c.name}"${c.code ? `, Code: ${c.code}` : ''}`);
+						});
+					}
+
+					if (modules.length > 0) {
+						parts.push('   📦 Modules:');
+						modules.forEach((m: any) => {
+							const courseId = findCourseId(m.id, 'module', m);
+							if (courseId) {
+								parts.push(`      - Module ID: ${m.id}, Name: "${m.name}", Course ID: ${courseId}`);
+							} else {
+								parts.push(`      - Module ID: ${m.id}, Name: "${m.name}" (Course ID: find from context below)`);
+							}
+						});
+					}
+
+					if (assignments.length > 0) {
+						parts.push('   📝 Assignments:');
+						assignments.forEach((a: any) => {
+							const courseId = findCourseId(a.id, 'assignment', a);
+							if (courseId) {
+								parts.push(`      - Assignment ID: ${a.id}, Name: "${a.name}", Course ID: ${courseId}`);
+							} else {
+								parts.push(`      - Assignment ID: ${a.id}, Name: "${a.name}" (Course ID: find from context below)`);
+							}
+						});
+					}
+
+					parts.push('\n   DIRECT FETCHING INSTRUCTIONS (use EXACT IDs from the list above, do NOT fetch all courses/modules):');
+					if (modules.length > 0) {
+						// Extract course IDs from modules (they now include course_id in the list)
+						const moduleCourseIds = modules.map((m: any) => {
+							const courseId = findCourseId(m.id, 'module');
+							return courseId;
+						}).filter((id): id is number => id !== null);
+						
+						if (moduleCourseIds.length > 0 || courses.length > 0) {
+							const allCourseIds = [...new Set([...courses.map((c: any) => c.id), ...moduleCourseIds])].join(' or ');
+							const moduleIds = modules.map((m: any) => m.id).join(', ');
+							parts.push(`   - For modules: PREFERRED - Use get_module(courseId: ${allCourseIds}, moduleId: ${moduleIds}) to directly fetch the specific module. The Course ID(s) ${allCourseIds} and Module ID(s) ${moduleIds} are DIFFERENT numbers - use BOTH parameters. If you need all modules, use get_modules(courseId: ${allCourseIds}) instead. Then retrieve that module's items (pages, files) using get_page_contents (for multiple pages at once) or get_file.`);
+						} else {
+							parts.push('   - For modules: PREFERRED - Use get_module(courseId, moduleId) to directly fetch the specific module. The Course ID and Module ID are shown in the list above - these are DIFFERENT numbers. Call get_module with BOTH the Course ID and Module ID. If you need all modules, use get_modules(courseId) with the Course ID instead. Then retrieve that module\'s items (pages, files) using get_page_contents (for multiple pages at once) or get_file.');
+						}
+					}
+					if (assignments.length > 0) {
+						// Extract course IDs from assignments (they now include course_id in the list)
+						const assignmentCourseIds = assignments.map((a: any) => {
+							const courseId = findCourseId(a.id, 'assignment');
+							return courseId;
+						}).filter((id): id is number => id !== null);
+						
+						if (assignmentCourseIds.length > 0 || courses.length > 0) {
+							const allCourseIds = [...new Set([...courses.map((c: any) => c.id), ...assignmentCourseIds])].join(' or ');
+							const assignmentIds = assignments.map((a: any) => a.id).join(', ');
+							parts.push(`   - For assignments: Use get_assignment(courseId: ${allCourseIds}, assignmentId: ${assignmentIds}) with the Course ID(s) ${allCourseIds} and Assignment ID(s) ${assignmentIds} from the list above.`);
+						} else {
+							parts.push('   - For assignments: Use get_assignment(courseId, assignmentId) with the Course ID and Assignment ID from the list above. The Course ID is shown next to each assignment in the list.');
+						}
+					}
+					if (courses.length > 0) {
+						parts.push('   - For courses: Call get_modules(courseId) for the EXACT course ID listed above to get all modules for that specific course, then retrieve their content.');
+					}
+					
+					contextAttachmentsList = parts.join('\n');
+				}
+
+				quizEnforcementPrompt = `\n\n⚠️ CRITICAL: QUIZ MODE IS ACTIVE${contextAttachmentsList}
+				
+You MUST follow this sequence:
+1. **Gather Information:** DIRECTLY fetch ONLY the specific items listed in the context attachments above:
+   ${contextAttachments.length > 0 ? `
+   ⚠️ CRITICAL INSTRUCTIONS:
+   - DO NOT call list_courses - the user has already attached specific items
+   - DO NOT fetch all courses or all modules - use ONLY the EXACT IDs from the attachments list above
+   - For attached modules: Get modules for the course (from formatted context), filter for the EXACT module ID, then get that module's items using get_page_contents (for multiple pages at once) or get_file
+   - For attached assignments: Directly call get_assignment(courseId, assignmentId) with the EXACT assignment ID
+   - For attached courses: Get modules for that EXACT course ID only using get_modules(courseId), then retrieve their content
+   - Retrieve content ONLY from the specific attached items, not from all available courses/modules
+   - If you need the courseId for a module, it should be available in the formatted context below` : `
+   - If courses are provided: Use get_modules, get_page_contents (for multiple pages at once), get_file to retrieve content
+   - If modules are provided: Use get_page_contents (for multiple pages at once), get_file to retrieve module content  
+   - If assignments are provided: Use get_assignment to understand assignment content`}
+   - Retrieve ALL relevant content from the attached items before proceeding
+
+2. **Generate Plan:** After gathering information, you MUST call 'generate_quiz_plan' tool with:
+   - sources: Object containing courses, modules, and/or assignments from the context (use the IDs from the attachments list above)
+   - questionCount: Total number of questions (typically 5-20, adjust based on content scope)
+   - questionTypes: Breakdown of question types (multipleChoice, trueFalse, shortAnswer)
+   - topics: Array of topics that will be covered
+   - difficulty: Estimated difficulty level (easy, medium, hard, or mixed)
+   - userPrompt: The user's specific requirements or prompt (if provided)
+
+3. **Wait for Approval:** After calling generate_quiz_plan, STOP and wait for user approval. Do NOT generate quiz questions yet.
+
+4. **Generate Quiz:** Once the user approves the plan (you will receive an approval response):
+   - Generate questions from the approved sources following the plan
+   - Create questions that test understanding, not just memorization
+   - Provide clear, detailed explanations for each answer
+   - Include source references when possible
+
+5. **Output:** After generating all questions, you MUST call 'provide_quiz_output' with the complete quiz structure matching QuizOutput format.
+
+This sequence is REQUIRED. Do not skip any step. The generate_quiz_plan and provide_quiz_output tools are essential for the quiz generation workflow.`;
+			}
+		}
+
+		// Include context in system prompt if:
+		// 1. formattedContext exists (from canvasContext with courses), OR
+		// 2. contextFromAttachments exists (when attachments exist but canvasContext is missing)
+		const contextToInclude = formattedContext || contextFromAttachments;
+		
+		const systemText = contextToInclude
+			? `${activeSystemPrompt}${toolUsageInstructions}${rubricEnforcementPrompt}${quizEnforcementPrompt}\n\n${contextToInclude}`
+			: `${activeSystemPrompt}${toolUsageInstructions}${rubricEnforcementPrompt}${quizEnforcementPrompt}`;
 
 		const uiMessagesWithSystem: UIMessage[] = [
 			{ role: 'system', parts: [{ type: 'text', text: systemText }] } as any,
@@ -586,6 +844,23 @@ This sequence is REQUIRED. Do not skip any step. The provide_rubric_analysis too
 		return response;
 	} catch (error) {
 		console.error('Chat API error:', error);
+		
+		// Check if the error is about tool use not being supported
+		const errorMessage = error instanceof Error ? error.message : String(error);
+		const errorString = JSON.stringify(error);
+		
+		if (errorMessage.includes('No endpoints found that support tool use') || 
+		    errorString.includes('No endpoints found that support tool use')) {
+			return new Response(
+				JSON.stringify({
+					error: `The selected model (${selectedModel}) does not support tool use, which is required for quiz generation and other advanced features. Please select a model that supports tool use, such as:\n- google/gemini-2.0-flash-exp\n- anthropic/claude-3.5-sonnet\n- openai/gpt-4o`,
+					errorCode: 'MODEL_NO_TOOL_SUPPORT',
+					suggestedModels: ['google/gemini-2.0-flash-exp', 'anthropic/claude-3.5-sonnet', 'openai/gpt-4o']
+				}),
+				{ status: 400 },
+			);
+		}
+		
 		return new Response(
 			JSON.stringify({
 				error: error instanceof Error ? error.message : 'Internal server error',

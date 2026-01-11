@@ -58,7 +58,9 @@ async function getModulesHandler(request: NextRequest) {
     return new Response(JSON.stringify({ modules }), { status: 200 })
   } catch (error) {
     console.error('Modules API error:', error)
-    return new Response(JSON.stringify({ error: 'Internal server error' }), { status: 500 })
+    const errorMessage = error instanceof Error ? error.message : 'Internal server error'
+    const statusCode = errorMessage.includes('404') || errorMessage.includes('not found') ? 404 : 500
+    return new Response(JSON.stringify({ error: errorMessage }), { status: statusCode })
   }
 }
 

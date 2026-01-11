@@ -22,6 +22,11 @@ jest.mock('../canvas-api', () => {
     getPageContent(_courseId: number, pageUrl: string) {
       return Promise.resolve({ title: 'Intro', body: 'Welcome', url: pageUrl })
     }
+    async getPageContents(_courseId: number, pageUrls: string[]) {
+      return Promise.resolve(
+        pageUrls.map((pageUrl) => ({ title: `Page ${pageUrl}`, body: 'Content', url: pageUrl }))
+      )
+    }
     getFileContent(fileId: number) {
       return Promise.resolve({ id: fileId, filename: 'file.pdf', url: 'https://example.com/file.pdf', 'content-type': 'application/pdf' })
     }
@@ -85,9 +90,12 @@ describe('canvas tools', () => {
     expect(res[0].title).toBe('Exam')
   })
 
-  test('get_page_content returns page', async () => {
-    const res = await tools.get_page_content.execute({ parameters: { courseId: 1, pageUrl: 'intro' } })
-    expect(res.title).toBe('Intro')
+  test('get_page_contents returns pages', async () => {
+    const res = await tools.get_page_contents.execute({ parameters: { courseId: 1, pageUrls: ['intro', 'about'] } })
+    expect(Array.isArray(res)).toBe(true)
+    expect(res.length).toBe(2)
+    expect(res[0].title).toBe('Page intro')
+    expect(res[1].title).toBe('Page about')
   })
 
   test('get_file returns file metadata', async () => {
