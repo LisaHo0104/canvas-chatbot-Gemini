@@ -9,6 +9,7 @@ import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuIte
 import { Menu } from 'lucide-react'
 import { NavigationMenu, NavigationMenuList, NavigationMenuItem, NavigationMenuLink } from '@/components/ui/navigation-menu'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
+import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { createClient as createSupabaseClient } from '@/lib/supabase/client'
 
@@ -92,12 +93,13 @@ export default function MainNavBar() {
                         <TooltipTrigger asChild>
                           <NavigationMenuLink
                             className={cn(
-                              'inline-flex items-center rounded-md px-3 py-2 text-sm text-muted-foreground opacity-50 cursor-not-allowed',
+                              'inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-sm text-muted-foreground opacity-50 cursor-not-allowed',
                               pathname === '/protected/quiz' ? 'bg-accent text-accent-foreground' : ''
                             )}
                             aria-disabled="true"
                           >
                             Quiz
+                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">Beta</Badge>
                           </NavigationMenuLink>
                         </TooltipTrigger>
                         <TooltipContent>This feature will be ready soon</TooltipContent>
@@ -144,8 +146,9 @@ export default function MainNavBar() {
                     <DropdownMenuItem asChild>
                       <Link href="/protected/chat">Chat</Link>
                     </DropdownMenuItem>
-                    <DropdownMenuItem disabled title="This feature will be ready soon">
+                    <DropdownMenuItem disabled title="This feature will be ready soon" className="flex items-center gap-1.5">
                       Quiz
+                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">Beta</Badge>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
                       <Link href="/protected/context">Context</Link>

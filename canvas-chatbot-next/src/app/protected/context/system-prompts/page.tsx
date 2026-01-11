@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Image from 'next/image'
 import { ArrowLeft, FileCode, Loader2, Save } from 'lucide-react'
@@ -22,6 +22,8 @@ export default function SystemPromptsPage() {
   const [selectedPromptId, setSelectedPromptId] = useState<string | null>(null)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [enabledPromptIds, setEnabledPromptIds] = useState<string[]>([])
+  // Keep a reference to the current prompt to prevent it from disappearing during reload
+  const currentPromptRef = useRef<SystemPrompt | null>(null)
   const [currentSelections, setCurrentSelections] = useState<{
     courses: number[]
     assignments: number[]
@@ -35,9 +37,14 @@ export default function SystemPromptsPage() {
   const supabase = createSupabaseClient()
 
   // Load prompts and select the one from query params
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (showLoading = false) => {
+    // #region agent log
+    fetch('http://127.0.0.1:7244/ingest/b8e98944-552b-4fa4-94d4-0555e01fc282',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:38',message:'loadData called',data:{callStack:new Error().stack?.split('\n').slice(1,4).join('|'),showLoading},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
     try {
-      setLoading(true)
+      if (showLoading) {
+        setLoading(true)
+      }
 
       // Get prompt ID from query params
       const promptId = searchParams.get('id')
@@ -60,6 +67,9 @@ export default function SystemPromptsPage() {
         throw new Error('Failed to load prompts')
       }
       const promptsData = await promptsResponse.json()
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/b8e98944-552b-4fa4-94d4-0555e01fc282',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:62',message:'About to set templates and userPrompts',data:{templatesCount:promptsData.templates?.length,userPromptsCount:promptsData.userPrompts?.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       setTemplates(promptsData.templates || [])
       setUserPrompts(promptsData.userPrompts || [])
 
@@ -75,8 +85,15 @@ export default function SystemPromptsPage() {
               (up: SystemPrompt) => up.template_type === prompt.template_type
             )
             // Show modified version if it exists, otherwise show template
-            setSelectedPromptId(modifiedVersion ? modifiedVersion.id : prompt.id)
+            const newSelectedId = modifiedVersion ? modifiedVersion.id : prompt.id
+            // #region agent log
+            fetch('http://127.0.0.1:7244/ingest/b8e98944-552b-4fa4-94d4-0555e01fc282',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:78',message:'Setting selectedPromptId (template case)',data:{newSelectedId,oldSelectedId:selectedPromptId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+            // #endregion
+            setSelectedPromptId(newSelectedId)
           } else {
+            // #region agent log
+            fetch('http://127.0.0.1:7244/ingest/b8e98944-552b-4fa4-94d4-0555e01fc282',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:80',message:'Setting selectedPromptId (non-template)',data:{newSelectedId:promptId,oldSelectedId:selectedPromptId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+            // #endregion
             setSelectedPromptId(promptId)
           }
         } else {
@@ -93,20 +110,29 @@ export default function SystemPromptsPage() {
             (up: SystemPrompt) => up.template_type === defaultTemplate.template_type
           )
           // Show modified version if it exists, otherwise show template
-          setSelectedPromptId(modifiedVersion ? modifiedVersion.id : defaultTemplate.id)
+          const newSelectedId = modifiedVersion ? modifiedVersion.id : defaultTemplate.id
+          // #region agent log
+          fetch('http://127.0.0.1:7244/ingest/b8e98944-552b-4fa4-94d4-0555e01fc282',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:96',message:'Setting selectedPromptId (default template)',data:{newSelectedId,oldSelectedId:selectedPromptId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+          // #endregion
+          setSelectedPromptId(newSelectedId)
         }
       }
     } catch (error) {
       console.error('Error loading data:', error)
       toast.error('Failed to load system prompts')
     } finally {
-      setLoading(false)
+      if (showLoading) {
+        setLoading(false)
+      }
     }
   }, [searchParams, router])
 
 
   // Handle save changes
   const handleSave = useCallback(async (promptId: string, promptText: string, name?: string, description?: string) => {
+    // #region agent log
+    fetch('http://127.0.0.1:7244/ingest/b8e98944-552b-4fa4-94d4-0555e01fc282',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:109',message:'handleSave called',data:{promptId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
     setSaving(true)
     try {
       const prompt = [...templates, ...userPrompts].find((p) => p.id === promptId)
@@ -139,8 +165,11 @@ export default function SystemPromptsPage() {
           }
 
           toast.success('Changes saved successfully!')
-          // Reload to get updated prompt
-          await loadData()
+          // Reload to get updated prompt (without showing loading spinner)
+          // #region agent log
+          fetch('http://127.0.0.1:7244/ingest/b8e98944-552b-4fa4-94d4-0555e01fc282',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:143',message:'About to call loadData (existing modified)',data:{promptId},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'B'})}).catch(()=>{});
+          // #endregion
+          await loadData(false) // Don't show loading spinner
         } else {
           // Create new user copy with template_type
           const response = await fetch('/api/system-prompts', {
@@ -159,9 +188,17 @@ export default function SystemPromptsPage() {
             throw new Error(errorData.error || 'Failed to save prompt')
           }
 
+          const data = await response.json()
           toast.success('Changes saved successfully!')
-          // Reload to get updated prompt and show the modified version
-          await loadData()
+          // Update selected prompt and URL - the URL change will trigger loadData via useEffect
+          if (data.prompt) {
+            // #region agent log
+            fetch('http://127.0.0.1:7244/ingest/b8e98944-552b-4fa4-94d4-0555e01fc282',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:168',message:'Setting selectedPromptId and router.replace (will trigger URL change reload)',data:{newPromptId:data.prompt.id},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'C'})}).catch(()=>{});
+            // #endregion
+            setSelectedPromptId(data.prompt.id)
+            router.replace(`/protected/context/system-prompts?id=${data.prompt.id}`)
+            // Don't call loadData() here - the URL change will trigger it via the searchParams useEffect
+          }
         }
       } else {
         // Update existing user prompt
@@ -181,8 +218,11 @@ export default function SystemPromptsPage() {
         }
 
         toast.success('Changes saved successfully!')
-        // Reload to get updated prompt
-        await loadData()
+        // Reload to get updated prompt (without showing loading spinner)
+        // #region agent log
+        fetch('http://127.0.0.1:7244/ingest/b8e98944-552b-4fa4-94d4-0555e01fc282',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:191',message:'About to call loadData (custom prompt)',data:{promptId},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'B'})}).catch(()=>{});
+        // #endregion
+        await loadData(false) // Don't show loading spinner
       }
       setHasUnsavedChanges(false)
     } catch (error) {
@@ -283,22 +323,88 @@ export default function SystemPromptsPage() {
 
   // Handle reset to original Lulu prompt
   const handleReset = useCallback(async () => {
+    // #region agent log
+    fetch('http://127.0.0.1:7244/ingest/b8e98944-552b-4fa4-94d4-0555e01fc282',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:291',message:'handleReset called',data:{selectedPromptId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
     if (!selectedPromptId) return
 
     const prompt = [...templates, ...userPrompts].find((p) => p.id === selectedPromptId)
     if (!prompt) return
 
-    // Only handle reset for templates
-    if (!prompt.is_template) {
-      // For custom prompts, just reset the form (handled by editor)
+    // Handle reset for templates or modified Lulu prompts (those with template_type)
+    const isLuluPrompt = prompt.is_template || (prompt.template_type && templates.some(t => t.template_type === prompt.template_type))
+    
+    if (!isLuluPrompt) {
+      // For custom prompts without template_type, just reset the form (handled by editor)
       return
     }
 
     try {
       setSaving(true)
-      // Find the user prompt that modifies this template
+      
+      // Determine the template type
+      const templateType = prompt.template_type
+      if (!templateType) {
+        toast.error('Cannot reset: No template type found')
+        setSaving(false)
+        return
+      }
+      
+      // If the current prompt is a modified version (not a template), delete it directly
+      if (!prompt.is_template && prompt.template_type) {
+        const response = await fetch(`/api/system-prompts/${prompt.id}`, {
+          method: 'DELETE',
+        })
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}))
+          throw new Error(errorData.error || 'Failed to reset prompt')
+        }
+
+        // Remove from enabled list if it was enabled
+        if (enabledPromptIds.includes(prompt.id)) {
+          const newEnabledIds = enabledPromptIds.filter((id) => id !== prompt.id)
+          try {
+            await fetch('/api/context/selection', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                courses: currentSelections.courses,
+                assignments: currentSelections.assignments,
+                modules: currentSelections.modules,
+                enabled_system_prompt_ids: newEnabledIds,
+              }),
+            })
+            setEnabledPromptIds(newEnabledIds)
+          } catch (error) {
+            console.error('Error updating enabled state:', error)
+            // Don't fail the whole operation if this fails
+          }
+        }
+
+        toast.success('Reset to original Lulu prompt')
+        // Find and navigate to the original template
+        const originalTemplate = templates.find(
+          (t) => t.template_type === templateType
+        )
+        if (originalTemplate) {
+          // #region agent log
+          fetch('http://127.0.0.1:7244/ingest/b8e98944-552b-4fa4-94d4-0555e01fc282',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:354',message:'router.replace (will trigger URL change reload)',data:{originalTemplateId:originalTemplate.id},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'C'})}).catch(()=>{});
+          // #endregion
+          router.replace(`/protected/context/system-prompts?id=${originalTemplate.id}`)
+          // Don't call loadData() here - the URL change will trigger it via the searchParams useEffect
+        }
+        return
+      }
+      
+      // If viewing a template, find and delete the modified version
       const modifiedPrompt = userPrompts.find(
-        (up) => up.template_type === prompt.template_type
+        (up) => up.template_type === templateType
+      )
+
+      // Find the original template
+      const originalTemplate = templates.find(
+        (t) => t.template_type === templateType
       )
 
       if (modifiedPrompt) {
@@ -333,10 +439,14 @@ export default function SystemPromptsPage() {
         }
 
         toast.success('Reset to original Lulu prompt')
-        // Update URL to point to template
-        router.replace(`/protected/context/system-prompts?id=${prompt.id}`)
-        // Reload to show original template
-        await loadData()
+        // Update URL to point to template if it exists
+        if (originalTemplate) {
+          // #region agent log
+          fetch('http://127.0.0.1:7244/ingest/b8e98944-552b-4fa4-94d4-0555e01fc282',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:404',message:'router.replace (will trigger URL change reload)',data:{originalTemplateId:originalTemplate.id},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'C'})}).catch(()=>{});
+          // #endregion
+          router.replace(`/protected/context/system-prompts?id=${originalTemplate.id}`)
+          // Don't call loadData() here - the URL change will trigger it via the searchParams useEffect
+        }
       } else {
         // No modified version exists, just reset the form
         toast.info('Already at original Lulu prompt')
@@ -347,7 +457,7 @@ export default function SystemPromptsPage() {
     } finally {
       setSaving(false)
     }
-  }, [selectedPromptId, templates, userPrompts, enabledPromptIds, currentSelections, loadData])
+  }, [selectedPromptId, templates, userPrompts, enabledPromptIds, currentSelections, loadData, router])
 
   // Handle delete prompt
   const handleDeletePrompt = useCallback(
@@ -364,7 +474,7 @@ export default function SystemPromptsPage() {
       if (selectedPromptId === promptId) {
         router.push('/protected/context')
       } else {
-        await loadData()
+        await loadData(false) // Don't show loading spinner
       }
     },
     [selectedPromptId, router, loadData]
@@ -381,9 +491,15 @@ export default function SystemPromptsPage() {
     }
   }, [selectedPromptId, hasUnsavedChanges, templates, userPrompts])
 
-  // Initial load
+  // Track if we've done initial load to prevent double-loading
+  const [hasInitialized, setHasInitialized] = useState(false)
+
+  // Initial load - only run once on mount
   useEffect(() => {
     const initialize = async () => {
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/b8e98944-552b-4fa4-94d4-0555e01fc282',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:453',message:'Initial load useEffect triggered',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
       // Check authentication
       const {
         data: { session },
@@ -394,10 +510,29 @@ export default function SystemPromptsPage() {
         return
       }
 
-      await loadData()
+      await loadData(true) // Show loading spinner on initial load
+      setHasInitialized(true)
     }
     initialize()
-  }, [router, supabase, loadData])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // Only run once on mount - removed loadData from deps to prevent re-triggering
+
+  // Clear prompt ref when selectedPromptId changes to a different prompt
+  useEffect(() => {
+    if (currentPromptRef.current && currentPromptRef.current.id !== selectedPromptId) {
+      currentPromptRef.current = null
+    }
+  }, [selectedPromptId])
+
+  // Handle URL changes (e.g., from router.replace) - but skip initial mount
+  useEffect(() => {
+    if (!hasInitialized) return // Skip on initial mount
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7244/ingest/b8e98944-552b-4fa4-94d4-0555e01fc282',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:520',message:'URL change detected, reloading data',data:{promptId:searchParams.get('id')},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion
+    loadData(false) // Don't show loading spinner on URL changes (save/reset operations)
+  }, [searchParams, hasInitialized, loadData])
 
   // Get the effective prompt to show (modified version if exists, otherwise template)
   const getEffectivePrompt = useCallback((template: SystemPrompt): SystemPrompt => {
@@ -405,16 +540,28 @@ export default function SystemPromptsPage() {
     return modified || template
   }, [userPrompts])
 
-  // Find the selected prompt, handling templates specially
-  const effectiveSelectedPrompt = (() => {
+  // Find the selected prompt, handling templates specially - memoized to prevent unnecessary recalculations
+  const effectiveSelectedPrompt = useMemo(() => {
     if (!selectedPromptId) return null
     const prompt = [...templates, ...userPrompts].find((p) => p.id === selectedPromptId)
-    if (!prompt) return null
+    // If prompt not found in current arrays, use the cached reference (prevents disappearing during reload)
+    if (!prompt) {
+      if (currentPromptRef.current && currentPromptRef.current.id === selectedPromptId) {
+        return currentPromptRef.current
+      }
+      return null
+    }
     
+    // Update the cached reference when we find the prompt
+    currentPromptRef.current = prompt
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7244/ingest/b8e98944-552b-4fa4-94d4-0555e01fc282',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:477',message:'effectiveSelectedPrompt recalculated',data:{selectedPromptId,promptId:prompt.id},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
     // If it's a template, return it as-is (we already selected the effective one in loadData)
     // If it's a modified version, return it
     return prompt
-  })()
+  }, [selectedPromptId, templates, userPrompts])
 
   if (loading) {
     return (
@@ -471,21 +618,6 @@ export default function SystemPromptsPage() {
                 ? 'Edit your customized version of this Lulu prompt. Use Reset to restore the original.'
                 : 'Edit the system prompt text and save your changes'}
             </p>
-            {(saving || hasUnsavedChanges) && (
-              <div className="flex items-center gap-2 mt-2">
-                {saving && (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Saving...</span>
-                  </div>
-                )}
-                {hasUnsavedChanges && !saving && (
-                  <div className="text-xs text-muted-foreground">
-                    Unsaved changes
-                  </div>
-                )}
-              </div>
-            )}
           </div>
         </div>
 

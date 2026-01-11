@@ -6,6 +6,7 @@ import { FileText, Trash2, Edit2, Loader2, GraduationCap, ClipboardList, Calenda
 import { Switch } from '@/components/ui/switch'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
+import { Badge } from '@/components/ui/badge'
 import { SystemPrompt } from './SystemPromptManager'
 
 interface SystemPromptListInlineProps {
@@ -229,6 +230,10 @@ export function SystemPromptListInline({
     }
   }
 
+  const isBetaFeature = (templateType: string | null | undefined): boolean => {
+    return templateType === 'quiz_generation' || templateType === 'study_plan' || templateType === 'rubric_analysis'
+  }
+
   const modifiedLuluPrompts = getModifiedLuluPrompts()
   const customUserPrompts = getCustomUserPrompts()
 
@@ -263,6 +268,9 @@ export function SystemPromptListInline({
                     <div className="flex items-center gap-2 mb-1">
                       <TemplateIcon className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                       <span className="font-medium">{template.name}</span>
+                      {isBetaFeature(template.template_type) && (
+                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-green-100 text-green-800 border-green-300 dark:bg-green-900 dark:text-green-200 dark:border-green-700">Beta</Badge>
+                      )}
                       {isModified && (
                         <span className="text-xs text-muted-foreground">(Modified)</span>
                       )}

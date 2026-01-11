@@ -26,6 +26,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { Spinner } from '@/components/ui/spinner'
+import { Badge } from '@/components/ui/badge'
 
 let supabase: any = null
 
@@ -1367,8 +1368,11 @@ export default function ChatPage() {
                         ) : (
                           <GraduationCap className="size-4" />
                         )}
-                        <span className="ml-1">
+                        <span className="ml-1 flex items-center gap-1.5">
                           {mode === 'rubric' ? 'Rubric' : mode === 'quiz' ? 'Quiz' : mode === 'study-plan' ? 'Study Plan' : 'Generic'}
+                          {(mode === 'rubric' || mode === 'quiz' || mode === 'study-plan') && (
+                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-green-100 text-green-800 border-green-300 dark:bg-green-900 dark:text-green-200 dark:border-green-700">Beta</Badge>
+                          )}
                         </span>
                       </PromptInputButton>
                     </PopoverTrigger>
@@ -1397,7 +1401,10 @@ export default function ChatPage() {
                               }}
                             >
                               <FileText className="size-4" />
-                              <span>Rubric Analysis</span>
+                              <span className="flex items-center gap-1.5">
+                                Rubric Analysis
+                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-green-100 text-green-800 border-green-300 dark:bg-green-900 dark:text-green-200 dark:border-green-700">Beta</Badge>
+                              </span>
                               {mode === 'rubric' && <CheckIcon className="ml-auto size-4" />}
                             </PromptInputCommandItem>
                             <PromptInputCommandItem
@@ -1408,7 +1415,10 @@ export default function ChatPage() {
                               }}
                             >
                               <FileQuestion className="size-4" />
-                              <span>Quiz Analysis</span>
+                              <span className="flex items-center gap-1.5">
+                                Quiz Analysis
+                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-green-100 text-green-800 border-green-300 dark:bg-green-900 dark:text-green-200 dark:border-green-700">Beta</Badge>
+                              </span>
                               {mode === 'quiz' && <CheckIcon className="ml-auto size-4" />}
                             </PromptInputCommandItem>
                             <PromptInputCommandItem
@@ -1419,7 +1429,10 @@ export default function ChatPage() {
                               }}
                             >
                               <BookOpen className="size-4" />
-                              <span>Study Plan</span>
+                              <span className="flex items-center gap-1.5">
+                                Study Plan
+                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-green-100 text-green-800 border-green-300 dark:bg-green-900 dark:text-green-200 dark:border-green-700">Beta</Badge>
+                              </span>
                               {mode === 'study-plan' && <CheckIcon className="ml-auto size-4" />}
                             </PromptInputCommandItem>
                           </PromptInputCommandGroup>

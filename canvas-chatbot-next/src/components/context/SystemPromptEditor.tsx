@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { Loader2, Save, RotateCcw, Info, AlertCircle, Eye, Edit } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -12,6 +12,8 @@ import { Switch } from '@/components/ui/switch'
 import { MessageResponse } from '@/components/ai-elements/message'
 import { toast } from 'sonner'
 import { SystemPrompt } from './SystemPromptManager'
+import { SYSTEM_PROMPT_TEMPLATES } from '@/lib/system-prompt-templates'
+import { SYSTEM_PROMPT } from '@/lib/system-prompt'
 
 interface SystemPromptEditorProps {
   prompt: SystemPrompt | null
@@ -44,23 +46,67 @@ export function SystemPromptEditor({
   const [togglingEnabled, setTogglingEnabled] = useState(false)
   const [hasChanges, setHasChanges] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [resetting, setResetting] = useState(false)
   const [mobileView, setMobileView] = useState<'edit' | 'preview'>('edit')
+  const [isResetting, setIsResetting] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const previewRef = useRef<HTMLDivElement>(null)
+  const lastProcessedPromptIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     setIsEnabled(enabled)
   }, [enabled])
 
   useEffect(() => {
+    // #region agent log
+    fetch('http://127.0.0.1:7244/ingest/b8e98944-552b-4fa4-94d4-0555e01fc282',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SystemPromptEditor.tsx:58',message:'useEffect triggered - prompt prop changed',data:{promptId:prompt?.id,promptName:prompt?.name,isResetting,lastProcessedId:lastProcessedPromptIdRef.current},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+    // Don't overwrite form during reset operation
+    if (isResetting) return
+    
+    // Skip if we've already processed this prompt (prevents double-loading)
+    if (prompt?.id && prompt.id === lastProcessedPromptIdRef.current) {
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/b8e98944-552b-4fa4-94d4-0555e01fc282',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SystemPromptEditor.tsx:65',message:'Skipping duplicate load - already processed this prompt',data:{promptId:prompt.id},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+      return
+    }
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7244/ingest/b8e98944-552b-4fa4-94d4-0555e01fc282',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SystemPromptEditor.tsx:70',message:'Loading prompt text into editor',data:{promptId:prompt?.id,isTemplate:prompt?.is_template},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
     if (prompt) {
-      setPromptText(prompt.prompt_text)
-      setOriginalPromptText(prompt.prompt_text)
+      // Only load from source files if it's a template (is_template === true)
+      // For modified versions (is_template === false but has template_type), use the prompt_text from database
+      let textToLoad = prompt.prompt_text
+      
+      if (prompt.is_template) {
+        // Get original text from source files for templates only
+        const getOriginalPromptText = (templateType: string | null | undefined): string | null => {
+          if (!templateType) return null
+          const sourceTemplate = SYSTEM_PROMPT_TEMPLATES.find(t => t.template_type === templateType)
+          if (sourceTemplate) return sourceTemplate.prompt_text
+          if (templateType === 'default') return SYSTEM_PROMPT
+          return null
+        }
+        const originalText = getOriginalPromptText(prompt.template_type)
+        if (originalText) {
+          textToLoad = originalText
+        }
+      }
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/b8e98944-552b-4fa4-94d4-0555e01fc282',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SystemPromptEditor.tsx:82',message:'Setting prompt text state',data:{promptId:prompt.id,textLength:textToLoad.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+      setPromptText(textToLoad)
+      setOriginalPromptText(textToLoad)
       setPromptName(prompt.name)
       setOriginalPromptName(prompt.name)
       setPromptDescription(prompt.description || '')
       setOriginalPromptDescription(prompt.description || '')
       setHasChanges(false)
+      // Mark this prompt as processed
+      lastProcessedPromptIdRef.current = prompt.id
     } else {
       setPromptText('')
       setOriginalPromptText('')
@@ -69,15 +115,44 @@ export function SystemPromptEditor({
       setPromptDescription('')
       setOriginalPromptDescription('')
       setHasChanges(false)
+      // Clear the processed prompt ID when prompt is null
+      lastProcessedPromptIdRef.current = null
     }
-  }, [prompt])
+  }, [prompt, isResetting])
 
   useEffect(() => {
     const textChanged = promptText !== originalPromptText
     const nameChanged = promptName !== originalPromptName
     const descChanged = promptDescription !== originalPromptDescription
-    setHasChanges(textChanged || nameChanged || descChanged)
+    const newHasChanges = textChanged || nameChanged || descChanged
+    setHasChanges(newHasChanges)
   }, [promptText, originalPromptText, promptName, originalPromptName, promptDescription, originalPromptDescription])
+
+  // Helper function to get the original template text from source files
+  const getOriginalTemplateText = useCallback((templateType: string | null | undefined): string | null => {
+    if (!templateType) return null
+    const sourceTemplate = SYSTEM_PROMPT_TEMPLATES.find(t => t.template_type === templateType)
+    if (sourceTemplate) return sourceTemplate.prompt_text
+    if (templateType === 'default') return SYSTEM_PROMPT
+    return null
+  }, [])
+
+  // Check if current text differs from original template text (for Reset button)
+  const canReset = useMemo(() => {
+    if (!prompt) return false
+    
+    // For Lulu prompts (templates or modified versions), compare with original template text
+    const isLuluPrompt = prompt.is_template || (prompt.template_type && templates.some(t => t.template_type === prompt.template_type))
+    if (isLuluPrompt && prompt.template_type) {
+      const originalTemplateText = getOriginalTemplateText(prompt.template_type)
+      if (originalTemplateText) {
+        return promptText !== originalTemplateText
+      }
+    }
+    
+    // For custom prompts, compare with originalPromptText (what was loaded)
+    return promptText !== originalPromptText
+  }, [prompt, promptText, originalPromptText, templates, getOriginalTemplateText])
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -125,7 +200,13 @@ export function SystemPromptEditor({
   }, [promptText, prompt])
 
   const handleSave = async () => {
+    // #region agent log
+    fetch('http://127.0.0.1:7244/ingest/b8e98944-552b-4fa4-94d4-0555e01fc282',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SystemPromptEditor.tsx:153',message:'handleSave called',data:{promptId:prompt?.id,hasChanges},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
     if (!prompt || !hasChanges) return
+
+    // Check if this is a Lulu prompt (either template or modified version)
+    const isLuluPrompt = prompt.is_template || (prompt.template_type && templates.some(t => t.template_type === prompt.template_type))
 
     // For Lulu prompts, use the original name and description
     // For custom prompts, require name
@@ -136,11 +217,20 @@ export function SystemPromptEditor({
 
     try {
       setSaving(true)
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/b8e98944-552b-4fa4-94d4-0555e01fc282',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SystemPromptEditor.tsx:167',message:'About to call onSave callback',data:{promptId:prompt.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
       // For Lulu prompts, use original name/description; for custom prompts, use edited values
       const nameToSave = isLuluPrompt ? prompt.name : promptName
       const descriptionToSave = isLuluPrompt ? (prompt.description || '') : promptDescription
-      await onSave(prompt.id, promptText, nameToSave, descriptionToSave)
-      setOriginalPromptText(promptText)
+      // Use textarea value directly if it differs from state (race condition fix)
+      const textToSave = textareaRef.current?.value || promptText
+      await onSave(prompt.id, textToSave, nameToSave, descriptionToSave)
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/b8e98944-552b-4fa4-94d4-0555e01fc282',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SystemPromptEditor.tsx:173',message:'onSave callback completed',data:{promptId:prompt.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
+      setOriginalPromptText(textToSave)
+      setPromptText(textToSave)
       setOriginalPromptName(promptName)
       setOriginalPromptDescription(promptDescription)
       setHasChanges(false)
@@ -199,34 +289,125 @@ export function SystemPromptEditor({
     }
   }
 
-  const handleReset = () => {
+  const handleReset = async () => {
+    // #region agent log
+    fetch('http://127.0.0.1:7244/ingest/b8e98944-552b-4fa4-94d4-0555e01fc282',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SystemPromptEditor.tsx:234',message:'handleReset called',data:{promptId:prompt?.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
     if (!prompt) return
 
+    setResetting(true)
+    setIsResetting(true)
+
+    // Get the original prompt text from source files
+    const getOriginalPromptText = (templateType: string | null | undefined): string | null => {
+      if (!templateType) return null
+      
+      // Find the template in SYSTEM_PROMPT_TEMPLATES
+      const sourceTemplate = SYSTEM_PROMPT_TEMPLATES.find(t => t.template_type === templateType)
+      if (sourceTemplate) {
+        return sourceTemplate.prompt_text
+      }
+      
+      // Fallback: use SYSTEM_PROMPT for default type
+      if (templateType === 'default') {
+        return SYSTEM_PROMPT
+      }
+      
+      return null
+    }
+
     if (prompt.is_template) {
-      // For templates, call the parent's reset handler which will delete the modified version
-      if (onReset) {
-        onReset()
+      // For templates, get original text from source files
+      const originalText = getOriginalPromptText(prompt.template_type)
+      if (originalText) {
+        setPromptText(originalText)
+        setOriginalPromptText(originalText)
+        setPromptName(prompt.name)
+        setPromptDescription(prompt.description || '')
+        setHasChanges(false)
+        toast.success('Reset to original Lulu prompt from source files')
       } else {
-        // Fallback: just reset the form
+        // Fallback: use current template text
         setPromptText(prompt.prompt_text)
+        setOriginalPromptText(prompt.prompt_text)
         setPromptName(prompt.name)
         setPromptDescription(prompt.description || '')
         setHasChanges(false)
         toast.info('Reset to original')
+      }
+      
+      // Also call parent's reset handler to delete modified version if it exists
+      if (onReset) {
+        // #region agent log
+        fetch('http://127.0.0.1:7244/ingest/b8e98944-552b-4fa4-94d4-0555e01fc282',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SystemPromptEditor.tsx:278',message:'About to call onReset callback',data:{promptId:prompt.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+        // #endregion
+        try {
+          await onReset()
+        } catch (error) {
+          console.error('Error resetting:', error)
+          toast.error('Failed to reset prompt')
+        } finally {
+          setIsResetting(false)
+          setResetting(false)
+        }
+      } else {
+        setIsResetting(false)
+        setResetting(false)
       }
     } else {
-      // For custom prompts, find the original template this was based on
-      const template = templates.find((t) => t.template_type === prompt.template_type)
-      if (template) {
-        setPromptText(template.prompt_text)
+      // For modified Lulu prompts or custom prompts with template_type
+      if (prompt.template_type) {
+        const originalText = getOriginalPromptText(prompt.template_type)
+        if (originalText) {
+          // Find the original template for name/description
+          const template = templates.find((t) => t.template_type === prompt.template_type)
+          setPromptText(originalText)
+          setOriginalPromptText(originalText)
+          setPromptName(template?.name || prompt.name)
+          setPromptDescription(template?.description || prompt.description || '')
+          setHasChanges(false)
+          toast.success('Reset to original Lulu prompt from source files')
+        } else {
+          // Fallback: use template from database
+          const template = templates.find((t) => t.template_type === prompt.template_type)
+          if (template) {
+            setPromptText(template.prompt_text)
+            setOriginalPromptText(template.prompt_text)
+            setPromptName(prompt.name)
+            setPromptDescription(prompt.description || '')
+            setHasChanges(false)
+            toast.info('Reset to original')
+          }
+        }
+        
+        // Call parent's reset handler to delete modified version
+        if (onReset) {
+          // #region agent log
+          fetch('http://127.0.0.1:7244/ingest/b8e98944-552b-4fa4-94d4-0555e01fc282',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SystemPromptEditor.tsx:312',message:'About to call onReset callback (modified version)',data:{promptId:prompt.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+          // #endregion
+          try {
+            await onReset()
+          } catch (error) {
+            console.error('Error resetting:', error)
+            toast.error('Failed to reset prompt')
+          } finally {
+            setIsResetting(false)
+            setResetting(false)
+          }
+        } else {
+          setIsResetting(false)
+          setResetting(false)
+        }
+      } else {
+        // For custom prompts without template_type, just reset the form
+        setPromptText(prompt.prompt_text)
+        setOriginalPromptText(prompt.prompt_text)
         setPromptName(prompt.name)
         setPromptDescription(prompt.description || '')
         setHasChanges(false)
         toast.info('Reset to original')
-      }
-      // If it's a modified Lulu prompt, call parent's reset handler
-      if (prompt.template_type && onReset) {
-        onReset()
+        setIsResetting(false)
+        setResetting(false)
       }
     }
   }
@@ -263,7 +444,7 @@ export function SystemPromptEditor({
                     id="prompt-name"
                     value={promptName}
                     onChange={(e) => setPromptName(e.target.value)}
-                    disabled={false}
+                    disabled={loading || saving || resetting}
                     placeholder="Enter prompt name"
                     required
                   />
@@ -277,7 +458,7 @@ export function SystemPromptEditor({
                     id="prompt-description"
                     value={promptDescription}
                     onChange={(e) => setPromptDescription(e.target.value)}
-                    disabled={false}
+                    disabled={loading || saving || resetting}
                     placeholder="Optional description"
                   />
                   <p className="text-xs text-muted-foreground">
@@ -329,7 +510,7 @@ export function SystemPromptEditor({
                 onChange={(e) => setPromptText(e.target.value)}
                 className="min-h-[400px] lg:min-h-[500px] font-mono text-sm resize-y"
                 placeholder="Enter your system prompt text here... Use **bold** for emphasis, • for lists"
-                disabled={loading || saving}
+                disabled={loading || saving || resetting}
               />
               <p className="text-xs text-muted-foreground">
                 💡 Tip: Use <strong>**bold**</strong> for emphasis, <strong>•</strong> for lists, and <strong>#</strong> for headers
@@ -394,7 +575,7 @@ export function SystemPromptEditor({
                       id="prompt-enabled"
                       checked={isEnabled}
                       onCheckedChange={handleToggleEnabled}
-                      disabled={loading || saving || togglingEnabled}
+                      disabled={loading || saving || resetting || togglingEnabled}
                     />
                   </div>
                 </div>
@@ -404,12 +585,22 @@ export function SystemPromptEditor({
                   variant="outline"
                   size="sm"
                   onClick={handleReset}
-                  disabled={loading || saving || !hasChanges}
+                  disabled={loading || saving || resetting || !canReset}
                   className="flex-1 sm:flex-initial"
                 >
-                  <RotateCcw className="w-4 h-4 mr-2" />
-                  <span className="hidden sm:inline">Reset</span>
-                  <span className="sm:hidden">Reset</span>
+                  {resetting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      <span className="hidden sm:inline">Resetting...</span>
+                      <span className="sm:hidden">Resetting</span>
+                    </>
+                  ) : (
+                    <>
+                      <RotateCcw className="w-4 h-4 mr-2" />
+                      <span className="hidden sm:inline">Reset</span>
+                      <span className="sm:hidden">Reset</span>
+                    </>
+                  )}
                 </Button>
               )}
               {isLuluPrompt ? (

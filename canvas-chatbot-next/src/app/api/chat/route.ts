@@ -250,6 +250,17 @@ async function chatHandler(request: NextRequest) {
 			contextAttachments
 		);
 
+		// Inject tool call instructions programmatically (hidden from static prompts)
+		let toolUsageInstructions = '';
+		
+		// General tool usage instructions
+		if (shouldUseCanvasTools) {
+			toolUsageInstructions = `\n\n**TOOL USAGE INSTRUCTIONS:**
+- Web Search: For topics/facts not in Canvas data, call 'webSearch' with concise queries. Synthesize findings with source links.
+- Summaries: When summarizing modules, call tools in sequence: list_courses → get_modules → get_page_content/get_file/get_file_text for all items. Retrieve ALL items before producing Pareto summary.
+- Always provide comprehensive, student-friendly explanations after tool calls. Never return raw JSON. Synthesize into clear guidance with clickable links.`;
+		}
+
 		// Enhance system prompt when rubric mode is active
 		let rubricEnforcementPrompt = '';
 		if (analysisMode === 'rubric' && targetAssignment) {
@@ -274,8 +285,8 @@ This sequence is REQUIRED. Do not skip any step. The provide_rubric_analysis too
 
 		const systemText =
 			typeof canvasContext !== 'undefined' && canvasContext && formattedContext
-				? `${activeSystemPrompt}${rubricEnforcementPrompt}\n\n${formattedContext}`
-				: `${activeSystemPrompt}${rubricEnforcementPrompt}`;
+				? `${activeSystemPrompt}${toolUsageInstructions}${rubricEnforcementPrompt}\n\n${formattedContext}`
+				: `${activeSystemPrompt}${toolUsageInstructions}${rubricEnforcementPrompt}`;
 
 		const uiMessagesWithSystem: UIMessage[] = [
 			{ role: 'system', parts: [{ type: 'text', text: systemText }] } as any,

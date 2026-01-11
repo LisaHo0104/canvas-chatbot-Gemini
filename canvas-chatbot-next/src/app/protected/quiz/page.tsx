@@ -52,7 +52,10 @@ export default function QuizPage() {
       <div className="max-w-5xl mx-auto w-full">
         <div className="flex items-center justify-between gap-3 mb-4">
           <div>
-            <h1 className="text-2xl font-semibold">Quiz</h1>
+            <h1 className="text-2xl font-semibold flex items-center gap-2">
+              Quiz
+              <Badge variant="secondary" className="text-xs px-2 py-0.5">Beta</Badge>
+            </h1>
             <p className="text-sm text-muted-foreground">Your enrolled courses</p>
           </div>
         </div>

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { FileCode, FileText, Copy, CheckIcon } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Badge } from '@/components/ui/badge'
 import { PromptInputButton } from '@/components/ai-elements/prompt-input'
 import {
   PromptInputCommand,
@@ -80,6 +81,10 @@ export function SystemPromptSelector({
   }
 
   const activeTemplateType = getActiveTemplateType()
+
+  const isBetaFeature = (templateType: string | null | undefined): boolean => {
+    return templateType === 'quiz_generation' || templateType === 'study_plan' || templateType === 'rubric_analysis'
+  }
 
   // Filter prompts based on enabled state and search query
   // Templates are always available (system-wide), user prompts require enabled state
@@ -161,7 +166,12 @@ export function SystemPromptSelector({
                           >
                             <FileText className="size-4" />
                             <div className="flex flex-col">
-                              <span className="font-medium text-sm">{template.name}</span>
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-medium text-sm">{template.name}</span>
+                                {isBetaFeature(template.template_type) && (
+                                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-green-100 text-green-800 border-green-300 dark:bg-green-900 dark:text-green-200 dark:border-green-700">Beta</Badge>
+                                )}
+                              </div>
                               {template.description && (
                                 <span className="text-muted-foreground text-xs">
                                   {template.description}
@@ -189,7 +199,12 @@ export function SystemPromptSelector({
                           >
                             <FileText className="size-4" />
                             <div className="flex flex-col">
-                              <span className="font-medium text-sm">{prompt.name}</span>
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-medium text-sm">{prompt.name}</span>
+                                {isBetaFeature(prompt.template_type) && (
+                                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-green-100 text-green-800 border-green-300 dark:bg-green-900 dark:text-green-200 dark:border-green-700">Beta</Badge>
+                                )}
+                              </div>
                               {prompt.description && (
                                 <span className="text-muted-foreground text-xs">
                                   {prompt.description}
