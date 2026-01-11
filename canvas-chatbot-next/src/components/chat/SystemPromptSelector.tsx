@@ -74,7 +74,7 @@ export function SystemPromptSelector({
 
   // Determine which template is active based on mode
   const getActiveTemplateType = (): string | null => {
-    if (mode === null) {
+    if (!mode) {
       return 'default'
     }
     return MODE_TO_TEMPLATE_TYPE[mode] || null

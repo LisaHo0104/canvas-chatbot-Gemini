@@ -151,12 +151,20 @@ export default function ContextPage() {
         const newProfileId = returnedProfileId
         
         // Deep check if anything actually changed
-        const coursesChanged = prev.courses.length !== (newSelections.courses as number[]).length ||
-          !(newSelections.courses as number[]).every(id => prev.courses.includes(id))
-        const assignmentsChanged = prev.assignments.length !== (newSelections.assignments as number[]).length ||
-          !(newSelections.assignments as number[]).every(id => prev.assignments.includes(id))
-        const modulesChanged = prev.modules.length !== (newSelections.modules as number[]).length ||
-          !(newSelections.modules as number[]).every(id => prev.modules.includes(id))
+        // Extract IDs from prev arrays (they might be ContextItem[] or number[])
+        const extractIds = (items: (number | ContextItem)[]): number[] => {
+          return items.map(item => typeof item === 'object' && item !== null ? item.id : item)
+        }
+        const prevCourseIds = extractIds(prev.courses)
+        const prevAssignmentIds = extractIds(prev.assignments)
+        const prevModuleIds = extractIds(prev.modules)
+        
+        const coursesChanged = prevCourseIds.length !== (newSelections.courses as number[]).length ||
+          !(newSelections.courses as number[]).every(id => prevCourseIds.includes(id))
+        const assignmentsChanged = prevAssignmentIds.length !== (newSelections.assignments as number[]).length ||
+          !(newSelections.assignments as number[]).every(id => prevAssignmentIds.includes(id))
+        const modulesChanged = prevModuleIds.length !== (newSelections.modules as number[]).length ||
+          !(newSelections.modules as number[]).every(id => prevModuleIds.includes(id))
         const lastSyncedChanged = prev.last_synced_at !== newLastSynced
         const profileIdChanged = prev.current_profile_id !== newProfileId
         
@@ -306,8 +314,10 @@ export default function ContextPage() {
         
         if (allCourseIds.length > 0) {
           // Avoid infinite loop: only update if we don't already have all courses selected
-          if (prev.courses.length === allCourseIds.length && 
-              allCourseIds.every(id => prev.courses.includes(id))) {
+          // Extract IDs from prev.courses (they might be ContextItem[] or number[])
+          const prevCourseIds = prev.courses.map(item => typeof item === 'object' && item !== null ? item.id : item)
+          if (prevCourseIds.length === allCourseIds.length && 
+              allCourseIds.every(id => prevCourseIds.includes(id))) {
             return prev
           }
           
@@ -422,13 +432,22 @@ export default function ContextPage() {
     })
   }
 
+  // Helper to extract IDs from arrays that might be number[] or ContextItem[]
+  const extractIds = (items: (number | ContextItem)[]): number[] => {
+    return items.map(item => typeof item === 'object' && item !== null ? item.id : item)
+  }
+
   // Toggle selection handlers
   const toggleCourseSelection = (courseId: number) => {
     const course = contextData?.courses.find(c => c.id === courseId)
     if (!course) return
 
     setSelections(prev => {
-      const isSelected = prev.courses.includes(courseId)
+      const prevCourseIds = extractIds(prev.courses)
+      const prevAssignmentIds = extractIds(prev.assignments)
+      const prevModuleIds = extractIds(prev.modules)
+      
+      const isSelected = prevCourseIds.includes(courseId)
       const courseAssignments = course.assignments || []
       const courseModules = course.modules || []
       const assignmentIds = courseAssignments.map(a => a.id)
@@ -438,22 +457,22 @@ export default function ContextPage() {
         // Deselect course and all its assignments and modules
         return {
           ...prev,
-          courses: prev.courses.filter(id => id !== courseId),
-          assignments: prev.assignments.filter(id => !assignmentIds.includes(id)),
-          modules: prev.modules.filter(id => !moduleIds.includes(id)),
+          courses: prevCourseIds.filter(id => id !== courseId),
+          assignments: prevAssignmentIds.filter(id => !assignmentIds.includes(id)),
+          modules: prevModuleIds.filter(id => !moduleIds.includes(id)),
           // Preserve profile ID and last_synced_at
           last_synced_at: prev.last_synced_at,
           current_profile_id: prev.current_profile_id,
         }
       } else {
         // Select course and all its assignments and modules
-        const newAssignmentIds = assignmentIds.filter(id => !prev.assignments.includes(id))
-        const newModuleIds = moduleIds.filter(id => !prev.modules.includes(id))
+        const newAssignmentIds = assignmentIds.filter(id => !prevAssignmentIds.includes(id))
+        const newModuleIds = moduleIds.filter(id => !prevModuleIds.includes(id))
         return {
           ...prev,
-          courses: [...prev.courses, courseId],
-          assignments: [...prev.assignments, ...newAssignmentIds],
-          modules: [...prev.modules, ...newModuleIds],
+          courses: [...prevCourseIds, courseId],
+          assignments: [...prevAssignmentIds, ...newAssignmentIds],
+          modules: [...prevModuleIds, ...newModuleIds],
           // Preserve profile ID and last_synced_at
           last_synced_at: prev.last_synced_at,
           current_profile_id: prev.current_profile_id,
@@ -465,23 +484,29 @@ export default function ContextPage() {
   }
 
   const toggleAssignmentSelection = (assignmentId: number) => {
-    setSelections(prev => ({
-      ...prev,
-      assignments: prev.assignments.includes(assignmentId)
-        ? prev.assignments.filter(id => id !== assignmentId)
-        : [...prev.assignments, assignmentId],
-    }))
+    setSelections(prev => {
+      const prevAssignmentIds = extractIds(prev.assignments)
+      return {
+        ...prev,
+        assignments: prevAssignmentIds.includes(assignmentId)
+          ? prevAssignmentIds.filter(id => id !== assignmentId)
+          : [...prevAssignmentIds, assignmentId],
+      }
+    })
     // Keep profile ID when manually changing selections - allows auto-sync to active profile
     setHasUnsavedChanges(true)
   }
 
   const toggleModuleSelection = (moduleId: number) => {
-    setSelections(prev => ({
-      ...prev,
-      modules: prev.modules.includes(moduleId)
-        ? prev.modules.filter(id => id !== moduleId)
-        : [...prev.modules, moduleId],
-    }))
+    setSelections(prev => {
+      const prevModuleIds = extractIds(prev.modules)
+      return {
+        ...prev,
+        modules: prevModuleIds.includes(moduleId)
+          ? prevModuleIds.filter(id => id !== moduleId)
+          : [...prevModuleIds, moduleId],
+      }
+    })
     // Keep profile ID when manually changing selections - allows auto-sync to active profile
     setHasUnsavedChanges(true)
   }
@@ -492,14 +517,16 @@ export default function ContextPage() {
     if (!course) return
     
     const courseAssignments = course.assignments || []
-    const allSelected = courseAssignments.every(a => selections.assignments.includes(a.id))
+    const prevAssignmentIds = extractIds(selections.assignments)
+    const allSelected = courseAssignments.every(a => prevAssignmentIds.includes(a.id))
     
     setSelections(prev => {
+      const currentAssignmentIds = extractIds(prev.assignments)
       if (allSelected) {
         // Deselect all assignments in this course
         return {
           ...prev,
-          assignments: prev.assignments.filter(id => 
+          assignments: currentAssignmentIds.filter(id => 
             !courseAssignments.some(a => a.id === id)
           ),
         }
@@ -507,10 +534,10 @@ export default function ContextPage() {
         // Select all assignments in this course
         const newAssignmentIds = courseAssignments
           .map(a => a.id)
-          .filter(id => !prev.assignments.includes(id))
+          .filter(id => !currentAssignmentIds.includes(id))
         return {
           ...prev,
-          assignments: [...prev.assignments, ...newAssignmentIds],
+          assignments: [...currentAssignmentIds, ...newAssignmentIds],
         }
       }
     })
@@ -524,14 +551,16 @@ export default function ContextPage() {
     if (!course) return
     
     const courseModules = course.modules || []
-    const allSelected = courseModules.every(m => selections.modules.includes(m.id))
+    const prevModuleIds = extractIds(selections.modules)
+    const allSelected = courseModules.every(m => prevModuleIds.includes(m.id))
     
     setSelections(prev => {
+      const currentModuleIds = extractIds(prev.modules)
       if (allSelected) {
         // Deselect all modules in this course
         return {
           ...prev,
-          modules: prev.modules.filter(id => 
+          modules: currentModuleIds.filter(id => 
             !courseModules.some(m => m.id === id)
           ),
         }
@@ -539,10 +568,10 @@ export default function ContextPage() {
         // Select all modules in this course
         const newModuleIds = courseModules
           .map(m => m.id)
-          .filter(id => !prev.modules.includes(id))
+          .filter(id => !currentModuleIds.includes(id))
         return {
           ...prev,
-          modules: [...prev.modules, ...newModuleIds],
+          modules: [...currentModuleIds, ...newModuleIds],
         }
       }
     })
@@ -596,6 +625,13 @@ export default function ContextPage() {
       return courseMatch || assignmentMatch || moduleMatch
     })
   }, [contextData, searchQuery])
+
+  // Extract IDs from selections for render (selections can be number[] or ContextItem[])
+  const selectionIds = useMemo(() => ({
+    courses: extractIds(selections.courses),
+    assignments: extractIds(selections.assignments),
+    modules: extractIds(selections.modules),
+  }), [selections.courses, selections.assignments, selections.modules])
 
 
   // Format last sync time
@@ -888,9 +924,9 @@ export default function ContextPage() {
                   setHasUnsavedChanges(false)
                 }}
                 selections={{
-                  courses: selections.courses,
-                  assignments: selections.assignments,
-                  modules: selections.modules,
+                  courses: selectionIds.courses,
+                  assignments: selectionIds.assignments,
+                  modules: selectionIds.modules,
                 }}
                 onProfileSaved={() => {
                   loadSelections()
@@ -954,14 +990,14 @@ export default function ContextPage() {
               <div className="space-y-2 sm:space-y-3">
                 {filteredCourses.map((course) => {
                   const isExpanded = expandedCourses.has(course.id)
-                  const isCourseSelected = selections.courses.includes(course.id)
+                  const isCourseSelected = selectionIds.courses.includes(course.id)
                   const courseAssignments = course.assignments || []
                   const courseModules = course.modules || []
                   const selectedAssignmentsCount = courseAssignments.filter(a =>
-                    selections.assignments.includes(a.id)
+                    selectionIds.assignments.includes(a.id)
                   ).length
                   const selectedModulesCount = courseModules.filter(m =>
-                    selections.modules.includes(m.id)
+                    selectionIds.modules.includes(m.id)
                   ).length
 
                   return (
@@ -1017,7 +1053,7 @@ export default function ContextPage() {
                               <div className="flex items-center gap-2 mb-2">
                                 <Checkbox
                                   id={`assignments-all-${course.id}`}
-                                  checked={courseAssignments.length > 0 && courseAssignments.every(a => selections.assignments.includes(a.id))}
+                                  checked={courseAssignments.length > 0 && courseAssignments.every(a => selectionIds.assignments.includes(a.id))}
                                   onChange={() => toggleAllAssignmentsInCourse(course.id)}
                                 />
                                 <h4 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
@@ -1027,7 +1063,7 @@ export default function ContextPage() {
                               </div>
                               <div className="space-y-1.5 sm:space-y-2 ml-4 sm:ml-6">
                                 {courseAssignments.map((assignment) => {
-                                  const isSelected = selections.assignments.includes(assignment.id)
+                                  const isSelected = selectionIds.assignments.includes(assignment.id)
                                   return (
                                     <div key={assignment.id} className="flex items-center gap-2">
                                       <Checkbox
@@ -1054,7 +1090,7 @@ export default function ContextPage() {
                               <div className="flex items-center gap-2 mb-2">
                                 <Checkbox
                                   id={`modules-all-${course.id}`}
-                                  checked={courseModules.length > 0 && courseModules.every(m => selections.modules.includes(m.id))}
+                                  checked={courseModules.length > 0 && courseModules.every(m => selectionIds.modules.includes(m.id))}
                                   onChange={() => toggleAllModulesInCourse(course.id)}
                                 />
                                 <h4 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
@@ -1064,7 +1100,7 @@ export default function ContextPage() {
                               </div>
                               <div className="space-y-1.5 sm:space-y-2 ml-4 sm:ml-6">
                                 {courseModules.map((module) => {
-                                  const isSelected = selections.modules.includes(module.id)
+                                  const isSelected = selectionIds.modules.includes(module.id)
                                   return (
                                     <div key={module.id} className="flex items-center gap-2">
                                       <Checkbox

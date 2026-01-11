@@ -3,5 +3,8 @@ alwaysApply: true
 ---
 # Overview
 
+## NextJS
+- Run `bun run build` to ensure code is compiling
+
 ## Supabase
 - Only create table in 'dev' schema

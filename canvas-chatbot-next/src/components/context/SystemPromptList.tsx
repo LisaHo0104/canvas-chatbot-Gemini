@@ -73,8 +73,9 @@ export function SystemPromptList({
               >
                 <Checkbox
                   checked={isEnabled(template.id)}
-                  onCheckedChange={(checked) => {
-                    onToggleEnabled(template.id, checked === true)
+                  onChange={(e) => {
+                    e.stopPropagation()
+                    onToggleEnabled(template.id, e.target.checked)
                   }}
                   onClick={(e) => e.stopPropagation()}
                   className="mt-1"
@@ -127,8 +128,9 @@ export function SystemPromptList({
               >
                 <Checkbox
                   checked={isEnabled(prompt.id)}
-                  onCheckedChange={(checked) => {
-                    onToggleEnabled(prompt.id, checked === true)
+                  onChange={(e) => {
+                    e.stopPropagation()
+                    onToggleEnabled(prompt.id, e.target.checked)
                   }}
                   onClick={(e) => e.stopPropagation()}
                   className="mt-1"
