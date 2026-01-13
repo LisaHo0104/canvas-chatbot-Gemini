@@ -12,6 +12,7 @@ import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { createClient as createSupabaseClient } from '@/lib/supabase/client'
+import { UserCountBadge } from '@/components/UserCountBadge'
 
 
 
@@ -61,6 +62,7 @@ export default function MainNavBar() {
             <img src="/dog_logo.png" alt="Lulu logo" className="h-12 w-auto" />
             <span className="ml-2 text-lg font-semibold">Lulu</span>
           </Link>
+          <UserCountBadge variant="compact" className="hidden sm:flex" />
           {authUser ? (
             <>
               <div className="hidden sm:block">

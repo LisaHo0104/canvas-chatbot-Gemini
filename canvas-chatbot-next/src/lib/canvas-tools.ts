@@ -622,7 +622,9 @@ export function createCanvasTools(token: string, url: string) {
 							z.string(),
 							z.number(),
 							z.boolean(),
-						]).describe('The correct answer (string for short answer, number for multiple choice index, boolean for true/false)'),
+							z.array(z.union([z.string(), z.number(), z.boolean()])),
+						]).describe('The correct answer (string for short answer, number for multiple choice index, boolean for true/false, or array for multiple select questions)'),
+						allowMultiple: z.boolean().optional().describe('Whether multiple answers can be selected (for multiple choice questions)'),
 						explanation: z.string().describe('Explanation of why the answer is correct'),
 						sourceReference: z.object({
 							type: z.enum(['module', 'assignment', 'course', 'page', 'file']).describe('Type of source'),

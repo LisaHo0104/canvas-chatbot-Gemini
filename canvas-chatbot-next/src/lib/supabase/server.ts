@@ -92,6 +92,7 @@ export function createAuthRouteHandlerClient(
  */
 export function createServiceRoleClient() {
 	const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
 	if (!serviceRoleKey) {
 		throw new Error('SUPABASE_SERVICE_ROLE_KEY environment variable is not set');
 	}

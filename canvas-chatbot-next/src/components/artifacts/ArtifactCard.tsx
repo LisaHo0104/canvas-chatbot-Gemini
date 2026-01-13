@@ -1,11 +1,11 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { FileQuestion, FileText, Calendar, Edit2, Trash2, Eye } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { ArtifactViewer } from './ArtifactViewer'
 import { ArtifactEditor } from './ArtifactEditor'
 
 interface Artifact {
@@ -25,7 +25,7 @@ interface ArtifactCardProps {
 }
 
 export function ArtifactCard({ artifact, onDelete, onUpdate }: ArtifactCardProps) {
-  const [viewerOpen, setViewerOpen] = useState(false)
+  const router = useRouter()
   const [editorOpen, setEditorOpen] = useState(false)
 
   const getArtifactTypeIcon = () => {
@@ -80,7 +80,7 @@ export function ArtifactCard({ artifact, onDelete, onUpdate }: ArtifactCardProps
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setViewerOpen(true)}
+              onClick={() => router.push(`/protected/artifacts/${artifact.id}`)}
               className="flex-1 h-8 text-xs"
             >
               <Eye className="size-3.5 mr-1.5" />
@@ -113,11 +113,6 @@ export function ArtifactCard({ artifact, onDelete, onUpdate }: ArtifactCardProps
           </div>
         </CardContent>
       </Card>
-      <ArtifactViewer
-        artifactId={artifact.id}
-        open={viewerOpen}
-        onOpenChange={setViewerOpen}
-      />
       {canEdit && (
         <ArtifactEditor
           artifact={artifact}
