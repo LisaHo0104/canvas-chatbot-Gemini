@@ -12,8 +12,8 @@ import { Progress } from '@/components/ui/progress'
 import { Checkbox } from '@/components/ui/checkbox'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Label } from '@/components/ui/label'
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 import { QuizResultsRadial } from './QuizResultsRadial'
+import { useRouter } from 'next/navigation'
 
 export interface QuizOutput {
   title: string
@@ -63,6 +63,7 @@ interface QuizUIProps {
 type ViewMode = 'welcome' | 'step-by-step' | 'results' | 'review'
 
 export function QuizUI({ data, messageId, compact = false, onViewFull, onSaveClick, artifactId, history }: QuizUIProps) {
+  const router = useRouter()
   const [viewMode, setViewMode] = useState<ViewMode>(compact ? 'review' : 'welcome')
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
   const [expandedQuestions, setExpandedQuestions] = useState<Set<string>>(new Set())
@@ -84,8 +85,28 @@ export function QuizUI({ data, messageId, compact = false, onViewFull, onSaveCli
   }
 
   const handleAnswerChange = (questionId: string, answer: string | number | boolean) => {
+    const question = data.questions.find(q => q.id === questionId)
     const newAnswers = new Map(userAnswers)
-    newAnswers.set(questionId, answer)
+    
+    if (question?.allowMultiple) {
+      // Handle multiple select - toggle answer in array
+      const currentAnswer = newAnswers.get(questionId)
+      const currentArray = Array.isArray(currentAnswer) ? currentAnswer : (currentAnswer !== undefined ? [currentAnswer] : [])
+      const answerIndex = currentArray.indexOf(answer)
+      
+      if (answerIndex >= 0) {
+        // Remove if already selected
+        currentArray.splice(answerIndex, 1)
+      } else {
+        // Add if not selected
+        currentArray.push(answer)
+      }
+      newAnswers.set(questionId, currentArray.length > 0 ? currentArray : [])
+    } else {
+      // Single select - replace answer
+      newAnswers.set(questionId, answer)
+    }
+    
     setUserAnswers(newAnswers)
   }
 
@@ -149,6 +170,12 @@ export function QuizUI({ data, messageId, compact = false, onViewFull, onSaveCli
     const newAssessments = new Map(selfAssessments)
     newAssessments.set(questionId, assessment)
     setSelfAssessments(newAssessments)
+  }
+  
+  const viewAttemptDetails = (attemptId: string) => {
+    if (artifactId) {
+      router.push(`/protected/artifacts/${artifactId}/attempts/${attemptId}`)
+    }
   }
 
   const goToNextQuestion = () => {
@@ -363,7 +390,7 @@ export function QuizUI({ data, messageId, compact = false, onViewFull, onSaveCli
             <CardTitle className="text-xl lg:text-2xl">Previous Attempts</CardTitle>
           </CardHeader>
           <CardContent>
-            <Accordion type="single" collapsible className="w-full">
+            <div className="space-y-3">
               {history.slice(0, 5).map((attempt, index) => {
                 const attemptNumber = history.length - index
                 const percent = Math.round((attempt.score / attempt.total_questions) * 100)
@@ -378,53 +405,33 @@ export function QuizUI({ data, messageId, compact = false, onViewFull, onSaveCli
                   : 'N/A'
                 
                 return (
-                  <AccordionItem key={attempt.id} value={attempt.id}>
-                    <AccordionTrigger className="hover:no-underline">
-                      <div className="flex items-center justify-between w-full pr-4">
-                        <div className="flex items-center gap-4">
-                          <span className="font-medium">Attempt #{attemptNumber}</span>
-                          <Badge variant="outline">
-                            {attempt.score}/{attempt.total_questions} ({percent}%)
-                          </Badge>
-                          <span className="text-sm text-muted-foreground">{formattedDate}</span>
-                          <span className="text-sm text-muted-foreground">Time: {timeTaken}</span>
-                        </div>
+                  <div
+                    key={attempt.id}
+                    className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                  >
+                    <div className="flex items-center gap-4 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">Attempt #{attemptNumber}</span>
+                        <Badge variant="outline">
+                          {attempt.score}/{attempt.total_questions} ({percent}%)
+                        </Badge>
                       </div>
-                    </AccordionTrigger>
-                    <AccordionContent>
-                      <div className="pt-4 space-y-4">
-                        <div className="flex items-center justify-center">
-                          <QuizResultsRadial correct={attempt.score} total={attempt.total_questions} />
-                        </div>
-                        <div className="text-center space-y-2">
-                          <p className="text-sm text-muted-foreground">
-                            Completed on {completedDate.toLocaleString('en-US', { 
-                              month: 'long', 
-                              day: 'numeric', 
-                              year: 'numeric',
-                              hour: 'numeric',
-                              minute: '2-digit'
-                            })}
-                          </p>
-                          {attempt.time_taken_seconds && (
-                            <p className="text-sm text-muted-foreground">
-                              Time taken: {timeTaken}
-                            </p>
-                          )}
-                        </div>
-                        <Button
-                          variant="outline"
-                          onClick={startQuiz}
-                          className="w-full"
-                        >
-                          Retake Quiz
-                        </Button>
+                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                        <span>{formattedDate}</span>
+                        <span>Time: {timeTaken}</span>
                       </div>
-                    </AccordionContent>
-                  </AccordionItem>
+                    </div>
+                    <Button
+                      variant="outline"
+                      onClick={() => viewAttemptDetails(attempt.id)}
+                      size="sm"
+                    >
+                      View Details
+                    </Button>
+                  </div>
                 )
               })}
-            </Accordion>
+            </div>
             {history.length > 5 && (
               <p className="text-sm text-muted-foreground mt-4 text-center">
                 Showing 5 most recent attempts
@@ -445,7 +452,7 @@ export function QuizUI({ data, messageId, compact = false, onViewFull, onSaveCli
     const selfAssessment = selfAssessments.get(question.id)
 
     return (
-      <div className="w-full max-w-4xl mx-auto py-4 lg:py-6">
+      <div className="w-full max-w-full mx-auto py-4 lg:py-6">
         {/* Progress Bar */}
         <div className="mb-6 lg:mb-8">
           <div className="flex items-center justify-between mb-2">
@@ -654,36 +661,38 @@ export function QuizUI({ data, messageId, compact = false, onViewFull, onSaveCli
 
             {/* Explanation */}
             {isFeedbackShown && (
-              <div className="p-4 lg:p-6 bg-muted/30 rounded-md border border-muted space-y-3 lg:space-y-4 mt-4">
-                <div className="flex items-center gap-2 lg:gap-3">
-                  <CheckCircle2 className="size-4 lg:size-5 text-green-600 dark:text-green-400" />
-                  <span className="font-medium text-sm lg:text-base">Correct Answer:</span>
-                </div>
-                <p className="text-sm lg:text-base font-medium">{getCorrectAnswerDisplay(question)}</p>
-                <Separator />
-                <div>
-                  <span className="font-medium text-sm lg:text-base">Explanation:</span>
-                  <p className="text-sm lg:text-base text-muted-foreground mt-2 lg:mt-3">{question.explanation}</p>
-                </div>
-                {question.sourceReference && (
-                  <div className="flex items-center gap-2 lg:gap-3 mt-3 lg:mt-4">
-                    <BookOpen className="size-4 lg:size-5 text-muted-foreground" />
-                    <span className="text-xs lg:text-sm text-muted-foreground">
-                      Source: {question.sourceReference.name}
-                      {question.sourceReference.url && (
-                        <a
-                          href={question.sourceReference.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="ml-2 inline-flex items-center gap-1 text-primary hover:underline"
-                        >
-                          View <ExternalLink className="size-3 lg:size-4" />
-                        </a>
-                      )}
-                    </span>
+              <Card className="bg-muted/30 border-muted mt-4">
+                <CardContent className="p-4 lg:p-6 space-y-3 lg:space-y-4">
+                  <div className="flex items-center gap-2 lg:gap-3">
+                    <CheckCircle2 className="size-4 lg:size-5 text-green-600 dark:text-green-400" />
+                    <span className="font-medium text-sm lg:text-base">Correct Answer:</span>
                   </div>
-                )}
-              </div>
+                  <p className="text-sm lg:text-base font-medium">{getCorrectAnswerDisplay(question)}</p>
+                  <Separator />
+                  <div>
+                    <span className="font-medium text-sm lg:text-base">Explanation:</span>
+                    <p className="text-sm lg:text-base text-muted-foreground mt-2 lg:mt-3">{question.explanation}</p>
+                  </div>
+                  {question.sourceReference && (
+                    <div className="flex items-center gap-2 lg:gap-3 mt-3 lg:mt-4">
+                      <BookOpen className="size-4 lg:size-5 text-muted-foreground" />
+                      <span className="text-xs lg:text-sm text-muted-foreground">
+                        Source: {question.sourceReference.name}
+                        {question.sourceReference.url && (
+                          <a
+                            href={question.sourceReference.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="ml-2 inline-flex items-center gap-1 text-primary hover:underline"
+                          >
+                            View <ExternalLink className="size-3 lg:size-4" />
+                          </a>
+                        )}
+                      </span>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             )}
 
             {/* Next Button */}
@@ -767,47 +776,52 @@ export function QuizUI({ data, messageId, compact = false, onViewFull, onSaveCli
     const percent = Math.round((correct / total) * 100)
 
     return (
-      <div className="w-full max-w-4xl mx-auto py-4 lg:py-6">
-        <Card className="text-center mb-6 lg:mb-8">
-          <CardHeader className="pb-6 lg:pb-8">
-            <div className="flex justify-center mb-4">
-              <div className={`w-20 h-20 rounded-full flex items-center justify-center ${
-                percent >= 80 ? 'bg-green-100 dark:bg-green-900' : percent >= 60 ? 'bg-yellow-100 dark:bg-yellow-900' : 'bg-red-100 dark:bg-red-900'
-              }`}>
-                {percent >= 80 ? (
-                  <CheckCircle2 className="size-10 text-green-600 dark:text-green-400" />
-                ) : (
-                  <XCircle className="size-10 text-red-600 dark:text-red-400" />
-                )}
+      <div className="w-full max-w-full mx-auto py-4 lg:py-6">
+        <Card className="mb-6 lg:mb-8">
+          <CardContent className="p-6 lg:p-10">
+            <div className="grid grid-cols-1 md:grid-cols-[1fr_320px] gap-8 items-center">
+              {/* Left Side: Text and Actions */}
+              <div className="flex flex-col items-start text-left space-y-6">
+                <div className="space-y-4">
+                  <div className={`w-16 h-16 rounded-full flex items-center justify-center ${
+                    percent >= 80 ? 'bg-green-100 dark:bg-green-900' : percent >= 60 ? 'bg-yellow-100 dark:bg-yellow-900' : 'bg-red-100 dark:bg-red-900'
+                  }`}>
+                    {percent >= 80 ? (
+                      <CheckCircle2 className="size-8 text-green-600 dark:text-green-400" />
+                    ) : (
+                      <XCircle className="size-8 text-red-600 dark:text-red-400" />
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <h2 className="text-3xl lg:text-4xl font-bold tracking-tight">Quiz Complete!</h2>
+                    <p className="text-lg lg:text-xl text-muted-foreground">
+                      You got <span className="font-semibold text-foreground">{correct} out of {total}</span> questions correct ({percent}%)
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-4 pt-2">
+                  <Button
+                    onClick={startQuiz}
+                    variant="outline"
+                    size="lg"
+                    className="h-12 text-base lg:text-lg px-8"
+                  >
+                    <RotateCcw className="mr-2 size-5" />
+                    Retake Quiz
+                  </Button>
+                </div>
               </div>
-            </div>
-            <CardTitle className="text-2xl lg:text-3xl mb-2">Quiz Complete!</CardTitle>
-            <CardDescription className="text-lg lg:text-xl">
-              You got <span className="font-semibold text-foreground">{correct} out of {total}</span> questions correct ({percent}%)
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="max-w-md mx-auto mb-6">
-              <QuizResultsRadial correct={correct} total={total} />
-            </div>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Button
-                onClick={() => setViewMode('review')}
-                variant="outline"
-                size="lg"
-                className="h-12 text-base lg:text-lg"
-              >
-                Review All Answers
-              </Button>
-              <Button
-                onClick={startQuiz}
-                variant="outline"
-                size="lg"
-                className="h-12 text-base lg:text-lg"
-              >
-                <RotateCcw className="mr-2 size-5" />
-                Retake Quiz
-              </Button>
+
+              {/* Right Side: Radial Chart */}
+              <div className="flex flex-col items-center justify-center">
+                <div className="w-full max-w-[280px]">
+                  <QuizResultsRadial correct={correct} total={total} minimal />
+                </div>
+                <p className="text-xs text-muted-foreground mt-2 text-center">
+                  Correct answers shown in light green; wrong in light red
+                </p>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -992,28 +1006,62 @@ export function QuizUI({ data, messageId, compact = false, onViewFull, onSaveCli
                     {question.type === 'multiple_choice' && question.options && (
                       <div className="space-y-3 lg:space-y-4">
                         <label className="text-sm lg:text-base font-medium">Select your answer:</label>
-                        <div className="space-y-2 lg:space-y-3">
-                          {question.options.map((option, index) => (
-                            <label
-                              key={index}
-                              className={`flex items-center gap-3 lg:gap-4 p-3 lg:p-4 rounded-md border cursor-pointer transition-colors ${
-                                userAnswer === index
-                                  ? 'bg-primary/10 border-primary ring-2 ring-primary/20'
-                                  : 'bg-card hover:bg-muted/50'
-                              }`}
-                            >
-                              <input
-                                type="radio"
-                                name={`question-${question.id}`}
-                                value={index}
-                                checked={userAnswer === index}
-                                onChange={() => handleAnswerChange(question.id, index)}
-                                className="rounded border-gray-300 dark:border-gray-600 size-4 lg:size-5"
-                              />
-                              <span className="text-sm lg:text-base flex-1">{option}</span>
-                            </label>
-                          ))}
-                        </div>
+                        {question.allowMultiple ? (
+                          <div className="space-y-2 lg:space-y-3">
+                            {question.options.map((option, index) => {
+                              const userArray = Array.isArray(userAnswer) ? userAnswer : (userAnswer !== undefined ? [userAnswer] : [])
+                              const isSelected = userArray.includes(index)
+                              return (
+                                <div
+                                  key={index}
+                                  className={`flex items-center gap-3 lg:gap-4 p-3 lg:p-4 rounded-md border cursor-pointer transition-colors ${
+                                    isSelected
+                                      ? 'bg-primary/10 border-primary ring-2 ring-primary/20'
+                                      : 'bg-card hover:bg-muted/50'
+                                  }`}
+                                  onClick={() => handleAnswerChange(question.id, index)}
+                                >
+                                  <Checkbox
+                                    checked={isSelected}
+                                    onChange={() => handleAnswerChange(question.id, index)}
+                                  />
+                                  <Label className="text-sm lg:text-base flex-1 cursor-pointer font-normal">
+                                    {option}
+                                  </Label>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        ) : (
+                          <RadioGroup
+                            value={userAnswer !== undefined ? String(userAnswer) : ''}
+                            onValueChange={(value) => handleAnswerChange(question.id, parseInt(value))}
+                            className="space-y-2 lg:space-y-3"
+                          >
+                            {question.options.map((option, index) => (
+                              <div
+                                key={index}
+                                className={`flex items-center gap-3 lg:gap-4 p-3 lg:p-4 rounded-md border cursor-pointer transition-colors ${
+                                  userAnswer === index
+                                    ? 'bg-primary/10 border-primary ring-2 ring-primary/20'
+                                    : 'bg-card hover:bg-muted/50'
+                                }`}
+                                onClick={() => handleAnswerChange(question.id, index)}
+                              >
+                                <RadioGroupItem
+                                  value={String(index)}
+                                  id={`${question.id}-option-${index}`}
+                                />
+                                <Label
+                                  htmlFor={`${question.id}-option-${index}`}
+                                  className="text-sm lg:text-base flex-1 cursor-pointer font-normal"
+                                >
+                                  {option}
+                                </Label>
+                              </div>
+                            ))}
+                          </RadioGroup>
+                        )}
                       </div>
                     )}
 
@@ -1062,59 +1110,61 @@ export function QuizUI({ data, messageId, compact = false, onViewFull, onSaveCli
 
                     {/* Answer Display */}
                     {showAnswer && (
-                      <div className="p-4 lg:p-6 bg-muted/30 rounded-md border border-muted space-y-3 lg:space-y-4">
-                        <div className="flex items-center gap-2 lg:gap-3">
-                          <CheckCircle2 className="size-4 lg:size-5 text-green-600 dark:text-green-400" />
-                          <span className="font-medium text-sm lg:text-base">Correct Answer:</span>
-                        </div>
-                        <p className="text-sm lg:text-base font-medium">{getCorrectAnswerDisplay(question)}</p>
-                        {question.type === 'short_answer' && selfAssessments.has(question.id) && (
-                          <>
-                            <Separator />
-                            <div>
-                              <span className="font-medium text-sm lg:text-base">Your Self-Assessment:</span>
-                              <div className="mt-2">
-                                <Badge 
-                                  variant="outline" 
-                                  className={
-                                    selfAssessments.get(question.id) === 'correct' 
-                                      ? 'bg-green-50 text-green-700 border-green-300 dark:bg-green-950 dark:text-green-300'
-                                      : selfAssessments.get(question.id) === 'partial'
-                                      ? 'bg-yellow-50 text-yellow-700 border-yellow-300 dark:bg-yellow-950 dark:text-yellow-300'
-                                      : 'bg-red-50 text-red-700 border-red-300 dark:bg-red-950 dark:text-red-300'
-                                  }
-                                >
-                                  {selfAssessments.get(question.id) === 'correct' ? 'Correct' : 
-                                   selfAssessments.get(question.id) === 'partial' ? 'Partially Correct' : 'Incorrect'}
-                                </Badge>
-                              </div>
-                            </div>
-                          </>
-                        )}
-                        <Separator />
-                        <div>
-                          <span className="font-medium text-sm lg:text-base">Explanation:</span>
-                          <p className="text-sm lg:text-base text-muted-foreground mt-2 lg:mt-3">{question.explanation}</p>
-                        </div>
-                        {question.sourceReference && (
-                          <div className="flex items-center gap-2 lg:gap-3 mt-3 lg:mt-4">
-                            <BookOpen className="size-4 lg:size-5 text-muted-foreground" />
-                            <span className="text-xs lg:text-sm text-muted-foreground">
-                              Source: {question.sourceReference.name}
-                              {question.sourceReference.url && (
-                                <a
-                                  href={question.sourceReference.url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="ml-2 inline-flex items-center gap-1 text-primary hover:underline"
-                                >
-                                  View <ExternalLink className="size-3 lg:size-4" />
-                                </a>
-                              )}
-                            </span>
+                      <Card className="bg-muted/30 border-muted mt-4">
+                        <CardContent className="p-4 lg:p-6 space-y-3 lg:space-y-4">
+                          <div className="flex items-center gap-2 lg:gap-3">
+                            <CheckCircle2 className="size-4 lg:size-5 text-green-600 dark:text-green-400" />
+                            <span className="font-medium text-sm lg:text-base">Correct Answer:</span>
                           </div>
-                        )}
-                      </div>
+                          <p className="text-sm lg:text-base font-medium">{getCorrectAnswerDisplay(question)}</p>
+                          {question.type === 'short_answer' && selfAssessments.has(question.id) && (
+                            <>
+                              <Separator />
+                              <div>
+                                <span className="font-medium text-sm lg:text-base">Your Self-Assessment:</span>
+                                <div className="mt-2">
+                                  <Badge 
+                                    variant="outline" 
+                                    className={
+                                      selfAssessments.get(question.id) === 'correct' 
+                                        ? 'bg-green-50 text-green-700 border-green-300 dark:bg-green-950 dark:text-green-300'
+                                        : selfAssessments.get(question.id) === 'partial'
+                                        ? 'bg-yellow-50 text-yellow-700 border-yellow-300 dark:bg-yellow-950 dark:text-yellow-300'
+                                        : 'bg-red-50 text-red-700 border-red-300 dark:bg-red-950 dark:text-red-300'
+                                    }
+                                  >
+                                    {selfAssessments.get(question.id) === 'correct' ? 'Correct' : 
+                                     selfAssessments.get(question.id) === 'partial' ? 'Partially Correct' : 'Incorrect'}
+                                  </Badge>
+                                </div>
+                              </div>
+                            </>
+                          )}
+                          <Separator />
+                          <div>
+                            <span className="font-medium text-sm lg:text-base">Explanation:</span>
+                            <p className="text-sm lg:text-base text-muted-foreground mt-2 lg:mt-3">{question.explanation}</p>
+                          </div>
+                          {question.sourceReference && (
+                            <div className="flex items-center gap-2 lg:gap-3 mt-3 lg:mt-4">
+                              <BookOpen className="size-4 lg:size-5 text-muted-foreground" />
+                              <span className="text-xs lg:text-sm text-muted-foreground">
+                                Source: {question.sourceReference.name}
+                                {question.sourceReference.url && (
+                                  <a
+                                    href={question.sourceReference.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="ml-2 inline-flex items-center gap-1 text-primary hover:underline"
+                                  >
+                                    View <ExternalLink className="size-3 lg:size-4" />
+                                  </a>
+                                )}
+                              </span>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
                     )}
                   </CardContent>
                 )}
