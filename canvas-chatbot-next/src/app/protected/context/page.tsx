@@ -486,28 +486,48 @@ export default function ContextPage() {
     setHasUnsavedChanges(true)
   }
 
-  const toggleAssignmentSelection = (assignmentId: number) => {
+  const toggleAssignmentSelection = (assignmentId: number, courseId: number) => {
     setSelections(prev => {
       const prevAssignmentIds = extractIds(prev.assignments)
+      const prevCourseIds = extractIds(prev.courses)
+      const isSelecting = !prevAssignmentIds.includes(assignmentId)
+      
+      const nextAssignments = isSelecting
+        ? [...prevAssignmentIds, assignmentId]
+        : prevAssignmentIds.filter(id => id !== assignmentId)
+      
+      const nextCourses = (isSelecting && !prevCourseIds.includes(courseId))
+        ? [...prevCourseIds, courseId]
+        : prevCourseIds
+
       return {
         ...prev,
-        assignments: prevAssignmentIds.includes(assignmentId)
-          ? prevAssignmentIds.filter(id => id !== assignmentId)
-          : [...prevAssignmentIds, assignmentId],
+        assignments: nextAssignments,
+        courses: nextCourses,
       }
     })
     // Keep profile ID when manually changing selections - allows auto-sync to active profile
     setHasUnsavedChanges(true)
   }
 
-  const toggleModuleSelection = (moduleId: number) => {
+  const toggleModuleSelection = (moduleId: number, courseId: number) => {
     setSelections(prev => {
       const prevModuleIds = extractIds(prev.modules)
+      const prevCourseIds = extractIds(prev.courses)
+      const isSelecting = !prevModuleIds.includes(moduleId)
+      
+      const nextModules = isSelecting
+        ? [...prevModuleIds, moduleId]
+        : prevModuleIds.filter(id => id !== moduleId)
+        
+      const nextCourses = (isSelecting && !prevCourseIds.includes(courseId))
+        ? [...prevCourseIds, courseId]
+        : prevCourseIds
+
       return {
         ...prev,
-        modules: prevModuleIds.includes(moduleId)
-          ? prevModuleIds.filter(id => id !== moduleId)
-          : [...prevModuleIds, moduleId],
+        modules: nextModules,
+        courses: nextCourses,
       }
     })
     // Keep profile ID when manually changing selections - allows auto-sync to active profile
@@ -525,6 +545,8 @@ export default function ContextPage() {
     
     setSelections(prev => {
       const currentAssignmentIds = extractIds(prev.assignments)
+      const prevCourseIds = extractIds(prev.courses)
+      
       if (allSelected) {
         // Deselect all assignments in this course
         return {
@@ -538,9 +560,15 @@ export default function ContextPage() {
         const newAssignmentIds = courseAssignments
           .map(a => a.id)
           .filter(id => !currentAssignmentIds.includes(id))
+          
+        const nextCourses = !prevCourseIds.includes(courseId)
+          ? [...prevCourseIds, courseId]
+          : prevCourseIds
+
         return {
           ...prev,
           assignments: [...currentAssignmentIds, ...newAssignmentIds],
+          courses: nextCourses,
         }
       }
     })
@@ -559,6 +587,8 @@ export default function ContextPage() {
     
     setSelections(prev => {
       const currentModuleIds = extractIds(prev.modules)
+      const prevCourseIds = extractIds(prev.courses)
+      
       if (allSelected) {
         // Deselect all modules in this course
         return {
@@ -572,9 +602,15 @@ export default function ContextPage() {
         const newModuleIds = courseModules
           .map(m => m.id)
           .filter(id => !currentModuleIds.includes(id))
+          
+        const nextCourses = !prevCourseIds.includes(courseId)
+          ? [...prevCourseIds, courseId]
+          : prevCourseIds
+
         return {
           ...prev,
           modules: [...currentModuleIds, ...newModuleIds],
+          courses: nextCourses,
         }
       }
     })
@@ -1072,7 +1108,7 @@ export default function ContextPage() {
                                       <Checkbox
                                         id={`assignment-${assignment.id}`}
                                         checked={isSelected}
-                                        onChange={() => toggleAssignmentSelection(assignment.id)}
+                                        onChange={() => toggleAssignmentSelection(assignment.id, course.id)}
                                       />
                                       <label
                                         htmlFor={`assignment-${assignment.id}`}
@@ -1109,7 +1145,7 @@ export default function ContextPage() {
                                       <Checkbox
                                         id={`module-${module.id}`}
                                         checked={isSelected}
-                                        onChange={() => toggleModuleSelection(module.id)}
+                                        onChange={() => toggleModuleSelection(module.id, course.id)}
                                       />
                                       <label
                                         htmlFor={`module-${module.id}`}
