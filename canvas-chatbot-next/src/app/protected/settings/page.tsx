@@ -188,16 +188,26 @@ export default function SettingsPage() {
   return (
     <div className="flex min-h-screen">
       <div className="flex-1 flex flex-col">
-        <div className="w-full max-w-3xl mx-auto p-6 space-y-6">
-          <div className="flex items-center gap-3">
-            <Image
-              src='/dog_laptop.png'
-              alt='Illustration'
-              width={64}
-              height={64}
-              priority
-            />
-            <h1 className="text-2xl font-semibold text-foreground">Settings</h1>
+        <div className="w-full max-w-5xl mx-auto p-6 space-y-6">
+          <div>
+            <div className="mb-4">
+              <Image
+                src="/dog_laptop.png"
+                alt="Settings"
+                width={120}
+                height={120}
+                className="object-contain"
+                priority
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-3xl font-semibold text-foreground">Settings</h1>
+              </div>
+            </div>
+            <p className="text-muted-foreground mt-1">
+              Configure your Canvas integration and personal preferences
+            </p>
           </div>
 
           <div id="general" className="space-y-6">
