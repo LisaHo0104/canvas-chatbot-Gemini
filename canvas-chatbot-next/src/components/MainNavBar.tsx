@@ -12,6 +12,8 @@ import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { createClient as createSupabaseClient } from '@/lib/supabase/client'
+import { UserCountBadge } from '@/components/UserCountBadge'
+import { getModeBadgeColors } from '@/lib/mode-colors'
 
 
 
@@ -61,6 +63,7 @@ export default function MainNavBar() {
             <img src="/dog_logo.png" alt="Lulu logo" className="h-12 w-auto" />
             <span className="ml-2 text-lg font-semibold">Lulu</span>
           </Link>
+          <UserCountBadge variant="compact" className="hidden sm:flex" />
           {authUser ? (
             <>
               <div className="hidden sm:block">
@@ -114,7 +117,7 @@ export default function MainNavBar() {
                             aria-disabled="true"
                           >
                             Quiz
-                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">Beta</Badge>
+                            <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 h-4 border ${getModeBadgeColors('quiz')}`}>Beta</Badge>
                           </NavigationMenuLink>
                         </TooltipTrigger>
                         <TooltipContent>This feature will be ready soon</TooltipContent>
@@ -163,7 +166,7 @@ export default function MainNavBar() {
                     </DropdownMenuItem>
                     <DropdownMenuItem disabled title="This feature will be ready soon" className="flex items-center gap-1.5">
                       Quiz
-                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">Beta</Badge>
+                      <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 h-4 border ${getModeBadgeColors('quiz')}`}>Beta</Badge>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
                       <Link href="/protected/context">Context</Link>

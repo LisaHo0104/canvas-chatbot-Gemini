@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { SystemPrompt } from './SystemPromptManager'
+import { getModeBadgeColors, getModeColors, type ModeType } from '@/lib/mode-colors'
 
 interface SystemPromptListInlineProps {
   enabledPromptIds: string[]
@@ -234,6 +235,13 @@ export function SystemPromptListInline({
     return templateType === 'quiz_generation' || templateType === 'study_plan' || templateType === 'rubric_analysis'
   }
 
+  const getModeFromTemplateType = (templateType: string | null | undefined): ModeType => {
+    if (templateType === 'quiz_generation') return 'quiz'
+    if (templateType === 'rubric_analysis') return 'rubric'
+    if (templateType === 'study_plan') return 'study-plan'
+    return null
+  }
+
   const modifiedLuluPrompts = getModifiedLuluPrompts()
   const customUserPrompts = getCustomUserPrompts()
 
@@ -258,6 +266,8 @@ export function SystemPromptListInline({
               const effectivePrompt = getEffectivePrompt(template)
               const isModified = effectivePrompt.id !== template.id
               const isRestoring = restoringId === template.template_type
+              const modeType = getModeFromTemplateType(template.template_type)
+              const modeColors = modeType ? getModeColors(modeType) : null
 
               return (
                 <div
@@ -266,10 +276,10 @@ export function SystemPromptListInline({
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                      <TemplateIcon className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                      <span className="font-medium">{template.name}</span>
+                      <TemplateIcon className={`w-4 h-4 flex-shrink-0 ${modeColors ? modeColors.text : 'text-muted-foreground'}`} />
+                      <span className={`font-medium ${modeColors ? modeColors.text : ''}`}>{template.name}</span>
                       {isBetaFeature(template.template_type) && (
-                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-green-100 text-green-800 border-green-300 dark:bg-green-900 dark:text-green-200 dark:border-green-700">Beta</Badge>
+                        <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 h-4 border ${getModeBadgeColors(modeType)}`}>Beta</Badge>
                       )}
                       {isModified && (
                         <span className="text-xs text-muted-foreground">(Modified)</span>

@@ -13,6 +13,7 @@ import { Suggestions, Suggestion } from '@/components/ai-elements/suggestion'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { PromptInput, PromptInputProvider, PromptInputBody, PromptInputTextarea, PromptInputFooter, PromptInputTools, PromptInputButton, PromptInputSubmit } from '@/components/ai-elements/prompt-input'
 import { SparklesIcon, GlobeIcon } from 'lucide-react'
+import { UserCountBadge } from '@/components/UserCountBadge'
 
 export default function LandingPage() {
   const router = useRouter()
@@ -35,11 +36,14 @@ export default function LandingPage() {
           <div className="mx-auto w-full max-w-md">
             <img src="/dog_logo.png" alt="Lulu illustration" className="w-full h-auto" />
           </div>
-          <h1 className="mt-8 text-3xl md:text-4xl font-semibold text-slate-900">Smarter learning with Canvas integration</h1>
-          <p className="mt-3 text-slate-600">Connect your Canvas to summarize courses, track deadlines, and surface announcements — all in one place.</p>
-          <div className="mt-6 flex items-center justify-center gap-3">
-            <Link href="/auth/sign-up"><Button className="px-6">Sign up and try it free</Button></Link>
-            <Link href="/auth/login"><Button variant="outline" className="px-6">Log in</Button></Link>
+          <h1 className="mt-8 text-3xl md:text-4xl font-semibold text-slate-900 tracking-tight">Smarter learning with Canvas integration</h1>
+          <p className="mt-4 text-slate-600 max-w-2xl mx-auto leading-relaxed text-lg">Connect your Canvas to summarize courses, track deadlines, and surface announcements — all in one place.</p>
+          <div className="mt-10 flex flex-col items-center justify-center gap-8">
+            <UserCountBadge variant="prominent" />
+            <div className="flex items-center justify-center gap-4">
+              <Link href="/auth/sign-up"><Button size="lg" className="px-8 h-12 text-base font-semibold shadow-lg">Sign up and try it free</Button></Link>
+              <Link href="/auth/login"><Button size="lg" variant="outline" className="px-8 h-12 text-base font-semibold">Log in</Button></Link>
+            </div>
           </div>
         </section>
 

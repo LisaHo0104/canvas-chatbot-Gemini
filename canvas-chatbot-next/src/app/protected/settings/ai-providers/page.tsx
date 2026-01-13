@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
@@ -85,11 +86,27 @@ export default function AIProvidersSettings({ compact = false }: AIProvidersSett
   }
 
   return (
-    <div className={compact ? 'space-y-4' : 'container mx-auto py-8 px-4 max-w-4xl'}>
+    <div className={compact ? 'space-y-4' : 'max-w-5xl mx-auto p-6 space-y-6'}>
       {!compact && (
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-foreground mb-2">AI Provider Settings</h1>
-          <p className="text-muted-foreground">Configure and manage your AI providers for chat functionality.</p>
+        <div>
+          <div className="mb-4">
+            <Image
+              src="/dog_thinking.png"
+              alt="AI Provider Settings"
+              width={120}
+              height={120}
+              className="object-contain"
+              priority
+            />
+          </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-semibold text-foreground">AI Provider Settings</h1>
+            </div>
+          </div>
+          <p className="text-muted-foreground mt-1">
+            Configure and manage your AI providers for chat functionality.
+          </p>
         </div>
       )}
 

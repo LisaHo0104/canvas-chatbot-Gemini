@@ -21,6 +21,8 @@ async function suggestionsHandler(request: NextRequest) {
 			messages: incomingMessages,
             model,
             model_override,
+            selected_context,
+            mode,
 			max_suggestions = 4,
 		} = body;
 
@@ -68,6 +70,11 @@ async function suggestionsHandler(request: NextRequest) {
 			  }))
 			: [];
 
+		const contextDescription = selected_context ? 
+			`Active context: ${JSON.stringify(selected_context)}. ` : 
+			'No specific context items selected yet. ';
+		const modeDescription = mode ? `Active mode: ${mode}. ` : '';
+
 		const uiMessages: any[] = [
 			{ role: 'system', parts: [{ type: 'text', text: `${SYSTEM_PROMPT}` }] },
 			...sanitizedIncoming,
@@ -76,10 +83,10 @@ async function suggestionsHandler(request: NextRequest) {
 				parts: [
 					{
 						type: 'text',
-						text: `Based on the chat context and the last assistant reply, propose ${Math.max(
+						text: `${contextDescription}${modeDescription}Based on the chat context, active mode, and the last assistant reply, propose ${Math.max(
 							1,
 							Math.min(6, Number(max_suggestions) || 4),
-						)} short, actionable follow-up suggestions that a student using Canvas would likely click next. Keep each under 12 words, specific and helpful. Return ONLY valid JSON matching the schema.`,
+						)} short, actionable follow-up suggestions that a student using Canvas would likely click next. If context items are selected, refer to them in suggestions. Keep each under 12 words, specific and helpful. Return ONLY valid JSON matching the schema.`,
 					},
 				],
 			},

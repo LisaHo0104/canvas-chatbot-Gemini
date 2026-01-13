@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ArtifactCard } from '@/components/artifacts/ArtifactCard'
 import { Spinner } from '@/components/ui/spinner'
+import { Breadcrumb, BreadcrumbList, BreadcrumbItem, BreadcrumbPage } from '@/components/ui/breadcrumb'
 
 interface Artifact {
   id: string
@@ -85,6 +86,15 @@ export default function ArtifactsPage() {
   return (
     <div className="min-h-[calc(100vh-3rem)] w-full px-4 py-6">
       <div className="max-w-7xl mx-auto w-full">
+        {/* Breadcrumb */}
+        <Breadcrumb className="mb-6">
+          <BreadcrumbList>
+            <BreadcrumbItem>
+              <BreadcrumbPage>Artifacts</BreadcrumbPage>
+            </BreadcrumbItem>
+          </BreadcrumbList>
+        </Breadcrumb>
+
         {/* Header */}
         <div className="flex items-center justify-between gap-4 mb-6">
           <div>
