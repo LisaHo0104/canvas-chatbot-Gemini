@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Image from 'next/image'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Loader2 } from 'lucide-react'
@@ -169,23 +170,32 @@ export default function AttemptDetailPage() {
         )}
 
         {/* Attempt Details */}
-        {!loading && !error && attempt && (
-          <div className="w-full space-y-6">
-            {/* Score Summary */}
-            <Card>
-              <CardContent className="p-6 lg:p-10">
-                <div className="grid grid-cols-1 md:grid-cols-[1fr_320px] gap-8 items-center">
-                  {/* Left Side: Text Details */}
-                  <div className="flex flex-col items-start text-left space-y-6">
-                    <div className="space-y-4">
-                      <div className="space-y-2">
-                        <h2 className="text-3xl lg:text-4xl font-bold tracking-tight">Attempt Details</h2>
-                        <p className="text-lg lg:text-xl text-muted-foreground">
-                          Score: <span className="font-semibold text-foreground">{attempt.score} out of {attempt.total_questions}</span> ({Math.round((attempt.score / attempt.total_questions) * 100)}%)
-                        </p>
-                      </div>
-                      
-                      <div className="space-y-1">
+        {!loading && !error && attempt && (() => {
+          const percent = Math.round((attempt.score / attempt.total_questions) * 100)
+          return (
+            <div className="w-full space-y-6">
+              {/* Score Summary */}
+              <Card>
+                <CardContent className="p-6 lg:p-10">
+                  <div className="grid grid-cols-1 md:grid-cols-[1fr_320px] gap-8 items-center">
+                    {/* Left Side: Text Details */}
+                    <div className="flex flex-col items-start text-left space-y-6">
+                      <div className="space-y-4">
+                        <Image
+                          src={percent >= 60 ? "/dog_correct.png" : "/dog_incorrect.png"}
+                          alt={percent >= 60 ? "Correct" : "Incorrect"}
+                          width={120}
+                          height={120}
+                          className="object-contain"
+                        />
+                        <div className="space-y-2">
+                          <h2 className="text-3xl lg:text-4xl font-bold tracking-tight">Attempt Details</h2>
+                          <p className="text-lg lg:text-xl text-muted-foreground">
+                            Score: <span className="font-semibold text-foreground">{attempt.score} out of {attempt.total_questions}</span> ({percent}%)
+                          </p>
+                        </div>
+                        
+                        <div className="space-y-1">
                         <p className="text-sm text-muted-foreground flex items-center gap-2">
                           <span className="font-medium">Completed on:</span> 
                           {new Date(attempt.completed_at).toLocaleString('en-US', { 
@@ -391,7 +401,8 @@ export default function AttemptDetailPage() {
               })}
             </div>
           </div>
-        )}
+        )
+      })()}
       </div>
     </div>
   )
