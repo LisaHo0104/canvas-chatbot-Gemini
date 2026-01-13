@@ -1,11 +1,13 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Image from 'next/image'
 import { FileQuestion, CheckCircle2, XCircle, BookOpen, Clock, ExternalLink, Maximize2, Save, ArrowRight, RotateCcw } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
@@ -87,13 +89,13 @@ export function QuizUI({ data, messageId, compact = false, onViewFull, onSaveCli
   const handleAnswerChange = (questionId: string, answer: string | number | boolean) => {
     const question = data.questions.find(q => q.id === questionId)
     const newAnswers = new Map(userAnswers)
-    
+
     if (question?.allowMultiple) {
       // Handle multiple select - toggle answer in array
       const currentAnswer = newAnswers.get(questionId)
       const currentArray = Array.isArray(currentAnswer) ? currentAnswer : (currentAnswer !== undefined ? [currentAnswer] : [])
       const answerIndex = currentArray.indexOf(answer)
-      
+
       if (answerIndex >= 0) {
         // Remove if already selected
         currentArray.splice(answerIndex, 1)
@@ -106,7 +108,7 @@ export function QuizUI({ data, messageId, compact = false, onViewFull, onSaveCli
       // Single select - replace answer
       newAnswers.set(questionId, answer)
     }
-    
+
     setUserAnswers(newAnswers)
   }
 
@@ -131,13 +133,13 @@ export function QuizUI({ data, messageId, compact = false, onViewFull, onSaveCli
 
   const handleAnswerSelect = (questionId: string, answer: string | number | boolean, allowMultiple?: boolean) => {
     const newAnswers = new Map(userAnswers)
-    
+
     if (allowMultiple) {
       // Handle multiple select - toggle answer in array
       const currentAnswer = newAnswers.get(questionId)
       const currentArray = Array.isArray(currentAnswer) ? currentAnswer : []
       const answerIndex = currentArray.indexOf(answer)
-      
+
       if (answerIndex >= 0) {
         // Remove if already selected
         currentArray.splice(answerIndex, 1)
@@ -149,29 +151,29 @@ export function QuizUI({ data, messageId, compact = false, onViewFull, onSaveCli
     } else {
       // Single select - replace answer
       newAnswers.set(questionId, answer)
-      
+
       // Reveal feedback immediately for single select
       const newFeedback = new Map(feedbackRevealed)
       newFeedback.set(questionId, true)
       setFeedbackRevealed(newFeedback)
     }
-    
+
     setUserAnswers(newAnswers)
   }
-  
+
   const handleMultipleSelectFeedback = (questionId: string) => {
     // Reveal feedback for multiple select when user is done selecting
     const newFeedback = new Map(feedbackRevealed)
     newFeedback.set(questionId, true)
     setFeedbackRevealed(newFeedback)
   }
-  
+
   const handleSelfAssessment = (questionId: string, assessment: 'correct' | 'incorrect' | 'partial') => {
     const newAssessments = new Map(selfAssessments)
     newAssessments.set(questionId, assessment)
     setSelfAssessments(newAssessments)
   }
-  
+
   const viewAttemptDetails = (attemptId: string) => {
     if (artifactId) {
       router.push(`/protected/artifacts/${artifactId}/attempts/${attemptId}`)
@@ -199,10 +201,10 @@ export function QuizUI({ data, messageId, compact = false, onViewFull, onSaveCli
             const correctArray = question.correctAnswer
             const userSet = new Set(userArray.map(String))
             const correctSet = new Set(correctArray.map(String))
-            
+
             // Check if sets are equal (all correct selected, none incorrect)
-            if (userSet.size === correctSet.size && 
-                Array.from(userSet).every(val => correctSet.has(val))) {
+            if (userSet.size === correctSet.size &&
+              Array.from(userSet).every(val => correctSet.has(val))) {
               correct++
             }
           } else {
@@ -271,7 +273,7 @@ export function QuizUI({ data, messageId, compact = false, onViewFull, onSaveCli
   const isAnswerCorrect = (question: QuizOutput['questions'][0]): boolean | null => {
     const userAnswer = userAnswers.get(question.id)
     if (userAnswer === undefined) return null
-    
+
     if (question.type === 'multiple_choice') {
       if (question.allowMultiple && Array.isArray(question.correctAnswer)) {
         // Multiple select: check if all correct answers are selected and no incorrect ones
@@ -279,9 +281,9 @@ export function QuizUI({ data, messageId, compact = false, onViewFull, onSaveCli
         const correctArray = question.correctAnswer
         const userSet = new Set(userArray.map(String))
         const correctSet = new Set(correctArray.map(String))
-        
-        return userSet.size === correctSet.size && 
-               Array.from(userSet).every(val => correctSet.has(val))
+
+        return userSet.size === correctSet.size &&
+          Array.from(userSet).every(val => correctSet.has(val))
       } else {
         return userAnswer === question.correctAnswer
       }
@@ -382,7 +384,7 @@ export function QuizUI({ data, messageId, compact = false, onViewFull, onSaveCli
           </Button>
         </CardContent>
       </Card>
-      
+
       {/* History Section */}
       {history && history.length > 0 && (
         <Card className="mt-6">
@@ -395,15 +397,15 @@ export function QuizUI({ data, messageId, compact = false, onViewFull, onSaveCli
                 const attemptNumber = history.length - index
                 const percent = Math.round((attempt.score / attempt.total_questions) * 100)
                 const completedDate = new Date(attempt.completed_at)
-                const formattedDate = completedDate.toLocaleDateString('en-US', { 
-                  month: 'short', 
-                  day: 'numeric', 
-                  year: 'numeric' 
+                const formattedDate = completedDate.toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric'
                 })
-                const timeTaken = attempt.time_taken_seconds 
+                const timeTaken = attempt.time_taken_seconds
                   ? `${Math.floor(attempt.time_taken_seconds / 60)}:${String(attempt.time_taken_seconds % 60).padStart(2, '0')}`
                   : 'N/A'
-                
+
                 return (
                   <div
                     key={attempt.id}
@@ -489,25 +491,24 @@ export function QuizUI({ data, messageId, compact = false, onViewFull, onSaveCli
                   const correctArray = Array.isArray(question.correctAnswer) ? question.correctAnswer : [question.correctAnswer]
                   const isCorrectOption = correctArray.includes(index)
                   const showFeedback = isFeedbackShown
-                  
+
                   // Determine if this specific option is correctly selected
                   const optionCorrect = isSelected && isCorrectOption
                   const optionIncorrect = isSelected && !isCorrectOption
-                  
+
                   return (
                     <Card
                       key={index}
-                      className={`cursor-pointer transition-all ${
-                        isSelected
-                          ? optionCorrect
-                            ? 'border-green-500 bg-green-50 dark:bg-green-950 ring-2 ring-green-500/20'
-                            : optionIncorrect
+                      className={`cursor-pointer transition-all ${isSelected
+                        ? optionCorrect
+                          ? 'border-green-500 bg-green-50 dark:bg-green-950 ring-2 ring-green-500/20'
+                          : optionIncorrect
                             ? 'border-red-500 bg-red-50 dark:bg-red-950 ring-2 ring-red-500/20'
                             : 'border-primary bg-primary/10 ring-2 ring-primary/20'
-                          : showFeedback && isCorrectOption
+                        : showFeedback && isCorrectOption
                           ? 'border-green-300 bg-green-50/50 dark:bg-green-950/30'
                           : 'hover:bg-muted/50'
-                      }`}
+                        }`}
                       onClick={() => !isFeedbackShown && handleAnswerSelect(question.id, index, question.allowMultiple)}
                     >
                       <CardContent className="p-4 lg:p-6">
@@ -519,13 +520,12 @@ export function QuizUI({ data, messageId, compact = false, onViewFull, onSaveCli
                               className={optionCorrect ? 'border-green-500' : optionIncorrect ? 'border-red-500' : ''}
                             />
                           ) : (
-                            <div className={`flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center ${
-                              isSelected
-                                ? optionCorrect
-                                  ? 'border-green-500 bg-green-500'
-                                  : 'border-red-500 bg-red-500'
-                                : 'border-muted-foreground'
-                            }`}>
+                            <div className={`flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center ${isSelected
+                              ? optionCorrect
+                                ? 'border-green-500 bg-green-500'
+                                : 'border-red-500 bg-red-500'
+                              : 'border-muted-foreground'
+                              }`}>
                               {isSelected && (
                                 optionCorrect ? (
                                   <CheckCircle2 className="size-4 text-white" />
@@ -565,19 +565,18 @@ export function QuizUI({ data, messageId, compact = false, onViewFull, onSaveCli
                   const isSelected = userAnswer === value
                   const isCorrectOption = question.correctAnswer === value
                   const showFeedback = isFeedbackShown && isSelected
-                  
+
                   return (
                     <Card
                       key={String(value)}
-                      className={`cursor-pointer transition-all ${
-                        isSelected
-                          ? isCorrect !== null && isCorrect
-                            ? 'border-green-500 bg-green-50 dark:bg-green-950 ring-2 ring-green-500/20'
-                            : isCorrect !== null && !isCorrect
+                      className={`cursor-pointer transition-all ${isSelected
+                        ? isCorrect !== null && isCorrect
+                          ? 'border-green-500 bg-green-50 dark:bg-green-950 ring-2 ring-green-500/20'
+                          : isCorrect !== null && !isCorrect
                             ? 'border-red-500 bg-red-50 dark:bg-red-950 ring-2 ring-red-500/20'
                             : 'border-primary bg-primary/10 ring-2 ring-primary/20'
-                          : 'hover:bg-muted/50'
-                      }`}
+                        : 'hover:bg-muted/50'
+                        }`}
                       onClick={() => !isFeedbackShown && handleAnswerSelect(question.id, value)}
                     >
                       <CardContent className="p-6 lg:p-8 text-center">
@@ -728,18 +727,18 @@ export function QuizUI({ data, messageId, compact = false, onViewFull, onSaveCli
       const saveAttempt = async () => {
         try {
           const timeTaken = Math.floor((new Date().getTime() - startTime.getTime()) / 1000)
-          
+
           // Convert Maps to plain objects for JSON serialization
           const userAnswersObj: Record<string, any> = {}
           userAnswers.forEach((value, key) => {
             userAnswersObj[key] = Array.isArray(value) ? value : value
           })
-          
+
           const selfAssessmentsObj: Record<string, string> = {}
           selfAssessments.forEach((value, key) => {
             selfAssessmentsObj[key] = value
           })
-          
+
           const response = await fetch('/api/quiz-attempts', {
             method: 'POST',
             headers: {
@@ -754,7 +753,7 @@ export function QuizUI({ data, messageId, compact = false, onViewFull, onSaveCli
               started_at: startTime.toISOString(),
             }),
           })
-          
+
           if (response.ok) {
             setAttemptSaved(true)
           } else {
@@ -764,7 +763,7 @@ export function QuizUI({ data, messageId, compact = false, onViewFull, onSaveCli
           console.error('Error saving quiz attempt:', error)
         }
       }
-      
+
       saveAttempt()
     }
   }, [viewMode, artifactId, attemptSaved, startTime, data, userAnswers, selfAssessments])
@@ -783,15 +782,13 @@ export function QuizUI({ data, messageId, compact = false, onViewFull, onSaveCli
               {/* Left Side: Text and Actions */}
               <div className="flex flex-col items-start text-left space-y-6">
                 <div className="space-y-4">
-                  <div className={`w-16 h-16 rounded-full flex items-center justify-center ${
-                    percent >= 80 ? 'bg-green-100 dark:bg-green-900' : percent >= 60 ? 'bg-yellow-100 dark:bg-yellow-900' : 'bg-red-100 dark:bg-red-900'
-                  }`}>
-                    {percent >= 80 ? (
-                      <CheckCircle2 className="size-8 text-green-600 dark:text-green-400" />
-                    ) : (
-                      <XCircle className="size-8 text-red-600 dark:text-red-400" />
-                    )}
-                  </div>
+                  <Image
+                    src={percent >= 60 ? "/dog_correct.png" : "/dog_incorrect.png"}
+                    alt={percent >= 60 ? "Correct" : "Incorrect"}
+                    width={120}
+                    height={120}
+                    className="object-contain"
+                  />
                   <div className="space-y-2">
                     <h2 className="text-3xl lg:text-4xl font-bold tracking-tight">Quiz Complete!</h2>
                     <p className="text-lg lg:text-xl text-muted-foreground">
@@ -918,339 +915,336 @@ export function QuizUI({ data, messageId, compact = false, onViewFull, onSaveCli
   function renderReviewMode() {
     return (
       <div className="w-full space-y-4 lg:space-y-6 mt-8">
-      {/* Header */}
-      <Card>
-        <CardHeader className="pb-4 lg:pb-6">
-          <CardTitle className="flex items-center gap-2 text-xl lg:text-2xl">
-            <FileQuestion className="size-5 lg:size-6" />
-            {data.title}
-          </CardTitle>
-          <CardDescription className="flex items-center gap-4 flex-wrap text-sm lg:text-base mt-2">
-            <span>{data.totalQuestions} Questions</span>
-            <Badge className={getDifficultyColor(data.difficulty)}>
-              {data.difficulty.charAt(0).toUpperCase() + data.difficulty.slice(1)}
-            </Badge>
-            {data.metadata?.estimatedTime && (
-              <span className="flex items-center gap-1">
-                <Clock className="size-4" />
-                ~{data.metadata.estimatedTime} min
-              </span>
-            )}
-          </CardDescription>
-        </CardHeader>
-        {data.description && (
-          <CardContent className="pt-0 pb-4 lg:pb-6">
-            <p className="text-sm lg:text-base text-muted-foreground">{data.description}</p>
-          </CardContent>
-        )}
-        {data.topics.length > 0 && (
-          <CardContent className="pt-0 pb-4 lg:pb-6">
-            <div className="flex flex-wrap gap-2">
-              <span className="text-sm lg:text-base font-medium">Topics:</span>
-              {data.topics.map((topic, i) => (
-                <Badge key={i} variant="outline" className="text-xs lg:text-sm">{topic}</Badge>
-              ))}
-            </div>
-          </CardContent>
-        )}
-      </Card>
+        {/* Header */}
+        <Card>
+          <CardHeader className="pb-4 lg:pb-6">
+            <CardTitle className="flex items-center gap-2 text-xl lg:text-2xl">
+              <FileQuestion className="size-5 lg:size-6" />
+              {data.title}
+            </CardTitle>
+            <CardDescription className="flex items-center gap-4 flex-wrap text-sm lg:text-base mt-2">
+              <span>{data.totalQuestions} Questions</span>
+              <Badge className={getDifficultyColor(data.difficulty)}>
+                {data.difficulty.charAt(0).toUpperCase() + data.difficulty.slice(1)}
+              </Badge>
+              {data.metadata?.estimatedTime && (
+                <span className="flex items-center gap-1">
+                  <Clock className="size-4" />
+                  ~{data.metadata.estimatedTime} min
+                </span>
+              )}
+            </CardDescription>
+          </CardHeader>
+          {data.description && (
+            <CardContent className="pt-0 pb-4 lg:pb-6">
+              <p className="text-sm lg:text-base text-muted-foreground">{data.description}</p>
+            </CardContent>
+          )}
+          {data.topics.length > 0 && (
+            <CardContent className="pt-0 pb-4 lg:pb-6">
+              <div className="flex flex-wrap gap-2">
+                <span className="text-sm lg:text-base font-medium">Topics:</span>
+                {data.topics.map((topic, i) => (
+                  <Badge key={i} variant="outline" className="text-xs lg:text-sm">{topic}</Badge>
+                ))}
+              </div>
+            </CardContent>
+          )}
+        </Card>
 
-      {/* Tabs for different views */}
-      <Tabs defaultValue="all" className="w-full">
-        <TabsList className="grid w-full grid-cols-4 h-10 lg:h-11 gap-1">
-          <TabsTrigger value="all" className="text-sm lg:text-base px-2 lg:px-3">All Questions</TabsTrigger>
-          <TabsTrigger value="by-type" className="text-sm lg:text-base px-2 lg:px-3">By Type</TabsTrigger>
-          <TabsTrigger value="by-topic" className="text-sm lg:text-base px-2 lg:px-3">By Topic</TabsTrigger>
-          <TabsTrigger value="sources" className="text-sm lg:text-base px-2 lg:px-3">Sources</TabsTrigger>
-        </TabsList>
+        {/* Tabs for different views */}
+        <Tabs defaultValue="all" className="w-full">
+          <TabsList className="grid w-full grid-cols-4 h-10 lg:h-11 gap-1">
+            <TabsTrigger value="all" className="text-sm lg:text-base px-2 lg:px-3">All Questions</TabsTrigger>
+            <TabsTrigger value="by-type" className="text-sm lg:text-base px-2 lg:px-3">By Type</TabsTrigger>
+            <TabsTrigger value="by-topic" className="text-sm lg:text-base px-2 lg:px-3">By Topic</TabsTrigger>
+            <TabsTrigger value="sources" className="text-sm lg:text-base px-2 lg:px-3">Sources</TabsTrigger>
+          </TabsList>
 
-        {/* All Questions Tab */}
-        <TabsContent value="all" className="space-y-4 lg:space-y-6 mt-4 lg:mt-6">
-          {data.questions.map((question) => {
-            const isExpanded = expandedQuestions.has(question.id)
-            const userAnswer = userAnswers.get(question.id)
-            const showAnswer = showAnswers.has(question.id)
-            const isCorrect = isAnswerCorrect(question)
-            
-            return (
-              <Card key={question.id} className="transition-all">
-                <CardHeader
-                  className="cursor-pointer hover:bg-muted/50 transition-colors py-4 lg:py-6"
-                  onClick={() => toggleQuestion(question.id)}
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2 lg:mb-3 flex-wrap">
-                        <CardTitle className="text-base lg:text-lg">Question {data.questions.indexOf(question) + 1}</CardTitle>
-                        <Badge className={`${getQuestionTypeColor(question.type)} text-xs lg:text-sm`} variant="outline">
-                          {question.type.replace('_', ' ')}
-                        </Badge>
-                        {question.topic && (
-                          <Badge variant="outline" className="text-xs lg:text-sm">{question.topic}</Badge>
-                        )}
-                        {userAnswer !== undefined && isCorrect !== null && (
-                          isCorrect ? (
-                            <CheckCircle2 className="size-5 lg:size-6 text-green-600 dark:text-green-400" />
-                          ) : (
-                            <XCircle className="size-5 lg:size-6 text-red-600 dark:text-red-400" />
-                          )
-                        )}
+          {/* All Questions Tab */}
+          <TabsContent value="all" className="space-y-4 lg:space-y-6 mt-4 lg:mt-6">
+            <Accordion type="multiple" className="space-y-4 lg:space-y-6">
+              {data.questions.map((question, index) => {
+                const userAnswer = userAnswers.get(question.id)
+                const showAnswer = showAnswers.has(question.id)
+                const isCorrect = isAnswerCorrect(question)
+
+                return (
+                  <AccordionItem
+                    key={question.id}
+                    value={question.id}
+                    className="border rounded-xl bg-card text-card-foreground shadow-sm overflow-hidden"
+                  >
+                    <AccordionTrigger className="px-4 lg:px-6 py-4 lg:py-6 hover:bg-muted/50 transition-colors hover:no-underline">
+                      <div className="flex-1 text-left">
+                        <div className="flex items-center gap-2 mb-2 lg:mb-3 flex-wrap">
+                          <span className="text-base lg:text-lg font-semibold">Question {index + 1}</span>
+                          <Badge className={`${getQuestionTypeColor(question.type)} text-xs lg:text-sm`} variant="outline">
+                            {question.type.replace('_', ' ')}
+                          </Badge>
+                          {question.topic && (
+                            <Badge variant="outline" className="text-xs lg:text-sm">{question.topic}</Badge>
+                          )}
+                          {userAnswer !== undefined && isCorrect !== null && (
+                            isCorrect ? (
+                              <CheckCircle2 className="size-5 lg:size-6 text-green-600 dark:text-green-400" />
+                            ) : (
+                              <XCircle className="size-5 lg:size-6 text-red-600 dark:text-red-400" />
+                            )
+                          )}
+                        </div>
+                        <div className="mt-1 text-sm lg:text-base text-muted-foreground">{question.question}</div>
                       </div>
-                      <CardDescription className="mt-1 text-sm lg:text-base">{question.question}</CardDescription>
-                    </div>
-                  </div>
-                </CardHeader>
-                {isExpanded && (
-                  <CardContent className="space-y-4 lg:space-y-6 pt-0 pb-4 lg:pb-6">
-                    {/* Answer Input */}
-                    {question.type === 'multiple_choice' && question.options && (
-                      <div className="space-y-3 lg:space-y-4">
-                        <label className="text-sm lg:text-base font-medium">Select your answer:</label>
-                        {question.allowMultiple ? (
-                          <div className="space-y-2 lg:space-y-3">
-                            {question.options.map((option, index) => {
-                              const userArray = Array.isArray(userAnswer) ? userAnswer : (userAnswer !== undefined ? [userAnswer] : [])
-                              const isSelected = userArray.includes(index)
-                              return (
-                                <div
-                                  key={index}
-                                  className={`flex items-center gap-3 lg:gap-4 p-3 lg:p-4 rounded-md border cursor-pointer transition-colors ${
-                                    isSelected
+                    </AccordionTrigger>
+                    <AccordionContent className="px-4 lg:px-6 pb-4 lg:pb-6 space-y-4 lg:space-y-6">
+                      {/* Answer Input (Disabled in Review Mode) */}
+                      {question.type === 'multiple_choice' && question.options && (
+                        <div className="space-y-3 lg:space-y-4">
+                          <label className="text-sm lg:text-base font-medium">Select your answer:</label>
+                          {question.allowMultiple ? (
+                            <div className="space-y-2 lg:space-y-3">
+                              {question.options.map((option, optIndex) => {
+                                const userArray = Array.isArray(userAnswer) ? userAnswer : (userAnswer !== undefined ? [userAnswer] : [])
+                                const isSelected = userArray.includes(optIndex)
+                                return (
+                                  <div
+                                    key={optIndex}
+                                    className={`flex items-center gap-3 lg:gap-4 p-3 lg:p-4 rounded-md border transition-colors ${isSelected
                                       ? 'bg-primary/10 border-primary ring-2 ring-primary/20'
-                                      : 'bg-card hover:bg-muted/50'
-                                  }`}
-                                  onClick={() => handleAnswerChange(question.id, index)}
+                                      : 'bg-card'
+                                      }`}
+                                  >
+                                    <Checkbox
+                                      checked={isSelected}
+                                      disabled={true}
+                                    />
+                                    <Label className="text-sm lg:text-base flex-1 font-normal">
+                                      {option}
+                                    </Label>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          ) : (
+                            <RadioGroup
+                              value={userAnswer !== undefined ? String(userAnswer) : ''}
+                              className="space-y-2 lg:space-y-3"
+                              disabled={true}
+                            >
+                              {question.options.map((option, optIndex) => (
+                                <div
+                                  key={optIndex}
+                                  className={`flex items-center gap-3 lg:gap-4 p-3 lg:p-4 rounded-md border transition-colors ${userAnswer === optIndex
+                                    ? 'bg-primary/10 border-primary ring-2 ring-primary/20'
+                                    : 'bg-card'
+                                    }`}
                                 >
-                                  <Checkbox
-                                    checked={isSelected}
-                                    onChange={() => handleAnswerChange(question.id, index)}
+                                  <RadioGroupItem
+                                    value={String(optIndex)}
+                                    id={`${question.id}-option-${optIndex}`}
                                   />
-                                  <Label className="text-sm lg:text-base flex-1 cursor-pointer font-normal">
+                                  <Label
+                                    htmlFor={`${question.id}-option-${optIndex}`}
+                                    className="text-sm lg:text-base flex-1 font-normal"
+                                  >
                                     {option}
                                   </Label>
                                 </div>
-                              )
-                            })}
-                          </div>
-                        ) : (
-                          <RadioGroup
-                            value={userAnswer !== undefined ? String(userAnswer) : ''}
-                            onValueChange={(value) => handleAnswerChange(question.id, parseInt(value))}
-                            className="space-y-2 lg:space-y-3"
-                          >
-                            {question.options.map((option, index) => (
-                              <div
-                                key={index}
-                                className={`flex items-center gap-3 lg:gap-4 p-3 lg:p-4 rounded-md border cursor-pointer transition-colors ${
-                                  userAnswer === index
-                                    ? 'bg-primary/10 border-primary ring-2 ring-primary/20'
-                                    : 'bg-card hover:bg-muted/50'
-                                }`}
-                                onClick={() => handleAnswerChange(question.id, index)}
-                              >
-                                <RadioGroupItem
-                                  value={String(index)}
-                                  id={`${question.id}-option-${index}`}
-                                />
-                                <Label
-                                  htmlFor={`${question.id}-option-${index}`}
-                                  className="text-sm lg:text-base flex-1 cursor-pointer font-normal"
-                                >
-                                  {option}
-                                </Label>
-                              </div>
-                            ))}
-                          </RadioGroup>
-                        )}
-                      </div>
-                    )}
-
-                    {question.type === 'true_false' && (
-                      <div className="space-y-3 lg:space-y-4">
-                        <label className="text-sm lg:text-base font-medium">Select your answer:</label>
-                        <div className="flex gap-3 lg:gap-4">
-                          <Button
-                            variant={userAnswer === true ? 'default' : 'outline'}
-                            onClick={() => handleAnswerChange(question.id, true)}
-                            className="flex-1 h-10 lg:h-12 text-sm lg:text-base"
-                          >
-                            True
-                          </Button>
-                          <Button
-                            variant={userAnswer === false ? 'default' : 'outline'}
-                            onClick={() => handleAnswerChange(question.id, false)}
-                            className="flex-1 h-10 lg:h-12 text-sm lg:text-base"
-                          >
-                            False
-                          </Button>
+                              ))}
+                            </RadioGroup>
+                          )}
                         </div>
-                      </div>
-                    )}
+                      )}
 
-                    {question.type === 'short_answer' && (
-                      <div className="space-y-3 lg:space-y-4">
-                        <label className="text-sm lg:text-base font-medium">Your answer:</label>
-                        <textarea
-                          value={userAnswer !== undefined ? String(userAnswer) : ''}
-                          onChange={(e) => handleAnswerChange(question.id, e.target.value)}
-                          className="w-full p-3 lg:p-4 border rounded-md min-h-[120px] lg:min-h-[150px] text-sm lg:text-base resize-y"
-                          placeholder="Type your answer here..."
-                        />
-                      </div>
-                    )}
-
-                    {/* Show Answer Button */}
-                    <Button
-                      variant="outline"
-                      onClick={() => toggleShowAnswer(question.id)}
-                      className="w-full h-10 lg:h-12 text-sm lg:text-base"
-                    >
-                      {showAnswer ? 'Hide Answer' : 'Show Answer'}
-                    </Button>
-
-                    {/* Answer Display */}
-                    {showAnswer && (
-                      <Card className="bg-muted/30 border-muted mt-4">
-                        <CardContent className="p-4 lg:p-6 space-y-3 lg:space-y-4">
-                          <div className="flex items-center gap-2 lg:gap-3">
-                            <CheckCircle2 className="size-4 lg:size-5 text-green-600 dark:text-green-400" />
-                            <span className="font-medium text-sm lg:text-base">Correct Answer:</span>
+                      {question.type === 'true_false' && (
+                        <div className="space-y-3 lg:space-y-4">
+                          <label className="text-sm lg:text-base font-medium">Select your answer:</label>
+                          <div className="flex gap-3 lg:gap-4">
+                            <Button
+                              variant={userAnswer === true ? 'default' : 'outline'}
+                              className="flex-1 h-10 lg:h-12 text-sm lg:text-base"
+                              disabled={true}
+                            >
+                              True
+                            </Button>
+                            <Button
+                              variant={userAnswer === false ? 'default' : 'outline'}
+                              className="flex-1 h-10 lg:h-12 text-sm lg:text-base"
+                              disabled={true}
+                            >
+                              False
+                            </Button>
                           </div>
-                          <p className="text-sm lg:text-base font-medium">{getCorrectAnswerDisplay(question)}</p>
-                          {question.type === 'short_answer' && selfAssessments.has(question.id) && (
-                            <>
-                              <Separator />
-                              <div>
-                                <span className="font-medium text-sm lg:text-base">Your Self-Assessment:</span>
-                                <div className="mt-2">
-                                  <Badge 
-                                    variant="outline" 
-                                    className={
-                                      selfAssessments.get(question.id) === 'correct' 
-                                        ? 'bg-green-50 text-green-700 border-green-300 dark:bg-green-950 dark:text-green-300'
-                                        : selfAssessments.get(question.id) === 'partial'
-                                        ? 'bg-yellow-50 text-yellow-700 border-yellow-300 dark:bg-yellow-950 dark:text-yellow-300'
-                                        : 'bg-red-50 text-red-700 border-red-300 dark:bg-red-950 dark:text-red-300'
-                                    }
-                                  >
-                                    {selfAssessments.get(question.id) === 'correct' ? 'Correct' : 
-                                     selfAssessments.get(question.id) === 'partial' ? 'Partially Correct' : 'Incorrect'}
-                                  </Badge>
-                                </div>
-                              </div>
-                            </>
-                          )}
-                          <Separator />
-                          <div>
-                            <span className="font-medium text-sm lg:text-base">Explanation:</span>
-                            <p className="text-sm lg:text-base text-muted-foreground mt-2 lg:mt-3">{question.explanation}</p>
-                          </div>
-                          {question.sourceReference && (
-                            <div className="flex items-center gap-2 lg:gap-3 mt-3 lg:mt-4">
-                              <BookOpen className="size-4 lg:size-5 text-muted-foreground" />
-                              <span className="text-xs lg:text-sm text-muted-foreground">
-                                Source: {question.sourceReference.name}
-                                {question.sourceReference.url && (
-                                  <a
-                                    href={question.sourceReference.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="ml-2 inline-flex items-center gap-1 text-primary hover:underline"
-                                  >
-                                    View <ExternalLink className="size-3 lg:size-4" />
-                                  </a>
-                                )}
-                              </span>
+                        </div>
+                      )}
+
+                      {question.type === 'short_answer' && (
+                        <div className="space-y-3 lg:space-y-4">
+                          <label className="text-sm lg:text-base font-medium">Your answer:</label>
+                          <textarea
+                            value={userAnswer !== undefined ? String(userAnswer) : ''}
+                            className="w-full p-3 lg:p-4 border rounded-md min-h-[120px] lg:min-h-[150px] text-sm lg:text-base resize-y bg-muted/50"
+                            placeholder="Type your answer here..."
+                            disabled={true}
+                          />
+                        </div>
+                      )}
+
+                      {/* Show Answer Button - Toggle is no longer needed if we always show feedback in review mode, 
+                        but I'll keep it as requested for "reviewing" or if the user wants it.
+                        Actually, since we are in results/review mode, we probably want to show the answer.
+                    */}
+                      <Button
+                        variant="outline"
+                        onClick={() => toggleShowAnswer(question.id)}
+                        className="w-full h-10 lg:h-12 text-sm lg:text-base"
+                      >
+                        {showAnswer ? 'Hide Feedback' : 'Show Feedback'}
+                      </Button>
+
+                      {/* Answer Display */}
+                      {showAnswer && (
+                        <Card className="bg-muted/30 border-muted mt-4">
+                          <CardContent className="p-4 lg:p-6 space-y-3 lg:space-y-4">
+                            <div className="flex items-center gap-2 lg:gap-3">
+                              <CheckCircle2 className="size-4 lg:size-5 text-green-600 dark:text-green-400" />
+                              <span className="font-medium text-sm lg:text-base">Correct Answer:</span>
                             </div>
-                          )}
-                        </CardContent>
-                      </Card>
-                    )}
-                  </CardContent>
-                )}
-              </Card>
-            )
-          })}
-        </TabsContent>
+                            <p className="text-sm lg:text-base font-medium">{getCorrectAnswerDisplay(question)}</p>
+                            {question.type === 'short_answer' && selfAssessments.has(question.id) && (
+                              <>
+                                <Separator />
+                                <div>
+                                  <span className="font-medium text-sm lg:text-base">Your Self-Assessment:</span>
+                                  <div className="mt-2">
+                                    <Badge
+                                      variant="outline"
+                                      className={
+                                        selfAssessments.get(question.id) === 'correct'
+                                          ? 'bg-green-50 text-green-700 border-green-300 dark:bg-green-950 dark:text-green-300'
+                                          : selfAssessments.get(question.id) === 'partial'
+                                            ? 'bg-yellow-50 text-yellow-700 border-yellow-300 dark:bg-yellow-950 dark:text-yellow-300'
+                                            : 'bg-red-50 text-red-700 border-red-300 dark:bg-red-950 dark:text-red-300'
+                                      }
+                                    >
+                                      {selfAssessments.get(question.id) === 'correct' ? 'Correct' :
+                                        selfAssessments.get(question.id) === 'partial' ? 'Partially Correct' : 'Incorrect'}
+                                    </Badge>
+                                  </div>
+                                </div>
+                              </>
+                            )}
+                            <Separator />
+                            <div>
+                              <span className="font-medium text-sm lg:text-base">Explanation:</span>
+                              <p className="text-sm lg:text-base text-muted-foreground mt-2 lg:mt-3">{question.explanation}</p>
+                            </div>
+                            {question.sourceReference && (
+                              <div className="flex items-center gap-2 lg:gap-3 mt-3 lg:mt-4">
+                                <BookOpen className="size-4 lg:size-5 text-muted-foreground" />
+                                <span className="text-xs lg:text-sm text-muted-foreground">
+                                  Source: {question.sourceReference.name}
+                                  {question.sourceReference.url && (
+                                    <a
+                                      href={question.sourceReference.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="ml-2 inline-flex items-center gap-1 text-primary hover:underline"
+                                    >
+                                      View <ExternalLink className="size-3 lg:size-4" />
+                                    </a>
+                                  )}
+                                </span>
+                              </div>
+                            )}
+                          </CardContent>
+                        </Card>
+                      )}
+                    </AccordionContent>
+                  </AccordionItem>
+                )
+              })}
+            </Accordion>
+          </TabsContent>
 
-        {/* By Type Tab */}
-        <TabsContent value="by-type" className="space-y-4 lg:space-y-6 mt-4 lg:mt-6">
-          {Object.entries(questionsByType).map(([type, questions]) => (
-            questions.length > 0 && (
-              <Card key={type}>
+          {/* By Type Tab */}
+          <TabsContent value="by-type" className="space-y-4 lg:space-y-6 mt-4 lg:mt-6">
+            {Object.entries(questionsByType).map(([type, questions]) => (
+              questions.length > 0 && (
+                <Card key={type}>
+                  <CardHeader className="pb-4 lg:pb-6">
+                    <CardTitle className="text-base lg:text-lg capitalize">
+                      {type.replace('_', ' ')} ({questions.length})
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3 lg:space-y-4">
+                      {questions.map((question) => (
+                        <div key={question.id} className="p-3 lg:p-4 border rounded-md">
+                          <p className="text-sm lg:text-base font-medium mb-2 lg:mb-3">{question.question}</p>
+                          {question.options && (
+                            <ul className="list-disc list-inside space-y-1 lg:space-y-2 text-xs lg:text-sm text-muted-foreground">
+                              {question.options.map((option, i) => (
+                                <li key={i}>{option}</li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )
+            ))}
+          </TabsContent>
+
+          {/* By Topic Tab */}
+          <TabsContent value="by-topic" className="space-y-4 lg:space-y-6 mt-4 lg:mt-6">
+            {Object.entries(questionsByTopic).map(([topic, questions]) => (
+              <Card key={topic}>
                 <CardHeader className="pb-4 lg:pb-6">
-                  <CardTitle className="text-base lg:text-lg capitalize">
-                    {type.replace('_', ' ')} ({questions.length})
-                  </CardTitle>
+                  <CardTitle className="text-base lg:text-lg">{topic} ({questions.length})</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3 lg:space-y-4">
                     {questions.map((question) => (
                       <div key={question.id} className="p-3 lg:p-4 border rounded-md">
                         <p className="text-sm lg:text-base font-medium mb-2 lg:mb-3">{question.question}</p>
-                        {question.options && (
-                          <ul className="list-disc list-inside space-y-1 lg:space-y-2 text-xs lg:text-sm text-muted-foreground">
-                            {question.options.map((option, i) => (
-                              <li key={i}>{option}</li>
-                            ))}
-                          </ul>
-                        )}
+                        <Badge className={`${getQuestionTypeColor(question.type)} text-xs lg:text-sm`} variant="outline">
+                          {question.type.replace('_', ' ')}
+                        </Badge>
                       </div>
                     ))}
                   </div>
                 </CardContent>
               </Card>
-            )
-          ))}
-        </TabsContent>
+            ))}
+          </TabsContent>
 
-        {/* By Topic Tab */}
-        <TabsContent value="by-topic" className="space-y-4 lg:space-y-6 mt-4 lg:mt-6">
-          {Object.entries(questionsByTopic).map(([topic, questions]) => (
-            <Card key={topic}>
-              <CardHeader className="pb-4 lg:pb-6">
-                <CardTitle className="text-base lg:text-lg">{topic} ({questions.length})</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3 lg:space-y-4">
-                  {questions.map((question) => (
-                    <div key={question.id} className="p-3 lg:p-4 border rounded-md">
-                      <p className="text-sm lg:text-base font-medium mb-2 lg:mb-3">{question.question}</p>
-                      <Badge className={`${getQuestionTypeColor(question.type)} text-xs lg:text-sm`} variant="outline">
-                        {question.type.replace('_', ' ')}
-                      </Badge>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </TabsContent>
-
-        {/* Sources Tab */}
-        <TabsContent value="sources" className="space-y-3 lg:space-y-4 mt-4 lg:mt-6">
-          {data.metadata?.sourcesUsed && data.metadata.sourcesUsed.length > 0 ? (
-            <Card>
-              <CardHeader className="pb-4 lg:pb-6">
-                <CardTitle className="text-base lg:text-lg">Sources Used</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ul className="list-disc list-inside space-y-2 lg:space-y-3">
-                  {data.metadata.sourcesUsed.map((source, i) => (
-                    <li key={i} className="text-sm lg:text-base text-muted-foreground">{source}</li>
-                  ))}
-                </ul>
-              </CardContent>
-            </Card>
-          ) : (
-            <Card>
-              <CardContent className="py-8 lg:py-12 text-center text-sm lg:text-base text-muted-foreground">
-                No source information available
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
-      </Tabs>
+          {/* Sources Tab */}
+          <TabsContent value="sources" className="space-y-3 lg:space-y-4 mt-4 lg:mt-6">
+            {data.metadata?.sourcesUsed && data.metadata.sourcesUsed.length > 0 ? (
+              <Card>
+                <CardHeader className="pb-4 lg:pb-6">
+                  <CardTitle className="text-base lg:text-lg">Sources Used</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ul className="list-disc list-inside space-y-2 lg:space-y-3">
+                    {data.metadata.sourcesUsed.map((source, i) => (
+                      <li key={i} className="text-sm lg:text-base text-muted-foreground">{source}</li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card>
+                <CardContent className="py-8 lg:py-12 text-center text-sm lg:text-base text-muted-foreground">
+                  No source information available
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
+        </Tabs>
       </div>
     )
   }
