@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ArtifactEditor } from './ArtifactEditor'
+import { getModeFromArtifactType, getModeBadgeColors } from '@/lib/mode-colors'
 
 interface Artifact {
   id: string
@@ -60,7 +61,7 @@ export function ArtifactCard({ artifact, onDelete, onUpdate }: ArtifactCardProps
           </CardTitle>
           <Badge 
             variant="outline" 
-            className="w-fit flex items-center gap-1.5 text-xs font-normal"
+            className={`w-fit flex items-center gap-1.5 text-xs font-normal border ${getModeBadgeColors(getModeFromArtifactType(artifact.artifact_type))}`}
           >
             {getArtifactTypeIcon()}
             {getArtifactTypeLabel()}

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback, startTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient as createSupabaseClient } from '@/lib/supabase/client'
 import { X, CopyIcon, RefreshCcwIcon, GlobeIcon, CheckIcon, SparklesIcon, FolderIcon, LayersIcon, FileText, BookOpen, GraduationCap, FileQuestion } from 'lucide-react'
@@ -27,6 +27,7 @@ import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { Spinner } from '@/components/ui/spinner'
 import { Badge } from '@/components/ui/badge'
+import { getModeColors, getModeBadgeColors, type ModeType } from '@/lib/mode-colors'
 
 let supabase: any = null
 
@@ -120,6 +121,7 @@ export default function ChatPage() {
   const [userPrompts, setUserPrompts] = useState<Array<{ id: string; template_type: string | null }>>([])
   const { messages: uiMessages, sendMessage: sendChatMessage, status, regenerate, setMessages: setUIMessages, addToolApprovalResponse, error } = useChat({
     api: '/api/chat',
+    experimental_throttle: 50,
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
     onResponse: (response: Response) => {
       const sid = response.headers.get('x-session-id')
@@ -150,19 +152,79 @@ export default function ChatPage() {
     }
   } as any)
 
-  const staticSuggestions = useMemo(() => [
-    'Show my current courses',
-    'List upcoming deadlines',
-    'Summarize latest Canvas announcements',
-    'What modules need attention this week?',
-  ], [])
+  const hasContext = useMemo(() => 
+    selectedContext.courses.length > 0 || 
+    selectedContext.assignments.length > 0 || 
+    selectedContext.modules.length > 0
+  , [selectedContext])
 
-  const rubricSuggestions = useMemo(() => [
-    'Analyze the rubric for my latest assignment',
-    'What are the key criteria I need to meet?',
-    'Help me understand the rubric requirements',
-    'Show me examples for each criterion',
-  ], [])
+  const staticSuggestions = useMemo(() => {
+    if (hasContext) {
+      return [
+        'Tell me more about my selected items',
+        'List upcoming deadlines for these courses',
+        'Summarize announcements for my context',
+        'What should I focus on first?',
+      ]
+    }
+    return [
+      'Show my current courses',
+      'List upcoming deadlines',
+      'Summarize latest Canvas announcements',
+      'What modules need attention this week?',
+    ]
+  }, [hasContext])
+
+  const rubricSuggestions = useMemo(() => {
+    if (selectedContext.assignments.length > 0) {
+      return [
+        'Analyze the rubric for my selected assignments',
+        'What are the key criteria for these assignments?',
+        'Help me understand these rubric requirements',
+        'Show me examples for these criteria',
+      ]
+    }
+    return [
+      'Analyze the rubric for assignments I mention',
+      'What are the key criteria in the rubric?',
+      'Help me understand the rubric requirements',
+      'Show me examples for each criterion',
+    ]
+  }, [selectedContext.assignments.length])
+
+  const quizSuggestions = useMemo(() => {
+    if (hasContext) {
+      return [
+        'Generate a quiz for my selected context',
+        'Create a practice test from these items',
+        'Give me some practice questions',
+        'Help me study for my upcoming quiz',
+      ]
+    }
+    return [
+      'Generate a quiz for modules I mention',
+      'Create a practice test for my assignment',
+      'Help me study for an upcoming quiz',
+      'Give me practice questions for my course',
+    ]
+  }, [hasContext])
+
+  const studyPlanSuggestions = useMemo(() => {
+    if (hasContext) {
+      return [
+        'Create a study plan for my selected items',
+        'How should I prioritize these tasks?',
+        'Help me organize my study schedule',
+        'Break down these topics into a plan',
+      ]
+    }
+    return [
+      'Create a study plan for courses I mention',
+      'How should I prioritize my assignments?',
+      'Help me organize my week',
+      'Break down my modules into a study schedule',
+    ]
+  }, [hasContext])
   const [dynamicSuggestions, setDynamicSuggestions] = useState<string[]>([])
   const [loadingSuggestions, setLoadingSuggestions] = useState(false)
   const lastAssistantIdRef = useRef<string | null>(null)
@@ -170,82 +232,27 @@ export default function ChatPage() {
   const suppressAutoSuggestionsRef = useRef<boolean>(false)
   const [suggestionsVisible, setSuggestionsVisible] = useState<boolean>(true)
 
+  // Combined effect for title and suggestions generation - runs in parallel with non-blocking updates
   useEffect(() => {
     const lastAssistant = [...uiMessages].reverse().find((m) => m.role === 'assistant')
     const isIdle = status !== 'streaming' && status !== 'submitted'
     if (!lastAssistant || !isIdle) return
-    if (suppressAutoSuggestionsRef.current) { suppressAutoSuggestionsRef.current = false; return }
-    if (lastAssistantIdRef.current === lastAssistant.id) return
-    const hasFinalText = lastAssistant.parts.some((p: any) => p.type === 'text' && String((p as any).text || '').trim().length > 0)
-    if (!hasFinalText) return
-    setLoadingSuggestions(true)
-    setSuggestionsVisible(true)
-    ; (async () => {
-      try {
-        const res = await fetch('/api/suggestions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            messages: uiMessages,
-            provider_id: activeProvider?.id,
-            model: selectedModel,
-            model_override: activeProvider?.provider_name === 'openrouter' ? selectedModel : selectedModel,
-            max_suggestions: 4,
-          }),
-        })
-        if (res.ok) {
-          const data = await res.json()
-          const suggestions = Array.isArray(data?.suggestions) ? data.suggestions : []
-          setDynamicSuggestions(suggestions)
-          lastAssistantIdRef.current = lastAssistant.id
-        }
-      } catch (e) {
-        console.error('Failed to load suggestions', e)
-      } finally {
-        setLoadingSuggestions(false)
-      }
-    })()
-  }, [uiMessages, status, selectedModel, activeProvider])
-
-  const regenerateAllSuggestions = async () => {
-    setLoadingSuggestions(true)
-    setSuggestionsVisible(true)
-    try {
-      const res = await fetch('/api/suggestions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: uiMessages,
-          provider_id: activeProvider?.id,
-          model: selectedModel,
-          model_override: activeProvider?.provider_name === 'openrouter' ? selectedModel : selectedModel,
-          max_suggestions: 4,
-        }),
-      })
-      if (res.ok) {
-        const data = await res.json()
-        const suggestions = Array.isArray(data?.suggestions) ? data.suggestions : []
-        setDynamicSuggestions(suggestions)
-      }
-    } catch (e) {
-      console.error('Failed to regenerate suggestions', e)
-    } finally {
-      setLoadingSuggestions(false)
-    }
-  }
-
-  useEffect(() => {
-    const lastAssistant = [...uiMessages].reverse().find((m) => m.role === 'assistant')
-    const isIdle = status !== 'streaming' && status !== 'submitted'
-    if (!lastAssistant || !isIdle) return
+    
+    // Check if we've already processed this assistant message
     if (lastUpdatedAssistantIdRef.current === lastAssistant.id) return
-    lastUpdatedAssistantIdRef.current = lastAssistant.id
+    
     const finalAssistantText = lastAssistant.parts
       .filter((p: any) => p.type === 'text')
       .map((p: any) => String(p.text || ''))
       .join('')
     if (!String(finalAssistantText || '').trim()) return
 
+    const hasFinalText = lastAssistant.parts.some((p: any) => p.type === 'text' && String((p as any).text || '').trim().length > 0)
+    if (!hasFinalText) return
+
+    // Mark as processing to prevent duplicate runs
+    lastUpdatedAssistantIdRef.current = lastAssistant.id
+    
     const lastUser = [...uiMessages].reverse().find((m) => m.role === 'user')
     const lastUserText = lastUser
       ? lastUser.parts
@@ -274,77 +281,181 @@ export default function ChatPage() {
     }
 
     const mappedMessages = mapUIMessagesToSessionMessages()
+    const needsTitle = !currentSession?.title || currentSession?.title === 'New Chat'
+    const needsSuggestions = !suppressAutoSuggestionsRef.current && lastAssistantIdRef.current !== lastAssistant.id
 
-      ; (async () => {
+    // Set loading states immediately
+    if (needsTitle) {
+      setTitleGenerating(true)
+    }
+    if (needsSuggestions) {
+      setLoadingSuggestions(true)
+      setSuggestionsVisible(true)
+    }
+
+    // Reset suppress flag if it was set
+    if (suppressAutoSuggestionsRef.current) {
+      suppressAutoSuggestionsRef.current = false
+    }
+
+    ; (async () => {
+      try {
+        // Run title and suggestions generation in parallel
+        const [titleResult, suggestionsResult] = await Promise.allSettled([
+          needsTitle
+            ? fetch('/api/session-title', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  messages: uiMessages,
+                  model: selectedModel,
+                  model_override: selectedModel,
+                }),
+              }).then(async (res) => {
+                if (res.ok) {
+                  const data = await res.json()
+                  const title = typeof data?.title === 'string' ? data.title.trim() : ''
+                  return title || null
+                }
+                return null
+              })
+            : Promise.resolve(null),
+          needsSuggestions
+            ? fetch('/api/suggestions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  messages: uiMessages,
+                  provider_id: activeProvider?.id,
+                  model: selectedModel,
+                  model_override: activeProvider?.provider_name === 'openrouter' ? selectedModel : selectedModel,
+                  max_suggestions: 4,
+                  selected_context: selectedContext,
+                  mode: mode,
+                }),
+              }).then(async (res) => {
+                if (res.ok) {
+                  const data = await res.json()
+                  const suggestions = Array.isArray(data?.suggestions) ? data.suggestions : []
+                  return suggestions
+                }
+                return []
+              })
+            : Promise.resolve([]),
+        ])
+
+        // Process title result
         let generatedTitle: string | null = null
-        const needsTitle = !currentSession?.title || currentSession?.title === 'New Chat'
         if (needsTitle) {
-          try {
-            setTitleGenerating(true)
-            const res = await fetch('/api/session-title', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                messages: uiMessages,
-                model: selectedModel,
-                model_override: selectedModel,
-              }),
-            })
-            if (res.ok) {
-              const data = await res.json()
-              const title = typeof data?.title === 'string' ? data.title.trim() : ''
-              if (title) generatedTitle = title
-            }
-          } catch (e) {
-            console.error('Failed to generate session title', e)
-          } finally {
-            setTitleGenerating(false)
+          if (titleResult.status === 'fulfilled' && titleResult.value) {
+            generatedTitle = titleResult.value
+          } else if (titleResult.status === 'rejected') {
+            console.error('Failed to generate session title', titleResult.reason)
           }
         }
 
+        // Process suggestions result
+        if (needsSuggestions) {
+          if (suggestionsResult.status === 'fulfilled') {
+            const suggestions = suggestionsResult.value
+            startTransition(() => {
+              setDynamicSuggestions(suggestions)
+              lastAssistantIdRef.current = lastAssistant.id
+            })
+          } else if (suggestionsResult.status === 'rejected') {
+            console.error('Failed to load suggestions', suggestionsResult.reason)
+          }
+        }
+
+        // Update title and session state
         const fallbackTitleBase = String(lastUserText || '').substring(0, 50)
         const fallbackTitle = fallbackTitleBase + (String(lastUserText || '').length > 50 ? '...' : '')
         const finalTitle = generatedTitle || fallbackTitle
 
-        setSessions((prev) => {
-          const updated = prev.map((s) => {
-            if (!currentSession || s.id !== currentSession.id) return s
+        startTransition(() => {
+          setSessions((prev) => {
+            const updated = prev.map((s) => {
+              if (!currentSession || s.id !== currentSession.id) return s
+              return {
+                ...s,
+                title: finalTitle,
+                messages: mappedMessages,
+                lastMessage: now,
+                updated_at: now,
+              }
+            })
+            return updated.sort((a, b) => b.lastMessage.getTime() - a.lastMessage.getTime())
+          })
+
+          setCurrentSession((prev) => {
+            if (!prev) return prev
             return {
-              ...s,
+              ...prev,
               title: finalTitle,
               messages: mappedMessages,
               lastMessage: now,
               updated_at: now,
             }
           })
-          return updated.sort((a, b) => b.lastMessage.getTime() - a.lastMessage.getTime())
         })
 
-        setCurrentSession((prev) => {
-          if (!prev) return prev
-          return {
-            ...prev,
-            title: finalTitle,
-            messages: mappedMessages,
-            lastMessage: now,
-            updated_at: now,
+        // Persist title to database (non-blocking)
+        if (needsTitle && generatedTitle) {
+          try {
+            const id = currentSession?.id
+            if (id && supabase) {
+              await supabase
+                .from('chat_sessions')
+                .update({ title: finalTitle })
+                .eq('id', id)
+            }
+          } catch (e) {
+            console.error('Failed to persist session title', e)
           }
-        })
-
-        try {
-          const id = currentSession?.id
-          if (id && supabase) {
-            await supabase
-              .from('chat_sessions')
-              .update({ title: finalTitle })
-              .eq('id', id)
-          }
-        } catch (e) {
-          console.error('Failed to persist session title', e)
         }
+      } catch (e) {
+        console.error('Error in title/suggestions generation', e)
+      } finally {
+        if (needsTitle) {
+          setTitleGenerating(false)
+        }
+        if (needsSuggestions) {
+          setLoadingSuggestions(false)
+        }
+      }
+    })()
+  }, [uiMessages, status, selectedModel, activeProvider, currentSession])
 
-      })()
-  }, [uiMessages, status, selectedModel, activeProvider])
+  const regenerateAllSuggestions = async () => {
+    setLoadingSuggestions(true)
+    setSuggestionsVisible(true)
+    try {
+      const res = await fetch('/api/suggestions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: uiMessages,
+          provider_id: activeProvider?.id,
+          model: selectedModel,
+          model_override: activeProvider?.provider_name === 'openrouter' ? selectedModel : selectedModel,
+          max_suggestions: 4,
+          selected_context: selectedContext,
+          mode: mode,
+        }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        const suggestions = Array.isArray(data?.suggestions) ? data.suggestions : []
+        startTransition(() => {
+          setDynamicSuggestions(suggestions)
+        })
+      }
+    } catch (e) {
+      console.error('Failed to regenerate suggestions', e)
+    } finally {
+      setLoadingSuggestions(false)
+    }
+  }
 
   // Check authentication and load data
   useEffect(() => {
@@ -1323,8 +1434,12 @@ export default function ChatPage() {
                   (dynamicSuggestions.length > 0 
                     ? dynamicSuggestions 
                     : mode === 'rubric'
-                      ? rubricSuggestions 
-                      : staticSuggestions
+                      ? rubricSuggestions
+                      : mode === 'quiz'
+                        ? quizSuggestions
+                        : mode === 'study-plan'
+                          ? studyPlanSuggestions
+                          : staticSuggestions
                   ).map((s, i) => (
                     <Suggestion key={`${s}-${i}`} suggestion={s} disabled={status !== 'ready'} onClick={() => { onSubmitAI({ text: s }) }} />
                   ))
@@ -1537,7 +1652,7 @@ export default function ChatPage() {
                   </Tooltip>
                   <Popover open={modeOpen} onOpenChange={setModeOpen}>
                     <PopoverTrigger asChild>
-                      <PromptInputButton type="button">
+                      <PromptInputButton type="button" className={mode ? `${getModeColors(mode as ModeType).text}` : ''}>
                         {mode === 'rubric' ? (
                           <FileText className="size-4" />
                         ) : mode === 'quiz' ? (
@@ -1550,7 +1665,7 @@ export default function ChatPage() {
                         <span className="ml-1 flex items-center gap-1.5">
                           {mode === 'rubric' ? 'Rubric' : mode === 'quiz' ? 'Quiz Generation' : mode === 'study-plan' ? 'Study Plan' : 'Generic'}
                           {(mode === 'rubric' || mode === 'quiz' || mode === 'study-plan') && (
-                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-green-100 text-green-800 border-green-300 dark:bg-green-900 dark:text-green-200 dark:border-green-700">Beta</Badge>
+                            <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 h-4 border ${getModeBadgeColors(mode as ModeType)}`}>Beta</Badge>
                           )}
                         </span>
                       </PromptInputButton>
@@ -1579,10 +1694,10 @@ export default function ChatPage() {
                                 setModeOpen(false)
                               }}
                             >
-                              <FileText className="size-4" />
+                              <FileText className={`size-4 ${getModeColors('rubric').text}`} />
                               <span className="flex items-center gap-1.5">
                                 Rubric Analysis
-                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-green-100 text-green-800 border-green-300 dark:bg-green-900 dark:text-green-200 dark:border-green-700">Beta</Badge>
+                                <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 h-4 border ${getModeBadgeColors('rubric')}`}>Beta</Badge>
                               </span>
                               {mode === 'rubric' && <CheckIcon className="ml-auto size-4" />}
                             </PromptInputCommandItem>
@@ -1593,10 +1708,10 @@ export default function ChatPage() {
                                 setModeOpen(false)
                               }}
                             >
-                              <FileQuestion className="size-4" />
+                              <FileQuestion className={`size-4 ${getModeColors('quiz').text}`} />
                               <span className="flex items-center gap-1.5">
                                 Quiz Generation
-                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-green-100 text-green-800 border-green-300 dark:bg-green-900 dark:text-green-200 dark:border-green-700">Beta</Badge>
+                                <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 h-4 border ${getModeBadgeColors('quiz')}`}>Beta</Badge>
                               </span>
                               {mode === 'quiz' && <CheckIcon className="ml-auto size-4" />}
                             </PromptInputCommandItem>
@@ -1607,10 +1722,10 @@ export default function ChatPage() {
                                 setModeOpen(false)
                               }}
                             >
-                              <BookOpen className="size-4" />
+                              <BookOpen className={`size-4 ${getModeColors('study-plan').text}`} />
                               <span className="flex items-center gap-1.5">
                                 Study Plan
-                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-green-100 text-green-800 border-green-300 dark:bg-green-900 dark:text-green-200 dark:border-green-700">Beta</Badge>
+                                <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 h-4 border ${getModeBadgeColors('study-plan')}`}>Beta</Badge>
                               </span>
                               {mode === 'study-plan' && <CheckIcon className="ml-auto size-4" />}
                             </PromptInputCommandItem>

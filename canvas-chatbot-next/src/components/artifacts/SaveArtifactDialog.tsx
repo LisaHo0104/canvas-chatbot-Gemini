@@ -15,6 +15,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
+import { getModeFromArtifactType, getModeBadgeColors } from '@/lib/mode-colors'
 
 interface SaveArtifactDialogProps {
   open: boolean
@@ -126,7 +127,7 @@ export function SaveArtifactDialog({
           <div className="space-y-2">
             <Label htmlFor="artifact-type">Type</Label>
             <div className="flex items-center gap-2">
-              <Badge variant="outline" className="flex items-center gap-1">
+              <Badge variant="outline" className={`flex items-center gap-1 border ${getModeBadgeColors(getModeFromArtifactType(artifactType))}`}>
                 {getArtifactTypeIcon()}
                 {getArtifactTypeLabel()}
               </Badge>

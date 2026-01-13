@@ -37,6 +37,18 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+  --color-quiz: var(--quiz);
+  --color-quiz-foreground: var(--quiz-foreground);
+  --color-quiz-muted: var(--quiz-muted);
+  --color-quiz-muted-foreground: var(--quiz-muted-foreground);
+  --color-rubric: var(--rubric);
+  --color-rubric-foreground: var(--rubric-foreground);
+  --color-rubric-muted: var(--rubric-muted);
+  --color-rubric-muted-foreground: var(--rubric-muted-foreground);
+  --color-study-plan: var(--study-plan);
+  --color-study-plan-foreground: var(--study-plan-foreground);
+  --color-study-plan-muted: var(--study-plan-muted);
+  --color-study-plan-muted-foreground: var(--study-plan-muted-foreground);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -76,6 +88,18 @@
   --sidebar-ring: oklch(0.705 0.015 286.067);
   --background: oklch(1 0 0);
   --foreground: oklch(0.141 0.005 285.823);
+  --quiz: oklch(0.55 0.15 240);
+  --quiz-foreground: oklch(0.985 0 0);
+  --quiz-muted: oklch(0.95 0.02 240);
+  --quiz-muted-foreground: oklch(0.45 0.08 240);
+  --rubric: oklch(0.55 0.15 300);
+  --rubric-foreground: oklch(0.985 0 0);
+  --rubric-muted: oklch(0.95 0.02 300);
+  --rubric-muted-foreground: oklch(0.45 0.08 300);
+  --study-plan: oklch(0.55 0.15 160);
+  --study-plan-foreground: oklch(0.985 0 0);
+  --study-plan-muted: oklch(0.95 0.02 160);
+  --study-plan-muted-foreground: oklch(0.45 0.08 160);
 }
 
 .dark {
@@ -110,6 +134,18 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.552 0.016 285.938);
+  --quiz: oklch(0.65 0.18 240);
+  --quiz-foreground: oklch(0.1 0 0);
+  --quiz-muted: oklch(0.25 0.03 240);
+  --quiz-muted-foreground: oklch(0.75 0.05 240);
+  --rubric: oklch(0.65 0.18 300);
+  --rubric-foreground: oklch(0.1 0 0);
+  --rubric-muted: oklch(0.25 0.03 300);
+  --rubric-muted-foreground: oklch(0.75 0.05 300);
+  --study-plan: oklch(0.65 0.18 160);
+  --study-plan-foreground: oklch(0.1 0 0);
+  --study-plan-muted: oklch(0.25 0.03 160);
+  --study-plan-muted-foreground: oklch(0.75 0.05 160);
 }
 
 @layer base {

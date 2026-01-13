@@ -5,6 +5,7 @@ import { FileCode, FileText, Copy, CheckIcon } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Badge } from '@/components/ui/badge'
 import { PromptInputButton } from '@/components/ai-elements/prompt-input'
+import { getModeBadgeColors, getModeColors, type ModeType } from '@/lib/mode-colors'
 import {
   PromptInputCommand,
   PromptInputCommandInput,
@@ -81,9 +82,20 @@ export function SystemPromptSelector({
   }
 
   const activeTemplateType = getActiveTemplateType()
+  
+  // Get mode type for color utilities
+  const modeType: ModeType = mode === 'rubric' ? 'rubric' : mode === 'quiz' ? 'quiz' : mode === 'study-plan' ? 'study-plan' : null
 
   const isBetaFeature = (templateType: string | null | undefined): boolean => {
     return templateType === 'quiz_generation' || templateType === 'study_plan' || templateType === 'rubric_analysis'
+  }
+
+  // Get mode type from template type
+  const getModeFromTemplateType = (templateType: string | null | undefined): ModeType => {
+    if (templateType === 'quiz_generation') return 'quiz'
+    if (templateType === 'rubric_analysis') return 'rubric'
+    if (templateType === 'study_plan') return 'study-plan'
+    return null
   }
 
   // Filter prompts based on enabled state and search query
@@ -154,6 +166,8 @@ export function SystemPromptSelector({
                       {availableTemplates.map((template) => {
                         const isActive = activeTemplateType !== null && template.template_type === activeTemplateType
                         const isSelected = selectedPromptIds.includes(template.id)
+                        const templateModeType = getModeFromTemplateType(template.template_type)
+                        const templateModeColors = templateModeType ? getModeColors(templateModeType) : null
                         return (
                           <PromptInputCommandItem
                             key={template.id}
@@ -164,12 +178,12 @@ export function SystemPromptSelector({
                             }}
                             className={isActive || isSelected ? '' : 'opacity-75 cursor-not-allowed'}
                           >
-                            <FileText className="size-4" />
+                            <FileText className={`size-4 ${templateModeColors ? templateModeColors.text : ''}`} />
                             <div className="flex flex-col">
                               <div className="flex items-center gap-1.5">
-                                <span className="font-medium text-sm">{template.name}</span>
+                                <span className={`font-medium text-sm ${templateModeColors ? templateModeColors.text : ''}`}>{template.name}</span>
                                 {isBetaFeature(template.template_type) && (
-                                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-green-100 text-green-800 border-green-300 dark:bg-green-900 dark:text-green-200 dark:border-green-700">Beta</Badge>
+                                  <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 h-4 border ${getModeBadgeColors(templateModeType)}`}>Beta</Badge>
                                 )}
                               </div>
                               {template.description && (
@@ -187,6 +201,8 @@ export function SystemPromptSelector({
                         // Find the corresponding template to check if it's active
                         const correspondingTemplate = templates.find(t => t.template_type === prompt.template_type)
                         const isActive = correspondingTemplate && activeTemplateType !== null && correspondingTemplate.template_type === activeTemplateType
+                        const promptModeType = getModeFromTemplateType(prompt.template_type)
+                        const promptModeColors = promptModeType ? getModeColors(promptModeType) : null
                         return (
                           <PromptInputCommandItem
                             key={prompt.id}
@@ -197,12 +213,12 @@ export function SystemPromptSelector({
                             }}
                             className={isActive || isSelected ? '' : 'opacity-75 cursor-not-allowed'}
                           >
-                            <FileText className="size-4" />
+                            <FileText className={`size-4 ${promptModeColors ? promptModeColors.text : ''}`} />
                             <div className="flex flex-col">
                               <div className="flex items-center gap-1.5">
-                                <span className="font-medium text-sm">{prompt.name}</span>
+                                <span className={`font-medium text-sm ${promptModeColors ? promptModeColors.text : ''}`}>{prompt.name}</span>
                                 {isBetaFeature(prompt.template_type) && (
-                                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-green-100 text-green-800 border-green-300 dark:bg-green-900 dark:text-green-200 dark:border-green-700">Beta</Badge>
+                                  <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 h-4 border ${getModeBadgeColors(promptModeType)}`}>Beta</Badge>
                                 )}
                               </div>
                               {prompt.description && (

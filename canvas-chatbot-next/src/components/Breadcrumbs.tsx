@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Badge } from '@/components/ui/badge'
+import { getModeBadgeColors, type ModeType } from '@/lib/mode-colors'
 
 export default function Breadcrumbs() {
   const pathname = usePathname()
@@ -12,7 +13,8 @@ export default function Breadcrumbs() {
     const label = part.replace(/-/g, ' ')
     const isLast = idx === parts.length - 1
     const isBeta = part === 'quiz' || part === 'rubric' || part === 'study-plan'
-    return { href, label, isLast, isBeta }
+    const mode: ModeType = part === 'quiz' ? 'quiz' : part === 'rubric' ? 'rubric' : part === 'study-plan' ? 'study-plan' : null
+    return { href, label, isLast, isBeta, mode }
   })
 
   if (items.length <= 1) return null
@@ -29,12 +31,12 @@ export default function Breadcrumbs() {
             {item.isLast ? (
               <span className="text-foreground flex items-center gap-1.5">
                 {item.label}
-                {item.isBeta && <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">Beta</Badge>}
+                {item.isBeta && item.mode && <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 h-4 border ${getModeBadgeColors(item.mode)}`}>Beta</Badge>}
               </span>
             ) : (
               <Link href={item.href} className="text-muted-foreground hover:text-foreground flex items-center gap-1.5">
                 {item.label}
-                {item.isBeta && <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">Beta</Badge>}
+                {item.isBeta && item.mode && <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 h-4 border ${getModeBadgeColors(item.mode)}`}>Beta</Badge>}
               </Link>
             )}
           </li>
