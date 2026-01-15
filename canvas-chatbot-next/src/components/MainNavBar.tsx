@@ -124,17 +124,6 @@ export default function MainNavBar() {
                       </Tooltip>
                     </NavigationMenuItem>
                     <NavigationMenuItem>
-                      <NavigationMenuLink
-                        asChild
-                        className={cn(
-                          pathname.startsWith('/protected/settings') ? 'bg-accent text-accent-foreground' : ''
-                        )}
-                        aria-current={pathname.startsWith('/protected/settings') ? 'page' : undefined}
-                      >
-                        <Link href="/protected/settings">Settings</Link>
-                      </NavigationMenuLink>
-                    </NavigationMenuItem>
-                    <NavigationMenuItem>
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <NavigationMenuLink
@@ -176,9 +165,6 @@ export default function MainNavBar() {
                         Artifacts
                         <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-green-100 text-green-800 border-green-300 dark:bg-green-900 dark:text-green-200 dark:border-green-700">Beta</Badge>
                       </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <Link href="/protected/settings">Settings</Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem disabled title="Not ready for public use">
                       Billing

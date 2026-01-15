@@ -3,13 +3,16 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
-import { RefreshCw, Search, ChevronDown, ChevronRight, BookOpen, FileText, Layers, CheckCircle2, Loader2, FileCode, Plus } from 'lucide-react'
+import { RefreshCw, Search, ChevronDown, ChevronRight, BookOpen, FileText, Layers, CheckCircle2, Loader2, FileCode, Plus, AlertCircle, Info, Settings2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardAction } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Spinner } from '@/components/ui/spinner'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Label } from '@/components/ui/label'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem, SelectGroup, SelectLabel, SelectSeparator } from '@/components/ui/select'
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
 import { createClient as createSupabaseClient } from '@/lib/supabase/client'
 import { SelectionSummary } from '@/components/context/SelectionSummary'
 import { SystemPromptListInline } from '@/components/context/SystemPromptListInline'
@@ -64,12 +67,48 @@ export default function ContextPage() {
   const [enabledSystemPromptIds, setEnabledSystemPromptIds] = useState<string[]>([])
   const [savingPrompts, setSavingPrompts] = useState(false)
   const [creatingNewPrompt, setCreatingNewPrompt] = useState(false)
+  const [canvasStatus, setCanvasStatus] = useState<'connected' | 'missing' | 'error'>('missing')
+  const [canvasInstitution, setCanvasInstitution] = useState('https://swinburne.instructure.com')
+  const [canvasUrl, setCanvasUrl] = useState('https://swinburne.instructure.com')
+  const [canvasToken, setCanvasToken] = useState('')
+  const [savingCanvas, setSavingCanvas] = useState(false)
+  const [canvasMessage, setCanvasMessage] = useState<string | null>(null)
+  const [showUpdateToken, setShowUpdateToken] = useState(false)
   const hasAttemptedInitialAutoSelect = useRef(false)
   const hasLoadedSelections = useRef(false) // Track if we've loaded selections from DB
   const selectionsRef = useRef<ContextSelections>(selections) // Store latest selections for auto-save
   const hasCheckedNamesRef = useRef(false) // Track if we've checked and updated names
 
   const supabase = createSupabaseClient()
+
+  // Helper function to check if a message is an error message
+  const isErrorMessage = (message: string | null): boolean => {
+    if (!message) return false
+    const errorKeywords = ['error', 'invalid', 'failed', 'unauthorized', 'forbidden', 'not found']
+    const lowerMessage = message.toLowerCase()
+    return errorKeywords.some(keyword => lowerMessage.includes(keyword))
+  }
+
+  const auInstitutions = [
+    { value: 'https://myuni.adelaide.edu.au', label: 'University of Adelaide' },
+    { value: 'https://canvas.anu.edu.au', label: 'Australian National University (ANU)' },
+    { value: 'https://canvas.online.acu.edu.au', label: 'Australian Catholic University (ACU)' },
+    { value: 'https://rmit.instructure.com', label: 'Royal Melbourne Institute of Technology (RMIT)' },
+    { value: 'https://canvas.sydney.edu.au', label: 'University of Sydney' },
+    { value: 'https://lms.unimelb.edu.au/canvas', label: 'University of Melbourne' },
+    { value: 'https://canvas.uts.edu.au', label: 'University of Technology Sydney (UTS)' },
+    { value: 'https://uclearn.canberra.edu.au', label: 'University of Canberra (UC)' },
+    { value: 'https://canvas.qut.edu.au', label: 'Queensland University of Technology (QUT)' },
+    { value: 'https://swinburne.instructure.com', label: 'Swinburne University of Technology' },
+    { value: 'https://usc.instructure.com', label: 'University of the Sunshine Coast (USC)' },
+    { value: 'https://canvas.newcastle.edu.au', label: 'University of Newcastle (UON)' },
+  ]
+
+  const vnInstitutions = [
+    { value: 'https://vinuni.instructure.com', label: 'VinUniversity (VinUni)' },
+    { value: 'https://rmit.instructure.com', label: 'RMIT University Vietnam' },
+    { value: 'https://swinburne.instructure.com', label: 'Swinburne Vietnam' },
+  ]
   
   // Keep ref in sync with state
   useEffect(() => {
@@ -240,20 +279,58 @@ export default function ContextPage() {
     }
   }, [])
 
+  // Check Canvas status from profile
+  const loadCanvasStatus = useCallback(async () => {
+    try {
+      const { data: { session }, error: authError } = await supabase.auth.getSession()
+      if (authError || !session) return
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('canvas_api_url')
+        .eq('id', session.user.id)
+        .single()
+      
+      if (!error && data?.canvas_api_url) {
+        setCanvasStatus('connected')
+        try {
+          const base = String(data.canvas_api_url).replace(/\/?api\/v1$/, '')
+          setCanvasInstitution(base)
+          setCanvasUrl(base)
+        } catch { }
+      } else {
+        setCanvasStatus('missing')
+      }
+    } catch (error) {
+      setCanvasStatus('error')
+    }
+  }, [supabase])
+
   // Load Canvas context data
   const loadContextData = useCallback(async () => {
     try {
       const response = await fetch('/api/canvas/prefetch')
       if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        // Check if error is "Canvas not configured"
+        if (response.status === 400 && (errorData.error === 'Canvas not configured' || errorData.error?.includes('Canvas'))) {
+          setCanvasStatus('missing')
+          setContextData(null)
+          return
+        }
         throw new Error('Failed to load Canvas data')
       }
       const data = await response.json()
+      setCanvasStatus('connected')
       setContextData({
         courses: data.courses || [],
         last_synced_at: selections.last_synced_at,
       })
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load Canvas data')
+      // Only set error if it's not a "Canvas not configured" error
+      if (!(err instanceof Error && err.message.includes('Canvas not configured'))) {
+        setError(err instanceof Error ? err.message : 'Failed to load Canvas data')
+      }
       console.error('Error loading context data:', err)
     }
   }, [selections.last_synced_at])
@@ -384,6 +461,40 @@ export default function ContextPage() {
     return () => clearTimeout(timeoutId)
   }, [contextData, saving, loading, saveSelections])
 
+  // Handle Canvas save
+  const handleCanvasSave = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setCanvasMessage(null)
+    setSavingCanvas(true)
+    try {
+      const base = canvasInstitution === 'custom' ? canvasUrl.trim() : canvasInstitution.trim()
+      const finalUrl = base.endsWith('/api/v1') ? base : (base.endsWith('/') ? `${base}api/v1` : `${base}/api/v1`)
+      const response = await fetch('/api/auth/canvas-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ canvas_token: canvasToken, canvas_url: finalUrl })
+      })
+      const data = await response.json().catch(() => ({ error: 'Failed to save' }))
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to save Canvas credentials')
+      }
+      setCanvasMessage(data.message || 'Canvas configuration saved')
+      setCanvasStatus('connected')
+      setCanvasToken('')
+      setShowUpdateToken(false)
+      // Reload context data after successful save
+      await loadContextData()
+      toast.success('Canvas token configured successfully!')
+    } catch (err) {
+      setCanvasMessage(err instanceof Error ? err.message : 'Failed to save Canvas credentials')
+      setCanvasStatus('error')
+      toast.error(err instanceof Error ? err.message : 'Failed to save Canvas credentials')
+    } finally {
+      setSavingCanvas(false)
+    }
+  }
+
   // Initial load
   useEffect(() => {
     const initialize = async () => {
@@ -396,6 +507,8 @@ export default function ContextPage() {
           return
         }
 
+        // Load Canvas status first
+        await loadCanvasStatus()
         // Load selections and context data
         await Promise.all([loadSelections(), loadContextData()])
       } catch (err) {
@@ -405,7 +518,7 @@ export default function ContextPage() {
       }
     }
     initialize()
-  }, [router, supabase, loadSelections, loadContextData])
+  }, [router, supabase, loadSelections, loadContextData, loadCanvasStatus])
 
   // Auto-save with debounce
   useEffect(() => {
@@ -745,6 +858,201 @@ export default function ContextPage() {
           </Card>
         )}
 
+        {/* Canvas Setup/Update Section */}
+        {canvasStatus === 'missing' || canvasStatus === 'error' ? (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                {canvasStatus === 'error' ? (
+                  <AlertCircle className="w-5 h-5 text-destructive" />
+                ) : (
+                  <Info className="w-5 h-5 text-blue-600" />
+                )}
+                {canvasStatus === 'error' ? 'Canvas Integration Error' : 'Canvas Integration Required'}
+              </CardTitle>
+              <CardDescription className="mt-1">
+                {canvasStatus === 'error' 
+                  ? 'There was an error with your Canvas integration. Please check your credentials and try again.'
+                  : 'To use Canvas features, you need to configure your Canvas API token. This allows the chatbot to access your courses, assignments, and modules.'}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form className="space-y-6" onSubmit={handleCanvasSave} aria-busy={savingCanvas}>
+                    <div className="space-y-4">
+                      <div>
+                        <Label htmlFor="institution" className="mb-2 block">Canvas Institution</Label>
+                        <Select value={canvasInstitution} onValueChange={(v) => { setCanvasInstitution(v) }}>
+                          <SelectTrigger id="institution">
+                            <SelectValue placeholder="Select institution" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectGroup>
+                              <SelectLabel>Australian Universities</SelectLabel>
+                              {auInstitutions.map((inst) => (
+                                <SelectItem key={`${inst.value}-au`} value={inst.value}>{inst.label}</SelectItem>
+                              ))}
+                            </SelectGroup>
+                            <SelectSeparator />
+                            <SelectGroup>
+                              <SelectLabel>Vietnamese Universities</SelectLabel>
+                              {vnInstitutions.map((inst) => (
+                                <SelectItem key={`${inst.value}-vn`} value={inst.value}>{inst.label}</SelectItem>
+                              ))}
+                            </SelectGroup>
+                            <SelectSeparator />
+                            <SelectItem value="custom">Custom Institution URL</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {canvasInstitution === 'custom' && (
+                        <div>
+                          <Label htmlFor="canvasUrl" className="mb-2 block">Canvas URL</Label>
+                          <Input id="canvasUrl" value={canvasUrl} onChange={(e) => setCanvasUrl(e.target.value)} placeholder="your-school.instructure.com" />
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <Label htmlFor="canvasToken" className="mb-2 block">Canvas API Token</Label>
+                      <Input id="canvasToken" type="password" value={canvasToken} onChange={(e) => setCanvasToken(e.target.value)} placeholder="Canvas API Token" aria-describedby="canvasTokenHelp" />
+                      <p id="canvasTokenHelp" className="mt-2 text-xs text-muted-foreground">Token is sent securely to the server and stored encrypted. It is not saved in your browser.</p>
+                      <div id="canvasTokenInstructions" className="mt-4 text-xs text-muted-foreground space-y-2">
+                        <p>How to get a Canvas API token:</p>
+                        <ol className="list-decimal ml-4 space-y-1">
+                          <li>
+                            Sign in to your institution's Canvas
+                            { (canvasInstitution || canvasUrl) && (
+                              <>
+                                {' '}
+                                <a
+                                  href={(canvasInstitution === 'custom' ? canvasUrl : canvasInstitution) || '#'}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="underline"
+                                >Open Canvas</a>
+                              </>
+                            )}
+                          </li>
+                          <li>Go to Account → Settings.</li>
+                          <li>Find the Access Tokens section and click New Access Token.</li>
+                          <li>Enter a purpose and optional expiry, then Generate Token.</li>
+                          <li>Copy the token and paste it into the field above.</li>
+                        </ol>
+                      </div>
+                    </div>
+
+                    {canvasMessage && (
+                      <div role="status" aria-live="polite" className={`p-3 rounded-lg text-sm ${canvasStatus === 'error' || isErrorMessage(canvasMessage) ? 'border border-destructive bg-destructive/10 text-destructive' : 'bg-secondary text-secondary-foreground'}`}>
+                        {canvasMessage}
+                      </div>
+                    )}
+
+                    <div className="flex items-center gap-3">
+                      <Button type="submit" disabled={savingCanvas}>
+                        {savingCanvas ? (
+                          <span className="inline-flex items-center gap-2"><Spinner aria-hidden="true" /> Saving…</span>
+                        ) : (
+                          'Save Canvas Settings'
+                        )}
+                      </Button>
+                    </div>
+                  </form>
+            </CardContent>
+          </Card>
+        ) : canvasStatus === 'connected' ? (
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <CheckCircle2 className="w-5 h-5 text-green-600" />
+                    Canvas Integration
+                  </CardTitle>
+                  <CardDescription className="mt-1">
+                    Connected to {canvasInstitution === 'custom' ? canvasUrl : canvasInstitution}
+                  </CardDescription>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowUpdateToken(!showUpdateToken)}
+                >
+                  <Settings2 className="w-4 h-4 mr-2" />
+                  {showUpdateToken ? 'Cancel' : 'Update Token'}
+                </Button>
+              </div>
+            </CardHeader>
+            {showUpdateToken && (
+              <CardContent>
+                <Alert variant="default" className="mb-4">
+                  <Info className="h-4 w-4" />
+                  <AlertTitle>Update Canvas Token</AlertTitle>
+                  <AlertDescription className="mt-2">
+                    Enter a new Canvas API token to update your integration.
+                  </AlertDescription>
+                </Alert>
+                <form className="space-y-6" onSubmit={handleCanvasSave} aria-busy={savingCanvas}>
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="update-institution" className="mb-2 block">Canvas Institution</Label>
+                      <Select value={canvasInstitution} onValueChange={(v) => { setCanvasInstitution(v) }}>
+                        <SelectTrigger id="update-institution">
+                          <SelectValue placeholder="Select institution" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectGroup>
+                            <SelectLabel>Australian Universities</SelectLabel>
+                            {auInstitutions.map((inst) => (
+                              <SelectItem key={`${inst.value}-au-update`} value={inst.value}>{inst.label}</SelectItem>
+                            ))}
+                          </SelectGroup>
+                          <SelectSeparator />
+                          <SelectGroup>
+                            <SelectLabel>Vietnamese Universities</SelectLabel>
+                            {vnInstitutions.map((inst) => (
+                              <SelectItem key={`${inst.value}-vn-update`} value={inst.value}>{inst.label}</SelectItem>
+                            ))}
+                          </SelectGroup>
+                          <SelectSeparator />
+                          <SelectItem value="custom">Custom Institution URL</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {canvasInstitution === 'custom' && (
+                      <div>
+                        <Label htmlFor="update-canvasUrl" className="mb-2 block">Canvas URL</Label>
+                        <Input id="update-canvasUrl" value={canvasUrl} onChange={(e) => setCanvasUrl(e.target.value)} placeholder="your-school.instructure.com" />
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <Label htmlFor="update-canvasToken" className="mb-2 block">New Canvas API Token</Label>
+                    <Input id="update-canvasToken" type="password" value={canvasToken} onChange={(e) => setCanvasToken(e.target.value)} placeholder="Enter new Canvas API Token" aria-describedby="updateCanvasTokenHelp" />
+                    <p id="updateCanvasTokenHelp" className="mt-2 text-xs text-muted-foreground">Token is sent securely to the server and stored encrypted. It is not saved in your browser.</p>
+                  </div>
+
+                  {canvasMessage && (
+                    <div role="status" aria-live="polite" className={`p-3 rounded-lg text-sm ${isErrorMessage(canvasMessage) ? 'border border-destructive bg-destructive/10 text-destructive' : 'bg-secondary text-secondary-foreground'}`}>
+                      {canvasMessage}
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-3">
+                    <Button type="submit" disabled={savingCanvas}>
+                      {savingCanvas ? (
+                        <span className="inline-flex items-center gap-2"><Spinner aria-hidden="true" /> Saving…</span>
+                      ) : (
+                        'Update Canvas Token'
+                      )}
+                    </Button>
+                  </div>
+                </form>
+              </CardContent>
+            )}
+          </Card>
+        ) : null}
+
         {/* System Prompt Management */}
         <Card>
           <CardHeader>
@@ -868,20 +1176,21 @@ export default function ContextPage() {
           </CardContent>
         </Card>
 
-        {/* Merged Canvas Context Card with Selection Summary */}
-        <Card>
-          <CardHeader>
-            <CardTitle>
-              Canvas Context
-              {contextData && (
-                <Badge variant="secondary" className="ml-2">
-                  {filteredCourses.length} course{filteredCourses.length !== 1 ? 's' : ''}
-                </Badge>
-              )}
-            </CardTitle>
-            <CardDescription>
-              Select items to make available in chat sessions. Changes are saved automatically.
-            </CardDescription>
+        {/* Merged Canvas Context Card with Selection Summary - Only show when Canvas is connected */}
+        {canvasStatus === 'connected' && (
+          <Card>
+            <CardHeader>
+              <CardTitle>
+                Canvas Context
+                {contextData && (
+                  <Badge variant="secondary" className="ml-2">
+                    {filteredCourses.length} course{filteredCourses.length !== 1 ? 's' : ''}
+                  </Badge>
+                )}
+              </CardTitle>
+              <CardDescription>
+                Select items to make available in chat sessions. Changes are saved automatically.
+              </CardDescription>
             <div className="flex items-center gap-2 mt-2">
               <Button
                 onClick={syncCanvas}
@@ -1174,6 +1483,7 @@ export default function ContextPage() {
             )}
           </CardContent>
         </Card>
+        )}
       </div>
     </div>
   )

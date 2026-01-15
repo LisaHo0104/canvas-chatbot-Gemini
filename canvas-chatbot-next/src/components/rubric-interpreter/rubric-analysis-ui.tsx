@@ -70,6 +70,24 @@ export function RubricAnalysisUI({ data, messageId, compact = false, onViewFull 
     const saved = localStorage.getItem(`rubric-checklist-${messageId}`)
     return saved ? new Set(JSON.parse(saved)) : new Set()
   })
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false)
+
+  // Add defensive checks for data structure
+  if (!data || typeof data !== 'object') {
+    return (
+      <div className="p-4 text-center">
+        <p className="text-muted-foreground">Invalid rubric analysis data. Please try again.</p>
+      </div>
+    )
+  }
+
+  // Safely extract and validate arrays
+  const criteria = (data.criteria && Array.isArray(data.criteria)) ? data.criteria : []
+  const actionChecklist = (data.actionChecklist && Array.isArray(data.actionChecklist)) ? data.actionChecklist : []
+  const commonMistakes = (data.commonMistakes && Array.isArray(data.commonMistakes)) ? data.commonMistakes : []
+  const keyRequirements = (data.summary?.keyRequirements && Array.isArray(data.summary.keyRequirements)) ? data.summary.keyRequirements : []
+  const pointsByCriterion = (data.scoringBreakdown?.pointsByCriterion && Array.isArray(data.scoringBreakdown.pointsByCriterion)) ? data.scoringBreakdown.pointsByCriterion : []
+  const maximizationTips = (data.scoringBreakdown?.maximizationTips && Array.isArray(data.scoringBreakdown.maximizationTips)) ? data.scoringBreakdown.maximizationTips : []
 
   const toggleCriterion = (id: string) => {
     const newExpanded = new Set(expandedCriteria)
@@ -95,9 +113,8 @@ export function RubricAnalysisUI({ data, messageId, compact = false, onViewFull 
   }
 
   const completedChecklistItems = checkedItems.size
-  const totalChecklistItems = data.actionChecklist.length
+  const totalChecklistItems = actionChecklist.length
   const checklistProgress = totalChecklistItems > 0 ? (completedChecklistItems / totalChecklistItems) * 100 : 0
-  const [saveDialogOpen, setSaveDialogOpen] = useState(false)
 
   const getPriorityColor = (priority: 'high' | 'medium' | 'low') => {
     switch (priority) {
@@ -140,7 +157,7 @@ export function RubricAnalysisUI({ data, messageId, compact = false, onViewFull 
                   {data.assignmentName}
                 </CardTitle>
                 <CardDescription>
-                  Total Points: {data.totalPoints} | {data.criteria.length} Criteria
+                  Total Points: {data.totalPoints} | {criteria.length} Criteria
                 </CardDescription>
               </div>
               <Button
@@ -158,16 +175,16 @@ export function RubricAnalysisUI({ data, messageId, compact = false, onViewFull 
             <div className="space-y-2">
               <h4 className="font-semibold text-sm">Overview</h4>
               <p className="text-sm text-muted-foreground line-clamp-3">{data.summary.overview}</p>
-              {data.summary.keyRequirements.length > 0 && (
+              {keyRequirements.length > 0 && (
                 <div className="mt-3">
                   <h5 className="font-medium text-sm mb-2">Key Requirements:</h5>
                   <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
-                    {data.summary.keyRequirements.slice(0, 3).map((req, i) => (
+                    {keyRequirements.slice(0, 3).map((req, i) => (
                       <li key={i}>{req}</li>
                     ))}
-                    {data.summary.keyRequirements.length > 3 && (
+                    {keyRequirements.length > 3 && (
                       <li className="text-muted-foreground/70">
-                        +{data.summary.keyRequirements.length - 3} more...
+                        +{keyRequirements.length - 3} more...
                       </li>
                     )}
                   </ul>
@@ -224,7 +241,7 @@ export function RubricAnalysisUI({ data, messageId, compact = false, onViewFull 
                 {data.assignmentName}
               </CardTitle>
               <CardDescription>
-                Total Points: {data.totalPoints} | {data.criteria.length} Criteria
+                Total Points: {data.totalPoints} | {criteria.length} Criteria
               </CardDescription>
             </div>
             <Button
@@ -242,11 +259,11 @@ export function RubricAnalysisUI({ data, messageId, compact = false, onViewFull 
           <div className="space-y-2">
             <h4 className="font-semibold text-sm">Overview</h4>
             <p className="text-sm text-muted-foreground">{data.summary.overview}</p>
-            {data.summary.keyRequirements.length > 0 && (
+            {keyRequirements.length > 0 && (
               <div className="mt-3">
                 <h5 className="font-medium text-sm mb-2">Key Requirements:</h5>
                 <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
-                  {data.summary.keyRequirements.map((req, i) => (
+                  {keyRequirements.map((req, i) => (
                     <li key={i}>{req}</li>
                   ))}
                 </ul>
@@ -284,7 +301,7 @@ export function RubricAnalysisUI({ data, messageId, compact = false, onViewFull 
 
         {/* Criteria Breakdown Tab */}
         <TabsContent value="criteria" className="space-y-3">
-          {data.criteria.map((criterion) => (
+          {criteria.map((criterion) => (
             <Card key={criterion.id}>
               <CardHeader
                 className="cursor-pointer hover:bg-muted/50 transition-colors"
@@ -355,7 +372,7 @@ export function RubricAnalysisUI({ data, messageId, compact = false, onViewFull 
                   <Separator />
 
                   {/* Action Items */}
-                  {criterion.actionItems.length > 0 && (
+                  {criterion.actionItems && Array.isArray(criterion.actionItems) && criterion.actionItems.length > 0 && (
                     <div>
                       <h5 className="font-semibold text-sm mb-2">Action Items</h5>
                       <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
@@ -367,7 +384,7 @@ export function RubricAnalysisUI({ data, messageId, compact = false, onViewFull 
                   )}
 
                   {/* Scoring Tips */}
-                  {criterion.scoringTips.length > 0 && (
+                  {criterion.scoringTips && Array.isArray(criterion.scoringTips) && criterion.scoringTips.length > 0 && (
                     <div>
                       <h5 className="font-semibold text-sm mb-2 flex items-center gap-2">
                         <TrendingUp className="size-4" />
@@ -402,7 +419,8 @@ export function RubricAnalysisUI({ data, messageId, compact = false, onViewFull 
               <Progress value={checklistProgress} className="mb-4" />
               <ScrollArea className="h-[400px]">
                 <div className="space-y-2">
-                  {data.actionChecklist.map((item) => {
+                  {actionChecklist.length > 0 ? (
+                    actionChecklist.map((item) => {
                     const isChecked = checkedItems.has(item.id)
                     return (
                       <label
@@ -437,7 +455,11 @@ export function RubricAnalysisUI({ data, messageId, compact = false, onViewFull 
                         )}
                       </label>
                     )
-                  })}
+                  })) : (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      No action items available.
+                    </p>
+                  )}
                 </div>
               </ScrollArea>
             </CardContent>
@@ -446,7 +468,8 @@ export function RubricAnalysisUI({ data, messageId, compact = false, onViewFull 
 
         {/* Common Mistakes Tab */}
         <TabsContent value="mistakes" className="space-y-3">
-          {data.commonMistakes.map((mistakeGroup, idx) => (
+          {commonMistakes.length > 0 ? (
+            commonMistakes.map((mistakeGroup, idx) => (
             <Card key={idx}>
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
@@ -464,7 +487,13 @@ export function RubricAnalysisUI({ data, messageId, compact = false, onViewFull 
                 </ul>
               </CardContent>
             </Card>
-          ))}
+          ))) : (
+            <Card>
+              <CardContent className="py-8 text-center">
+                <p className="text-sm text-muted-foreground">No common mistakes data available.</p>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         {/* Scoring Breakdown Tab */}
@@ -480,7 +509,8 @@ export function RubricAnalysisUI({ data, messageId, compact = false, onViewFull 
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {data.scoringBreakdown.pointsByCriterion.map((item, idx) => (
+              {pointsByCriterion.length > 0 ? (
+                pointsByCriterion.map((item, idx) => (
                 <div key={idx} className="space-y-2">
                   <div className="flex items-center justify-between text-sm">
                     <span className="font-medium">{item.criterion}</span>
@@ -493,18 +523,22 @@ export function RubricAnalysisUI({ data, messageId, compact = false, onViewFull 
                   </div>
                   <Progress value={item.percentage} className="h-2" />
                 </div>
-              ))}
+              ))) : (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  No scoring breakdown data available.
+                </p>
+              )}
             </CardContent>
           </Card>
 
-          {data.scoringBreakdown.maximizationTips.length > 0 && (
+          {maximizationTips.length > 0 && (
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Maximization Tips</CardTitle>
               </CardHeader>
               <CardContent>
                 <ul className="list-disc list-inside space-y-2">
-                  {data.scoringBreakdown.maximizationTips.map((tip, i) => (
+                  {maximizationTips.map((tip, i) => (
                     <li key={i} className="text-sm text-muted-foreground">
                       {tip}
                     </li>

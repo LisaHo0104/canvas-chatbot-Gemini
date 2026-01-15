@@ -76,6 +76,31 @@ export function QuizUI({ data, messageId, compact = false, onViewFull, onSaveCli
   const [startTime, setStartTime] = useState<Date | null>(null)
   const [attemptSaved, setAttemptSaved] = useState(false)
 
+  // Add defensive checks for data structure - handle all edge cases
+  if (!data || typeof data !== 'object') {
+    return (
+      <div className="p-4 text-center">
+        <p className="text-muted-foreground">Invalid quiz data. Please try again.</p>
+      </div>
+    )
+  }
+
+  // Safely extract and validate questions array
+  const questions = (data.questions && Array.isArray(data.questions) && data.questions.length > 0) 
+    ? data.questions 
+    : []
+
+  if (questions.length === 0) {
+    return (
+      <div className="p-4 text-center">
+        <p className="text-muted-foreground">Invalid quiz data: questions are missing or invalid. Please try again.</p>
+      </div>
+    )
+  }
+
+  // Ensure topics is always an array
+  const topics = (data.topics && Array.isArray(data.topics)) ? data.topics : []
+
   const toggleQuestion = (id: string) => {
     const newExpanded = new Set(expandedQuestions)
     if (newExpanded.has(id)) {
@@ -87,7 +112,7 @@ export function QuizUI({ data, messageId, compact = false, onViewFull, onSaveCli
   }
 
   const handleAnswerChange = (questionId: string, answer: string | number | boolean) => {
-    const question = data.questions.find(q => q.id === questionId)
+    const question = questions.find(q => q.id === questionId)
     const newAnswers = new Map(userAnswers)
 
     if (question?.allowMultiple) {
@@ -181,7 +206,7 @@ export function QuizUI({ data, messageId, compact = false, onViewFull, onSaveCli
   }
 
   const goToNextQuestion = () => {
-    if (currentQuestionIndex < data.questions.length - 1) {
+    if (currentQuestionIndex < questions.length - 1) {
       setCurrentQuestionIndex(currentQuestionIndex + 1)
     } else {
       // Finished all questions, show results
@@ -191,7 +216,7 @@ export function QuizUI({ data, messageId, compact = false, onViewFull, onSaveCli
 
   const calculateScore = () => {
     let correct = 0
-    data.questions.forEach((question) => {
+    questions.forEach((question) => {
       const userAnswer = userAnswers.get(question.id)
       if (userAnswer !== undefined) {
         if (question.type === 'multiple_choice') {
@@ -233,13 +258,13 @@ export function QuizUI({ data, messageId, compact = false, onViewFull, onSaveCli
   }
 
   const getCurrentQuestion = () => {
-    return data.questions[currentQuestionIndex]
+    return questions[currentQuestionIndex]
   }
 
   const getProgress = () => {
     if (viewMode === 'welcome') return 0
     if (viewMode === 'results') return 100
-    return ((currentQuestionIndex + 1) / data.questions.length) * 100
+    return questions.length > 0 ? ((currentQuestionIndex + 1) / questions.length) * 100 : 0
   }
 
   const getDifficultyColor = (difficulty: string) => {
@@ -322,17 +347,17 @@ export function QuizUI({ data, messageId, compact = false, onViewFull, onSaveCli
   }
 
   const questionsByType = {
-    multiple_choice: data.questions.filter(q => q.type === 'multiple_choice'),
-    true_false: data.questions.filter(q => q.type === 'true_false'),
-    short_answer: data.questions.filter(q => q.type === 'short_answer'),
+    multiple_choice: questions.filter(q => q.type === 'multiple_choice'),
+    true_false: questions.filter(q => q.type === 'true_false'),
+    short_answer: questions.filter(q => q.type === 'short_answer'),
   }
 
-  const questionsByTopic = data.questions.reduce((acc, q) => {
+  const questionsByTopic = questions.reduce((acc, q) => {
     const topic = q.topic || 'General'
     if (!acc[topic]) acc[topic] = []
     acc[topic].push(q)
     return acc
-  }, {} as Record<string, typeof data.questions>)
+  }, {} as Record<string, typeof questions>)
 
   // Render Welcome Screen
   const renderWelcomeScreen = () => (
@@ -367,9 +392,9 @@ export function QuizUI({ data, messageId, compact = false, onViewFull, onSaveCli
               </div>
             )}
           </div>
-          {data.topics.length > 0 && (
+          {topics.length > 0 && (
             <div className="flex flex-wrap gap-2 justify-center">
-              {data.topics.map((topic, i) => (
+              {topics.map((topic, i) => (
                 <Badge key={i} variant="outline" className="text-xs lg:text-sm">{topic}</Badge>
               ))}
             </div>
@@ -459,7 +484,7 @@ export function QuizUI({ data, messageId, compact = false, onViewFull, onSaveCli
         <div className="mb-6 lg:mb-8">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm lg:text-base font-medium text-muted-foreground">
-              Question {currentQuestionIndex + 1} of {data.questions.length}
+              Question {currentQuestionIndex + 1} of {questions.length}
             </span>
             <span className="text-sm lg:text-base font-medium text-muted-foreground">
               {Math.round(getProgress())}%
@@ -702,7 +727,7 @@ export function QuizUI({ data, messageId, compact = false, onViewFull, onSaveCli
                 size="lg"
                 disabled={question.type === 'short_answer' && !selfAssessment}
               >
-                {currentQuestionIndex < data.questions.length - 1 ? (
+                {currentQuestionIndex < questions.length - 1 ? (
                   <>
                     Next Question
                     <ArrowRight className="ml-2 size-5" />
@@ -771,8 +796,8 @@ export function QuizUI({ data, messageId, compact = false, onViewFull, onSaveCli
   // Render Results Screen
   const renderResultsScreen = () => {
     const correct = calculateScore()
-    const total = data.questions.length
-    const percent = Math.round((correct / total) * 100)
+    const total = questions.length
+    const percent = total > 0 ? Math.round((correct / total) * 100) : 0
 
     return (
       <div className="w-full max-w-full mx-auto py-4 lg:py-6">
@@ -868,11 +893,11 @@ export function QuizUI({ data, messageId, compact = false, onViewFull, onSaveCli
             <p className="text-sm text-muted-foreground">{data.description}</p>
           </CardContent>
         )}
-        {data.topics.length > 0 && (
+        {topics.length > 0 && (
           <CardContent>
             <div className="flex flex-wrap gap-2">
               <span className="text-sm font-medium">Topics:</span>
-              {data.topics.map((topic, i) => (
+              {topics.map((topic, i) => (
                 <Badge key={i} variant="outline">{topic}</Badge>
               ))}
             </div>
@@ -940,11 +965,11 @@ export function QuizUI({ data, messageId, compact = false, onViewFull, onSaveCli
               <p className="text-sm lg:text-base text-muted-foreground">{data.description}</p>
             </CardContent>
           )}
-          {data.topics.length > 0 && (
+          {topics.length > 0 && (
             <CardContent className="pt-0 pb-4 lg:pb-6">
               <div className="flex flex-wrap gap-2">
                 <span className="text-sm lg:text-base font-medium">Topics:</span>
-                {data.topics.map((topic, i) => (
+                {topics.map((topic, i) => (
                   <Badge key={i} variant="outline" className="text-xs lg:text-sm">{topic}</Badge>
                 ))}
               </div>
@@ -964,7 +989,7 @@ export function QuizUI({ data, messageId, compact = false, onViewFull, onSaveCli
           {/* All Questions Tab */}
           <TabsContent value="all" className="space-y-4 lg:space-y-6 mt-4 lg:mt-6">
             <Accordion type="multiple" className="space-y-4 lg:space-y-6">
-              {data.questions.map((question, index) => {
+              {questions.map((question, index) => {
                 const userAnswer = userAnswers.get(question.id)
                 const showAnswer = showAnswers.has(question.id)
                 const isCorrect = isAnswerCorrect(question)

@@ -1,6 +1,7 @@
 'use client'
 
 import { cn } from '@/lib/utils'
+import { getRedirectUrl } from '@/lib/utils/get-redirect-url'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import {
@@ -41,7 +42,7 @@ export function SignUpForm({ className, ...props }: React.ComponentPropsWithoutR
         email,
         password,
         options: {
-          emailRedirectTo: `${window.location.origin}/protected/chat`,
+          emailRedirectTo: getRedirectUrl('/protected/chat'),
         },
       })
       if (error) throw error
