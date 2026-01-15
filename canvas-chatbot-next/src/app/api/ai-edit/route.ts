@@ -39,9 +39,18 @@ export async function POST(request: NextRequest) {
       })
     }
 
+    // Get API key
+    const apiKey = process.env.OPENROUTER_API_KEY_OWNER || process.env.OPENROUTER_API_KEY
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: 'OpenRouter API key not configured' },
+        { status: 500 }
+      )
+    }
+
     // Get model from request or use default
-    const selectedModel = model || getDefaultModelId()
-    const openrouter = createOpenRouterProvider()
+    const selectedModel = model || await getDefaultModelId()
+    const openrouter = createOpenRouterProvider(apiKey)
 
     // Build prompt based on operation
     let systemPrompt = ''
@@ -76,7 +85,6 @@ export async function POST(request: NextRequest) {
       model: openrouter.chat(selectedModel),
       system: systemPrompt,
       prompt: userPrompt,
-      maxTokens: 2000,
     })
 
     return NextResponse.json({

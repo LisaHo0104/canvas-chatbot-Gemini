@@ -7,6 +7,7 @@ import { ArrowLeft, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { QuizUI } from '@/components/quiz/quiz-ui'
 import { RubricAnalysisUI } from '@/components/rubric-interpreter/rubric-analysis-ui'
+import { NoteUI } from '@/components/note/note-ui'
 import { Spinner } from '@/components/ui/spinner'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Breadcrumb, BreadcrumbList, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator } from '@/components/ui/breadcrumb'
@@ -16,7 +17,7 @@ interface Artifact {
   title: string
   description: string | null
   tags: string[]
-  artifact_type: 'quiz' | 'rubric_analysis'
+  artifact_type: 'quiz' | 'rubric_analysis' | 'note'
   artifact_data: any
   created_at: string
   updated_at: string
@@ -126,6 +127,9 @@ export default function ArtifactPage() {
             )}
             {artifact.artifact_type === 'rubric_analysis' && artifact.artifact_data && (
               <RubricAnalysisUI data={artifact.artifact_data} compact={false} />
+            )}
+            {artifact.artifact_type === 'note' && artifact.artifact_data && (
+              <NoteUI data={artifact.artifact_data} compact={false} />
             )}
             {(!artifact.artifact_data) && (
               <Alert variant="destructive" className="max-w-2xl mx-auto">
