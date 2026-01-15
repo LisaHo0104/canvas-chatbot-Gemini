@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Image from 'next/image'
-import { Search, Plus, ChevronLeft, ChevronRight, MoreHorizontalIcon } from 'lucide-react'
+import { Search, Plus, MoreHorizontalIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -10,9 +10,14 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  DialogTrigger,
   DialogClose,
 } from '@/components/ui/dialog'
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { createClient as createSupabaseClient } from '@/lib/supabase/client'
 import { Shimmer } from '@/components/ai-elements/shimmer'
@@ -51,6 +56,8 @@ interface EnhancedSidebarProps {
   onSessionRename?: (sessionId: string, newTitle: string) => void
   status?: 'streaming' | 'submitted' | 'error' | 'ready'
   titleGenerating?: boolean
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }
 
 export default function EnhancedSidebar({
@@ -61,9 +68,10 @@ export default function EnhancedSidebar({
   onSessionDelete,
   onSessionRename,
   status,
-  titleGenerating
+  titleGenerating,
+  open,
+  onOpenChange
 }: EnhancedSidebarProps) {
-  const [isCollapsed, setIsCollapsed] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [filteredSessions, setFilteredSessions] = useState<ChatSession[]>([])
   const [editingSession, setEditingSession] = useState<string | null>(null)
@@ -72,27 +80,8 @@ export default function EnhancedSidebar({
   const [actionSessionId, setActionSessionId] = useState<string | null>(null)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
 
-  // Load sidebar state from localStorage
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const savedState = localStorage.getItem('sidebar-collapsed')
-      if (savedState !== null) {
-        try {
-          setIsCollapsed(JSON.parse(savedState))
-        } catch (error) {
-          console.warn('Failed to parse sidebar state from localStorage:', error)
-          setIsCollapsed(false)
-        }
-      }
-    }
-  }, [])
-
-  // Save sidebar state to localStorage
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('sidebar-collapsed', JSON.stringify(isCollapsed))
-    }
-  }, [isCollapsed])
+  // Check if session switching is disabled
+  const isSwitchingDisabled = status === 'streaming' || status === 'submitted'
 
   // Filter sessions based on search term
   useEffect(() => {
@@ -223,33 +212,24 @@ export default function EnhancedSidebar({
     setEditTitle('')
   }
 
-  if (isCollapsed) {
-    return (
-      <div className="relative h-full min-h-0 w-16 flex-shrink-0">
-
-        <div className="h-full w-full bg-white border-r border-slate-200 flex flex-col items-center py-4 space-y-4 box-border">
-          <Button onClick={() => setIsCollapsed(false)} aria-label="Expand sidebar" variant="ghost" size="icon" className="text-muted-foreground">
-            <ChevronRight className="w-4 h-4" />
-          </Button>
-          <Button onClick={onNewSession} aria-label="New chat" size="icon">
-            <Plus className="w-4 h-4" />
-          </Button>
-        </div>
-      </div>
-    )
+  const handleSessionClick = (session: ChatSession) => {
+    // Allow clicking current session to close drawer, but prevent switching to other sessions during generation
+    if (isSwitchingDisabled && currentSession?.id !== session.id) {
+      return
+    }
+    // Only switch if it's a different session
+    if (currentSession?.id !== session.id) {
+      onSessionSelect(session)
+    }
+    onOpenChange?.(false)
   }
 
   return (
-    <div className="flex h-full min-h-0">
-      {/* Main Sidebar */}
-      <div className="w-80 bg-white border-r border-slate-200 flex flex-col transition-all duration-300 ease-in-out box-border">
-        {/* Header with Toggle */}
-        <div className="p-4 border-b border-slate-200 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-slate-900">Conversations</h2>
-          <Button onClick={() => setIsCollapsed(true)} aria-label="Collapse sidebar" variant="ghost" size="icon">
-            <ChevronLeft className="w-4 h-4" />
-          </Button>
-        </div>
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="left" className="w-80 p-0 flex flex-col">
+        <SheetHeader className="p-4 border-b border-slate-200">
+          <SheetTitle className="text-lg font-semibold text-slate-900">Conversations</SheetTitle>
+        </SheetHeader>
 
         {/* Search Section */}
         <div className="p-4 border-b border-slate-200">
@@ -268,7 +248,13 @@ export default function EnhancedSidebar({
 
         {/* New Chat Button - Fixed at top */}
         <div className="p-4 border-b border-slate-200">
-          <Button onClick={onNewSession} className="w-full">
+          <Button 
+            onClick={() => {
+              onNewSession()
+              onOpenChange?.(false)
+            }} 
+            className="w-full"
+          >
             <Plus className="w-4 h-4" />
             New Chat
           </Button>
@@ -300,12 +286,23 @@ export default function EnhancedSidebar({
           ) : (
             <>
               <div className="divide-y divide-slate-100">
-                {filteredSessions.map((session) => (
+                {filteredSessions.map((session) => {
+                  const isDisabled = isSwitchingDisabled && currentSession?.id !== session.id
+                  return (
                   <div
                     key={session.id}
-                    className={`group relative p-4 transition-colors cursor-pointer ${currentSession?.id === session.id ? 'bg-neutral-950 hover:bg-neutral-900 text-white ring-0' : 'hover:bg-slate-50'}
-                      }`}
-                    onClick={() => onSessionSelect(session)}
+                    className={`group relative p-4 transition-colors ${
+                      isDisabled 
+                        ? 'opacity-50 cursor-not-allowed' 
+                        : 'cursor-pointer'
+                    } ${
+                      currentSession?.id === session.id 
+                        ? 'bg-neutral-950 hover:bg-neutral-900 text-white ring-0' 
+                        : isDisabled 
+                          ? '' 
+                          : 'hover:bg-slate-50'
+                    }`}
+                    onClick={() => handleSessionClick(session)}
                   >
                     <div className="flex items-start justify-between">
                       <div className="flex-1 min-w-0">
@@ -394,7 +391,8 @@ export default function EnhancedSidebar({
                       </div>
                     </div>
                   </div>
-                ))}
+                  )
+                })}
               </div>
               <Dialog open={showDeleteDialog} onOpenChange={(open) => { setShowDeleteDialog(open) }}>
                 <DialogContent onInteractOutside={(e) => e.preventDefault()} onPointerDownOutside={(e) => e.preventDefault()}>
@@ -426,8 +424,7 @@ export default function EnhancedSidebar({
             </>
           )}
         </div>
-
-      </div>
-    </div>
+      </SheetContent>
+    </Sheet>
   )
 }
