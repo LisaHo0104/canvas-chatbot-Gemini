@@ -20,7 +20,7 @@ import { getModeFromArtifactType, getModeBadgeColors } from '@/lib/mode-colors'
 interface SaveArtifactDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  artifactType: 'quiz' | 'rubric_analysis'
+  artifactType: 'quiz' | 'rubric_analysis' | 'summary_note'
   artifactData: any
   onSave: () => void
 }
@@ -102,7 +102,7 @@ export function SaveArtifactDialog({
   }
 
   const getArtifactTypeLabel = () => {
-    return artifactType === 'quiz' ? 'Quiz' : 'Rubric Analysis'
+    return artifactType === 'quiz' ? 'Quiz' : artifactType === 'rubric_analysis' ? 'Rubric Analysis' : 'Summary Note'
   }
 
   const getArtifactTypeIcon = () => {

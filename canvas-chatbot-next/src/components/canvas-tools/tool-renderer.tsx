@@ -11,6 +11,8 @@ import { RubricAnalysisUI } from '@/components/rubric-interpreter/rubric-analysi
 import { RubricModal } from '@/components/rubric-interpreter/rubric-modal'
 import { QuizUI } from '@/components/quiz/quiz-ui'
 import { QuizModal } from '@/components/quiz/quiz-modal'
+import { SummaryUI } from '@/components/summary/summary-ui'
+import { SummaryModal } from '@/components/summary/summary-modal'
 import { Plan, PlanHeader, PlanTitle, PlanDescription, PlanContent, PlanTrigger, PlanFooter, PlanAction } from '@/components/ai-elements/plan'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -357,6 +359,30 @@ export function ToolRenderer({ toolName, result, toolPart, onApprove, onReject }
         </div>
       )
 
+    case 'provide_summary_output':
+      if (result?.error) {
+        return (
+          <div className="p-4 border rounded-lg bg-red-50 dark:bg-red-950">
+            <p className="text-sm text-red-800 dark:text-red-200">
+              <strong>Error:</strong> {result.error}
+            </p>
+          </div>
+        )
+      }
+      if (result && typeof result === 'object' && 'sections' in result) {
+        return <SummaryOutputRenderer summaryData={result as any} />
+      }
+      return (
+        <div className="p-4 border rounded-lg bg-yellow-50 dark:bg-yellow-950">
+          <p className="text-sm text-yellow-800 dark:text-yellow-200">
+            <strong>⚠️ Incomplete Summary Data</strong>
+          </p>
+          <p className="text-xs text-yellow-600 dark:text-yellow-300 mt-1">
+            The summary data structure is incomplete. Expected sections array.
+          </p>
+        </div>
+      )
+
     case 'webSearch':
       const results = result?.results || (Array.isArray(result) ? result : [])
       if (!results.length) return <div className="text-sm text-muted-foreground">No results found</div>
@@ -434,6 +460,35 @@ function RubricOutputRenderer({ rubricData, messageId }: { rubricData: any; mess
         onOpenChange={setIsModalOpen}
         data={rubricData}
         messageId={messageId}
+      />
+    </>
+  )
+}
+
+function SummaryOutputRenderer({ summaryData }: { summaryData: any }) {
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false)
+  return (
+    <>
+      <div className="space-y-2">
+        <SummaryUI
+          data={summaryData}
+          compact={true}
+          onViewFull={() => setIsModalOpen(true)}
+          onSaveClick={() => setSaveDialogOpen(true)}
+        />
+      </div>
+      <SummaryModal
+        open={isModalOpen}
+        onOpenChange={setIsModalOpen}
+        data={summaryData}
+      />
+      <SaveArtifactDialog
+        open={saveDialogOpen}
+        onOpenChange={setSaveDialogOpen}
+        artifactType="summary_note"
+        artifactData={summaryData}
+        onSave={() => {}}
       />
     </>
   )

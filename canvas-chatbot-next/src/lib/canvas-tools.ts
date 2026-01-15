@@ -646,5 +646,155 @@ export function createCanvasTools(token: string, url: string) {
 				return quizData;
 			},
 		}),
+
+		provide_summary_output: tool({
+			description:
+				'Provide a structured summary note for rendering in the Summary UI. Supports multiple pages and rich sections. Prefer Pareto-style organization.',
+			inputSchema: z.object({
+				title: z.string(),
+				subtitle: z.string().optional(),
+				// Optional overall metadata for Overview tab
+				keyConcepts: z.array(z.string()).optional(),
+				meta: z
+					.object({
+						course: z.string().optional(),
+						module: z.string().optional(),
+						author: z.string().optional(),
+						date: z.string().optional(),
+						estimatedTime: z.string().optional(),
+						difficulty: z.string().optional(),
+					})
+					.optional(),
+				progress: z.number().min(0).max(100).optional(),
+				successCriteria: z.array(z.string()).optional(),
+				// Top-level sections (single-page)
+				sections: z
+					.array(
+						z.object({
+							title: z.string(),
+							bullets: z.array(z.string()).optional(),
+							paragraphs: z.array(z.string()).optional(),
+						}),
+					)
+					.optional(),
+				// Multi-page support
+				pages: z
+					.array(
+						z.object({
+							id: z.string().optional(),
+							title: z.string(),
+							keyConcepts: z.array(z.string()).optional(),
+							successCriteria: z.array(z.string()).optional(),
+							sections: z.array(
+								z.object({
+									title: z.string(),
+									bullets: z.array(z.string()).optional(),
+									paragraphs: z.array(z.string()).optional(),
+								}),
+							),
+							activities: z
+								.array(
+									z.object({
+										title: z.string(),
+										description: z.string().optional(),
+										successCriteria: z.array(z.string()).optional(),
+										timeEstimate: z.string().optional(),
+										prerequisites: z.array(z.string()).optional(),
+										ctaLabel: z.string().optional(),
+									}),
+								)
+								.optional(),
+							assessments: z
+								.array(
+									z.object({
+										type: z.enum(['assignment', 'quiz', 'project']).optional(),
+										title: z.string(),
+										description: z.string().optional(),
+										successCriteria: z.array(z.string()).optional(),
+										dueDate: z.string().optional(),
+										weight: z.string().optional(),
+										ctaLabel: z.string().optional(),
+									}),
+								)
+								.optional(),
+							checklist: z
+								.array(
+									z.object({
+										text: z.string(),
+										priority: z.enum(['high', 'medium', 'low']).optional(),
+										dueDate: z.string().optional(),
+										done: z.boolean().optional(),
+									}),
+								)
+								.optional(),
+							resources: z
+								.array(
+									z.object({
+										title: z.string().optional(),
+										url: z.string(),
+										type: z
+											.enum(['pdf', 'video', 'website', 'page', 'file'])
+											.optional(),
+										description: z.string().optional(),
+										tags: z.array(z.string()).optional(),
+									}),
+								)
+								.optional(),
+						}),
+					)
+					.optional(),
+				// Checklist (single-page)
+				checklist: z
+					.array(
+						z.object({
+							text: z.string(),
+							priority: z.enum(['high', 'medium', 'low']).optional(),
+							dueDate: z.string().optional(),
+							done: z.boolean().optional(),
+						}),
+					)
+					.optional(),
+				// Resources (single-page)
+				resources: z
+					.array(
+						z.object({
+							title: z.string().optional(),
+							url: z.string(),
+							type: z.enum(['pdf', 'video', 'website', 'page', 'file']).optional(),
+							description: z.string().optional(),
+							tags: z.array(z.string()).optional(),
+						}),
+					)
+					.optional(),
+				activities: z
+					.array(
+						z.object({
+							title: z.string(),
+							description: z.string().optional(),
+							successCriteria: z.array(z.string()).optional(),
+							timeEstimate: z.string().optional(),
+							prerequisites: z.array(z.string()).optional(),
+							ctaLabel: z.string().optional(),
+						}),
+					)
+					.optional(),
+				assessments: z
+					.array(
+						z.object({
+							type: z.enum(['assignment', 'quiz', 'project']).optional(),
+							title: z.string(),
+							description: z.string().optional(),
+							successCriteria: z.array(z.string()).optional(),
+							dueDate: z.string().optional(),
+							weight: z.string().optional(),
+							ctaLabel: z.string().optional(),
+						}),
+					)
+					.optional(),
+			}),
+			execute: async (summaryData: any) => {
+				return summaryData;
+			},
+		}),
 	};
 }

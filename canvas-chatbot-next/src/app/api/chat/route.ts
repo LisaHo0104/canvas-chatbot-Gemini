@@ -539,14 +539,28 @@ This sequence is REQUIRED. Do not skip any step. The generate_quiz_plan and prov
 			}
 		}
 
+		let summaryEnforcementPrompt = '';
+		if (analysisMode === 'summary') {
+			summaryEnforcementPrompt = `\n\n⚠️ CRITICAL: SUMMARY MODE IS ACTIVE
+			
+You MUST provide a structured summary note and call 'provide_summary_output' with:
+- title: String title
+- subtitle: Optional
+- sections: Array of objects { title, bullets?: string[], paragraphs?: string[] }
+- checklist: Optional array of actionable steps
+- resources: Optional array of { title?, url }
+
+Use Pareto Principle for organization. Include clear headings and concise bullets. Do not return raw JSON to the user; the tool call will render the UI.`;
+		}
+
 		// Include context in system prompt if:
 		// 1. formattedContext exists (from canvasContext with courses), OR
 		// 2. contextFromAttachments exists (when attachments exist but canvasContext is missing)
 		const contextToInclude = formattedContext || contextFromAttachments;
 		
 		const systemText = contextToInclude
-			? `${activeSystemPrompt}${toolUsageInstructions}${rubricEnforcementPrompt}${quizEnforcementPrompt}\n\n${contextToInclude}`
-			: `${activeSystemPrompt}${toolUsageInstructions}${rubricEnforcementPrompt}${quizEnforcementPrompt}`;
+			? `${activeSystemPrompt}${toolUsageInstructions}${rubricEnforcementPrompt}${quizEnforcementPrompt}${summaryEnforcementPrompt}\n\n${contextToInclude}`
+			: `${activeSystemPrompt}${toolUsageInstructions}${rubricEnforcementPrompt}${quizEnforcementPrompt}${summaryEnforcementPrompt}`;
 
 		const uiMessagesWithSystem: UIMessage[] = [
 			{ role: 'system', parts: [{ type: 'text', text: systemText }] } as any,

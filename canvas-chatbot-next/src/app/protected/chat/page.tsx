@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback, startTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient as createSupabaseClient } from '@/lib/supabase/client'
-import { X, CopyIcon, RefreshCcwIcon, GlobeIcon, CheckIcon, SparklesIcon, FolderIcon, LayersIcon, FileText, BookOpen, GraduationCap, FileQuestion } from 'lucide-react'
+import { X, CopyIcon, RefreshCcwIcon, GlobeIcon, CheckIcon, SparklesIcon, FolderIcon, LayersIcon, FileText, BookOpen, GraduationCap, FileQuestion, StickyNote } from 'lucide-react'
 import { useChat } from '@ai-sdk/react'
 import { lastAssistantMessageIsCompleteWithApprovalResponses } from 'ai'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -107,12 +107,14 @@ export default function ChatPage() {
     'rubric': 'rubric_analysis',
     'quiz': 'quiz_generation',
     'study-plan': 'study_plan',
+    'summary': 'summary_note',
   }
   
   const TEMPLATE_TYPE_TO_MODE: Record<string, string | null> = {
     'rubric_analysis': 'rubric',
     'quiz_generation': 'quiz',
     'study_plan': 'study-plan',
+    'summary_note': 'summary',
     'default': null,
   }
   
@@ -1276,6 +1278,7 @@ export default function ChatPage() {
                               'provide_rubric_analysis',
                               'generate_quiz_plan',
                               'provide_quiz_output',
+                              'provide_summary_output',
                               'webSearch'
                             ].includes(toolName)
 
@@ -1659,12 +1662,14 @@ export default function ChatPage() {
                           <FileQuestion className="size-4" />
                         ) : mode === 'study-plan' ? (
                           <BookOpen className="size-4" />
+                        ) : mode === 'summary' ? (
+                          <StickyNote className="size-4" />
                         ) : (
                           <GraduationCap className="size-4" />
                         )}
                         <span className="ml-1 flex items-center gap-1.5">
-                          {mode === 'rubric' ? 'Rubric' : mode === 'quiz' ? 'Quiz Generation' : mode === 'study-plan' ? 'Study Plan' : 'Generic'}
-                          {(mode === 'rubric' || mode === 'quiz' || mode === 'study-plan') && (
+                          {mode === 'rubric' ? 'Rubric' : mode === 'quiz' ? 'Quiz Generation' : mode === 'study-plan' ? 'Study Plan' : mode === 'summary' ? 'Summary' : 'Generic'}
+                          {(mode === 'rubric' || mode === 'quiz' || mode === 'study-plan' || mode === 'summary') && (
                             <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 h-4 border ${getModeBadgeColors(mode as ModeType)}`}>Beta</Badge>
                           )}
                         </span>
@@ -1728,6 +1733,20 @@ export default function ChatPage() {
                                 <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 h-4 border ${getModeBadgeColors('study-plan')}`}>Beta</Badge>
                               </span>
                               {mode === 'study-plan' && <CheckIcon className="ml-auto size-4" />}
+                            </PromptInputCommandItem>
+                            <PromptInputCommandItem
+                              value="summary"
+                              onSelect={() => {
+                                handleModeChange('summary')
+                                setModeOpen(false)
+                              }}
+                            >
+                              <StickyNote className={`size-4 ${getModeColors('summary').text}`} />
+                              <span className="flex items-center gap-1.5">
+                                Summary
+                                <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 h-4 border ${getModeBadgeColors('summary')}`}>Beta</Badge>
+                              </span>
+                              {mode === 'summary' && <CheckIcon className="ml-auto size-4" />}
                             </PromptInputCommandItem>
                           </PromptInputCommandGroup>
                         </PromptInputCommandList>
