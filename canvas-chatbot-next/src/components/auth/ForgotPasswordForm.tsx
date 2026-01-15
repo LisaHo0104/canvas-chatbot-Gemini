@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { createClient as createSupabaseClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
+import { getRedirectUrl } from '@/lib/utils/get-redirect-url'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -22,7 +23,7 @@ export function ForgotPasswordForm({ className, ...props }: React.ComponentProps
 
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/auth/update-password`,
+        redirectTo: getRedirectUrl('/auth/update-password'),
       })
       if (error) throw error
       setSuccess(true)
