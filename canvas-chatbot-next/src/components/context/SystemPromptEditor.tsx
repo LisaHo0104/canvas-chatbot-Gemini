@@ -58,23 +58,14 @@ export function SystemPromptEditor({
   }, [enabled])
 
   useEffect(() => {
-    // #region agent log
-    fetch('http://127.0.0.1:7244/ingest/b8e98944-552b-4fa4-94d4-0555e01fc282',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SystemPromptEditor.tsx:58',message:'useEffect triggered - prompt prop changed',data:{promptId:prompt?.id,promptName:prompt?.name,isResetting,lastProcessedId:lastProcessedPromptIdRef.current},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
     // Don't overwrite form during reset operation
     if (isResetting) return
     
     // Skip if we've already processed this prompt (prevents double-loading)
     if (prompt?.id && prompt.id === lastProcessedPromptIdRef.current) {
-      // #region agent log
-      fetch('http://127.0.0.1:7244/ingest/b8e98944-552b-4fa4-94d4-0555e01fc282',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SystemPromptEditor.tsx:65',message:'Skipping duplicate load - already processed this prompt',data:{promptId:prompt.id},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
       return
     }
     
-    // #region agent log
-    fetch('http://127.0.0.1:7244/ingest/b8e98944-552b-4fa4-94d4-0555e01fc282',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SystemPromptEditor.tsx:70',message:'Loading prompt text into editor',data:{promptId:prompt?.id,isTemplate:prompt?.is_template},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
     if (prompt) {
       // Only load from source files if it's a template (is_template === true)
       // For modified versions (is_template === false but has template_type), use the prompt_text from database
@@ -95,9 +86,6 @@ export function SystemPromptEditor({
         }
       }
       
-      // #region agent log
-      fetch('http://127.0.0.1:7244/ingest/b8e98944-552b-4fa4-94d4-0555e01fc282',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SystemPromptEditor.tsx:82',message:'Setting prompt text state',data:{promptId:prompt.id,textLength:textToLoad.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
       setPromptText(textToLoad)
       setOriginalPromptText(textToLoad)
       setPromptName(prompt.name)
@@ -200,9 +188,6 @@ export function SystemPromptEditor({
   }, [promptText, prompt])
 
   const handleSave = async () => {
-    // #region agent log
-    fetch('http://127.0.0.1:7244/ingest/b8e98944-552b-4fa4-94d4-0555e01fc282',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SystemPromptEditor.tsx:153',message:'handleSave called',data:{promptId:prompt?.id,hasChanges},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-    // #endregion
     if (!prompt || !hasChanges) return
 
     // Check if this is a Lulu prompt (either template or modified version)
@@ -217,18 +202,12 @@ export function SystemPromptEditor({
 
     try {
       setSaving(true)
-      // #region agent log
-      fetch('http://127.0.0.1:7244/ingest/b8e98944-552b-4fa4-94d4-0555e01fc282',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SystemPromptEditor.tsx:167',message:'About to call onSave callback',data:{promptId:prompt.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-      // #endregion
       // For Lulu prompts, use original name/description; for custom prompts, use edited values
       const nameToSave = isLuluPrompt ? prompt.name : promptName
       const descriptionToSave = isLuluPrompt ? (prompt.description || '') : promptDescription
       // Use textarea value directly if it differs from state (race condition fix)
       const textToSave = textareaRef.current?.value || promptText
       await onSave(prompt.id, textToSave, nameToSave, descriptionToSave)
-      // #region agent log
-      fetch('http://127.0.0.1:7244/ingest/b8e98944-552b-4fa4-94d4-0555e01fc282',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SystemPromptEditor.tsx:173',message:'onSave callback completed',data:{promptId:prompt.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-      // #endregion
       setOriginalPromptText(textToSave)
       setPromptText(textToSave)
       setOriginalPromptName(promptName)
@@ -290,9 +269,6 @@ export function SystemPromptEditor({
   }
 
   const handleReset = async () => {
-    // #region agent log
-    fetch('http://127.0.0.1:7244/ingest/b8e98944-552b-4fa4-94d4-0555e01fc282',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SystemPromptEditor.tsx:234',message:'handleReset called',data:{promptId:prompt?.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-    // #endregion
     if (!prompt) return
 
     setResetting(true)
@@ -338,9 +314,6 @@ export function SystemPromptEditor({
       
       // Also call parent's reset handler to delete modified version if it exists
       if (onReset) {
-        // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/b8e98944-552b-4fa4-94d4-0555e01fc282',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SystemPromptEditor.tsx:278',message:'About to call onReset callback',data:{promptId:prompt.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-        // #endregion
         try {
           await onReset()
         } catch (error) {
@@ -382,9 +355,6 @@ export function SystemPromptEditor({
         
         // Call parent's reset handler to delete modified version
         if (onReset) {
-          // #region agent log
-          fetch('http://127.0.0.1:7244/ingest/b8e98944-552b-4fa4-94d4-0555e01fc282',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SystemPromptEditor.tsx:312',message:'About to call onReset callback (modified version)',data:{promptId:prompt.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-          // #endregion
           try {
             await onReset()
           } catch (error) {
