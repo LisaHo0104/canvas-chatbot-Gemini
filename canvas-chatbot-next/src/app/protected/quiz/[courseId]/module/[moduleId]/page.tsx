@@ -256,8 +256,8 @@ export default function QuizModuleQnAPage() {
             <EmptyContent>
               <Button onClick={() => loadQnA()}>Retry</Button>
               {typeof error === 'string' && (error.includes('Canvas') || error.includes('log in')) && (
-                <Button variant="outline" onClick={() => { console.debug('[DEBUG] Navigate to settings from quiz error'); router.push('/protected/settings') }}>
-                  Open Settings
+                <Button variant="outline" onClick={() => { console.debug('[DEBUG] Navigate to context from quiz error'); router.push('/protected/context') }}>
+                  Configure Canvas
                 </Button>
               )}
             </EmptyContent>
