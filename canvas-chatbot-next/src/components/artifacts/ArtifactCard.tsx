@@ -14,7 +14,7 @@ interface Artifact {
   title: string
   description: string | null
   tags: string[]
-  artifact_type: 'quiz' | 'rubric_analysis'
+  artifact_type: 'quiz' | 'rubric_analysis' | 'study_plan'
   created_at: string
   updated_at: string
 }
@@ -30,15 +30,24 @@ export function ArtifactCard({ artifact, onDelete, onUpdate }: ArtifactCardProps
   const [editorOpen, setEditorOpen] = useState(false)
 
   const getArtifactTypeIcon = () => {
-    return artifact.artifact_type === 'quiz' ? (
-      <FileQuestion className="size-3.5" />
-    ) : (
-      <FileText className="size-3.5" />
-    )
+    switch (artifact.artifact_type) {
+      case 'quiz':
+        return <FileQuestion className="size-3.5" />
+      case 'study_plan':
+        return <Calendar className="size-3.5" />
+      case 'rubric_analysis':
+      default:
+        return <FileText className="size-3.5" />
+    }
   }
 
   const getArtifactTypeLabel = () => {
-    return artifact.artifact_type === 'quiz' ? 'Quiz' : 'Rubric Analysis'
+    switch (artifact.artifact_type) {
+      case 'quiz': return 'Quiz'
+      case 'study_plan': return 'Study Plan'
+      case 'rubric_analysis': return 'Rubric Analysis'
+      default: return artifact.artifact_type
+    }
   }
 
   const formatDate = (dateString: string) => {

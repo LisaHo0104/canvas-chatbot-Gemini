@@ -69,17 +69,19 @@ export function getModeButtonColors(mode: ModeType): string {
 /**
  * Get artifact type from mode string
  */
-export function getArtifactTypeFromMode(mode: string | null): 'quiz' | 'rubric_analysis' | null {
+export function getArtifactTypeFromMode(mode: string | null): 'quiz' | 'rubric_analysis' | 'study_plan' | null {
   if (mode === 'quiz') return 'quiz'
   if (mode === 'rubric') return 'rubric_analysis'
+  if (mode === 'study-plan') return 'study_plan'
   return null
 }
 
 /**
  * Get mode from artifact type
  */
-export function getModeFromArtifactType(artifactType: 'quiz' | 'rubric_analysis'): ModeType {
+export function getModeFromArtifactType(artifactType: 'quiz' | 'rubric_analysis' | 'study_plan'): ModeType {
   if (artifactType === 'quiz') return 'quiz'
   if (artifactType === 'rubric_analysis') return 'rubric'
+  if (artifactType === 'study_plan') return 'study-plan'
   return null
 }

@@ -142,16 +142,21 @@ const RUBRIC_ANALYSIS_PROMPT = `${BASE_PROMPT}
 
 **Analysis Framework:**
 1. **Detection:** Check attached assignments in context. If rubric mode is enabled and assignments are attached, analyze the rubric. Verify rubric exists; identify assignment details (name, course, total points).
-2. **Extraction:** Extract all criteria (descriptions, point values) and ratings (sorted by points, highest to lowest). Map ratings to grade levels: HD (highest), D (second highest), C (middle), P (lower), F (lowest/zero).
-3. **Analysis (per criterion):** Parse descriptions; identify key requirements per grade level; generate common mistakes; create actionable checklist items; calculate scoring tips.
-4. **Synthesis:** Create summary overview; prioritize action items by importance/points; generate maximization tips; format for generative UI.
-5. **Output:** Provide complete rubric analysis structure with:
+2. **Extraction:** Extract all criteria (descriptions, point values) and ratings. Focus on understanding what leads to high marks vs. common mistakes.
+3. **Analysis (per criterion):** For each criterion, identify:
+   - What students should aim for (combine HD-level requirements and actionable steps)
+   - What to avoid (common mistakes and pitfalls)
+   - A single concise tip for maximizing points
+4. **Synthesis:** Create a clear overview and 3-5 key strategies that apply across all criteria. Optionally provide a comprehensive "how to succeed" guide.
+5. **Output:** Call provide_rubric_analysis with simplified structure:
    - assignmentName, assignmentId, courseId, totalPoints
-   - criteria: Array with (id, name, description, pointsPossible, plainEnglishExplanation with analogies, gradeLevels, commonMistakes, actionItems, scoringTips)
-   - summary: (Overview, keyRequirements, gradeStrategy, howToGetHD with detailed step-by-step guide)
-   - commonMistakes: Organized by criterion
-   - actionChecklist: Prioritized items (id, item, criterion, priority)
-   - scoringBreakdown: Points distribution and maximization tips
+   - overview: Overall summary of the rubric
+   - keyStrategies: Array of 3-5 key strategies (strings)
+   - howToSucceed: Optional comprehensive success guide
+   - criteria: Array with (name, points, description, whatToAim[], whatToAvoid[], tip?)
+   - checklist: Optional array with (item, priority: 'high'|'medium'|'low')
+
+**CRITICAL:** Use the simplified schema. Do NOT include gradeLevels objects, separate commonMistakes arrays, actionChecklist with IDs/criterion refs, or scoringBreakdown. Keep it simple and focused.
 
 **Text Output (fallback only):** Include disclaimers: "⚠️ **Important**: Interpretation based on rubric. Actual grading determined by instructor. Tool helps understand requirements but doesn't guarantee grades." "📚 **Remember**: Refer to instructor's official rubric for definitive criteria." Use language: "Typically", "Usually", "Helps achieve" (NOT "Guaranteed", "Will receive"). Structure: Clear markdown headings (##, ###), horizontal rules (---), emojis (📝 ✅ ⚠️ 🎯).`;
 

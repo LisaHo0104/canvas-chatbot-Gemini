@@ -486,77 +486,31 @@ export function createCanvasTools(token: string, url: string) {
 		}),
 
 		provide_rubric_analysis: tool({
-			description: 'CRITICAL: After calling analyze_rubric, you MUST immediately call this tool with the fully analyzed rubric data. This tool provides the structured data for rendering in the RubricAnalysisUI component. DO NOT generate text responses before calling this tool - call it immediately after analyze_rubric completes. This tool accepts the complete analyzed rubric structure matching the RubricAnalysisOutput interface.',
+			description: 'CRITICAL: After calling analyze_rubric, you MUST immediately call this tool with the fully analyzed rubric data. This tool provides the structured data for rendering in the RubricAnalysisUI component. DO NOT generate text responses before calling this tool - call it immediately after analyze_rubric completes. Use the simplified schema: core assignment info, overview with key strategies, simplified criteria array with whatToAim/whatToAvoid/tip, and optional checklist.',
 			inputSchema: z.object({
 				assignmentName: z.string().describe('The name of the assignment'),
 				assignmentId: z.number().describe('The assignment ID'),
 				courseId: z.number().describe('The course ID'),
 				totalPoints: z.number().describe('Total points possible for the assignment'),
+				overview: z.string().describe('Overall summary of the rubric and assignment requirements'),
+				keyStrategies: z.array(z.string()).describe('Key strategies or requirements across all criteria (3-5 items)'),
+				howToSucceed: z.string().optional().describe('A comprehensive guide on how to succeed on this assignment, written in clear, student-friendly language'),
 				criteria: z.array(
 					z.object({
-						id: z.string().describe('Unique identifier for the criterion'),
 						name: z.string().describe('Name/title of the criterion'),
+						points: z.number().describe('Points possible for this criterion'),
 						description: z.string().describe('Description of what the criterion evaluates'),
-						plainEnglishExplanation: z.string().optional().describe('A plain-English explanation of what this criterion evaluates, written in simple, student-friendly language with analogies. This helps students understand the criterion without technical jargon.'),
-						pointsPossible: z.number().describe('Points possible for this criterion'),
-						gradeLevels: z.object({
-							hd: z.object({
-								requirements: z.array(z.string()).describe('Requirements to achieve HD grade'),
-								points: z.number().describe('Points awarded for HD'),
-							}),
-							d: z.object({
-								requirements: z.array(z.string()).describe('Requirements to achieve D grade'),
-								points: z.number().describe('Points awarded for D'),
-							}),
-							c: z.object({
-								requirements: z.array(z.string()).describe('Requirements to achieve C grade'),
-								points: z.number().describe('Points awarded for C'),
-							}),
-							p: z.object({
-								requirements: z.array(z.string()).describe('Requirements to achieve P grade'),
-								points: z.number().describe('Points awarded for P'),
-							}),
-							f: z.object({
-								requirements: z.array(z.string()).describe('Requirements that result in F grade'),
-								points: z.number().describe('Points awarded for F'),
-							}),
-						}),
-						commonMistakes: z.array(z.string()).describe('Common mistakes students make for this criterion'),
-						actionItems: z.array(z.string()).describe('Actionable items students should do for this criterion'),
-						scoringTips: z.array(z.string()).describe('Tips for maximizing points on this criterion'),
+						whatToAim: z.array(z.string()).describe('What students should aim for to achieve high marks on this criterion (combines HD requirements and action items)'),
+						whatToAvoid: z.array(z.string()).describe('Common mistakes or pitfalls to avoid for this criterion'),
+						tip: z.string().optional().describe('A single, concise tip for maximizing points on this criterion'),
 					})
-				).describe('Array of analyzed criteria with grade level breakdowns'),
-				summary: z.object({
-					overview: z.string().describe('Overall summary of the rubric'),
-					keyRequirements: z.array(z.string()).describe('Key requirements across all criteria'),
-					gradeStrategy: z.string().describe('Strategic advice for achieving target grades'),
-					howToGetHD: z.string().optional().describe('A detailed, step-by-step guide on how to achieve HD (High Distinction) grade. This should be comprehensive, actionable, and written in clear, student-friendly language. Include specific requirements, strategies, and tips for each criterion.'),
-				}),
-				commonMistakes: z.array(
+				).describe('Array of analyzed criteria with simplified structure'),
+				checklist: z.array(
 					z.object({
-						criterion: z.string(),
-						mistakes: z.array(z.string()),
+						item: z.string().describe('Actionable checklist item'),
+						priority: z.enum(['high', 'medium', 'low']).describe('Priority level of this item'),
 					})
-				).describe('Common mistakes organized by criterion'),
-				actionChecklist: z.array(
-					z.object({
-						id: z.string(),
-						item: z.string(),
-						criterion: z.string(),
-						priority: z.enum(['high', 'medium', 'low']),
-					})
-				).describe('Prioritized actionable checklist items'),
-				scoringBreakdown: z.object({
-					totalPoints: z.number(),
-					pointsByCriterion: z.array(
-						z.object({
-							criterion: z.string(),
-							points: z.number(),
-							percentage: z.number(),
-						})
-					),
-					maximizationTips: z.array(z.string()),
-				}),
+				).optional().describe('Optional prioritized checklist of actionable items'),
 			}),
 			execute: async (analysisData: any) => {
 				// Simply return the provided analysis data as-is
@@ -644,6 +598,106 @@ export function createCanvasTools(token: string, url: string) {
 				// This tool exists to allow the AI to provide structured output
 				// that will be rendered by the QuizUI component
 				return quizData;
+			},
+		}),
+
+		generate_study_plan_proposal: tool({
+			description: 'Generate a detailed study plan proposal based on provided context (modules, assignments, or courses). This tool gathers information from the context and creates a structured plan that the user must approve before full study plan generation. Call this tool when study plan mode is enabled and the user has provided context and a prompt.',
+			needsApproval: true,
+			inputSchema: z.object({
+				sources: z.object({
+					courses: z.array(z.object({
+						id: z.number().describe('Course ID'),
+						name: z.string().describe('Course name'),
+					})).optional().describe('Courses to use as sources'),
+					modules: z.array(z.object({
+						id: z.number().describe('Module ID'),
+						name: z.string().describe('Module name'),
+						courseId: z.number().describe('Course ID containing this module'),
+					})).optional().describe('Modules to use as sources'),
+					assignments: z.array(z.object({
+						id: z.number().describe('Assignment ID'),
+						name: z.string().describe('Assignment name'),
+						courseId: z.number().describe('Course ID containing this assignment'),
+					})).optional().describe('Assignments to use as sources'),
+				}).describe('Sources to gather information from'),
+				planType: z.enum(['exam_prep', 'course_mastery', 'assignment_focused']).describe('Type of study plan'),
+				estimatedMilestones: z.number().int().min(1).max(20).describe('Estimated number of milestones'),
+				estimatedHours: z.number().min(1).describe('Total estimated study hours'),
+				topics: z.array(z.string()).describe('Topics that will be covered in the study plan'),
+				startDate: z.string().describe('ISO date string when the study plan starts'),
+				targetDate: z.string().optional().describe('ISO date string for the target completion date (e.g., exam date)'),
+				userPrompt: z.string().optional().describe('The user\'s specific prompt or requirements for the study plan'),
+			}),
+			execute: async (proposalData: any) => {
+				// Simply return the proposal data as-is
+				// This tool exists to allow the AI to provide structured proposal output
+				// that will be rendered by the Plan component for user approval
+				return proposalData;
+			},
+		}),
+
+		provide_study_plan_output: tool({
+			description: 'CRITICAL: After the user approves the study plan proposal from generate_study_plan_proposal, you MUST call this tool with the fully generated study plan data. This tool provides the structured study plan data for rendering in the StudyPlanUI component. DO NOT generate text responses before calling this tool - call it immediately after study plan generation completes.',
+			inputSchema: z.object({
+				title: z.string().describe('Title of the study plan'),
+				description: z.string().optional().describe('Description of the study plan'),
+				planType: z.enum(['exam_prep', 'course_mastery', 'assignment_focused']).describe('Type of study plan'),
+				startDate: z.string().describe('ISO date string when the study plan starts'),
+				targetDate: z.string().optional().describe('ISO date string for the target completion date'),
+				totalEstimatedHours: z.number().describe('Total estimated study hours'),
+				milestones: z.array(
+					z.object({
+						id: z.string().describe('Unique identifier for the milestone'),
+						title: z.string().describe('Title of the milestone'),
+						description: z.string().describe('Description of what this milestone covers'),
+						topics: z.array(z.string()).describe('Topics covered in this milestone'),
+						estimatedHours: z.number().describe('Estimated hours for this milestone'),
+						priority: z.enum(['high', 'medium', 'low']).describe('Priority level of this milestone'),
+						suggestedOrder: z.number().describe('Suggested order for completing this milestone'),
+						scheduledDate: z.string().optional().describe('ISO date when this milestone is scheduled'),
+						resources: z.array(
+							z.object({
+								type: z.enum(['module', 'assignment', 'page', 'file']).describe('Type of resource'),
+								name: z.string().describe('Name of the resource'),
+								url: z.string().optional().describe('URL to the resource'),
+							})
+						).describe('Resources for this milestone'),
+						studyTasks: z.array(
+							z.object({
+								id: z.string().describe('Unique identifier for the task'),
+								task: z.string().describe('Description of the task'),
+								duration: z.number().describe('Duration in minutes'),
+								taskType: z.enum(['read', 'practice', 'review', 'quiz']).describe('Type of study task'),
+							})
+						).describe('Study tasks within this milestone'),
+					})
+				).describe('Array of study milestones'),
+				calendarSchedule: z.array(
+					z.object({
+						date: z.string().describe('ISO date string'),
+						milestoneIds: z.array(z.string()).describe('IDs of milestones scheduled for this day'),
+						totalHours: z.number().describe('Total study hours for this day'),
+						isRestDay: z.boolean().optional().describe('Whether this is a rest day'),
+					})
+				).describe('Calendar schedule with daily breakdown'),
+				overview: z.object({
+					totalDays: z.number().describe('Total number of days in the plan'),
+					studyDays: z.number().describe('Number of study days'),
+					restDays: z.number().describe('Number of rest days'),
+					avgHoursPerDay: z.number().describe('Average hours per study day'),
+					peakDay: z.string().optional().describe('ISO date of the day with most hours'),
+				}).describe('Overview statistics'),
+				metadata: z.object({
+					sourcesUsed: z.array(z.string()).optional().describe('List of sources used'),
+					generatedAt: z.string().describe('ISO timestamp when the plan was generated'),
+				}).optional().describe('Metadata about the study plan'),
+			}),
+			execute: async (studyPlanData: any) => {
+				// Simply return the study plan data as-is
+				// This tool exists to allow the AI to provide structured output
+				// that will be rendered by the StudyPlanUI component
+				return studyPlanData;
 			},
 		}),
 	};

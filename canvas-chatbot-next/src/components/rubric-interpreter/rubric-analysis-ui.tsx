@@ -1,59 +1,35 @@
 'use client'
 
 import { useState } from 'react'
-import { ChevronDown, ChevronUp, CheckCircle2, XCircle, AlertCircle, Target, TrendingUp, Maximize2, Save } from 'lucide-react'
+import { CheckCircle2, AlertCircle, Target, Maximize2, Save, CheckCircle, TrendingUp } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Progress } from '@/components/ui/progress'
-import { Separator } from '@/components/ui/separator'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ScrollArea } from '@/components/ui/scroll-area'
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 import { Button } from '@/components/ui/button'
 import { SaveArtifactDialog } from '@/components/artifacts/SaveArtifactDialog'
+import { PriorityGroupedChecklist } from './priority-grouped-checklist'
+import { CollapsibleOverview } from './collapsible-overview'
 
 export interface RubricAnalysisOutput {
   assignmentName: string
   assignmentId: number
   courseId: number
   totalPoints: number
+  overview: string
+  keyStrategies: string[]
+  howToSucceed?: string
   criteria: Array<{
-    id: string
     name: string
+    points: number
     description: string
-    pointsPossible: number
-    plainEnglishExplanation?: string
-    gradeLevels: {
-      hd: { requirements: string[]; points: number }
-      d: { requirements: string[]; points: number }
-      c: { requirements: string[]; points: number }
-      p: { requirements: string[]; points: number }
-      f: { requirements: string[]; points: number }
-    }
-    commonMistakes: string[]
-    actionItems: string[]
-    scoringTips: string[]
+    whatToAim: string[]
+    whatToAvoid: string[]
+    tip?: string
   }>
-  summary: {
-    overview: string
-    keyRequirements: string[]
-    gradeStrategy: string
-    howToGetHD?: string
-  }
-  commonMistakes: Array<{
-    criterion: string
-    mistakes: string[]
-  }>
-  actionChecklist: Array<{
-    id: string
+  checklist?: Array<{
     item: string
-    criterion: string
     priority: 'high' | 'medium' | 'low'
   }>
-  scoringBreakdown: {
-    totalPoints: number
-    pointsByCriterion: Array<{ criterion: string; points: number; percentage: number }>
-    maximizationTips: string[]
-  }
 }
 
 interface RubricAnalysisUIProps {
@@ -64,29 +40,19 @@ interface RubricAnalysisUIProps {
 }
 
 export function RubricAnalysisUI({ data, messageId, compact = false, onViewFull }: RubricAnalysisUIProps) {
-  const [expandedCriteria, setExpandedCriteria] = useState<Set<string>>(new Set())
-  const [checkedItems, setCheckedItems] = useState<Set<string>>(() => {
-    if (typeof window === 'undefined' || !messageId) return new Set()
+  const [checkedItems, setCheckedItems] = useState<Set<number>>(() => {
+    if (typeof window === 'undefined' || !messageId || !data.checklist) return new Set()
     const saved = localStorage.getItem(`rubric-checklist-${messageId}`)
     return saved ? new Set(JSON.parse(saved)) : new Set()
   })
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false)
 
-  const toggleCriterion = (id: string) => {
-    const newExpanded = new Set(expandedCriteria)
-    if (newExpanded.has(id)) {
-      newExpanded.delete(id)
-    } else {
-      newExpanded.add(id)
-    }
-    setExpandedCriteria(newExpanded)
-  }
-
-  const toggleChecklistItem = (id: string) => {
+  const toggleChecklistItem = (index: number) => {
     const newChecked = new Set(checkedItems)
-    if (newChecked.has(id)) {
-      newChecked.delete(id)
+    if (newChecked.has(index)) {
+      newChecked.delete(index)
     } else {
-      newChecked.add(id)
+      newChecked.add(index)
     }
     setCheckedItems(newChecked)
     if (messageId && typeof window !== 'undefined') {
@@ -95,37 +61,7 @@ export function RubricAnalysisUI({ data, messageId, compact = false, onViewFull 
   }
 
   const completedChecklistItems = checkedItems.size
-  const totalChecklistItems = data.actionChecklist.length
-  const checklistProgress = totalChecklistItems > 0 ? (completedChecklistItems / totalChecklistItems) * 100 : 0
-  const [saveDialogOpen, setSaveDialogOpen] = useState(false)
-
-  const getPriorityColor = (priority: 'high' | 'medium' | 'low') => {
-    switch (priority) {
-      case 'high':
-        return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-      case 'medium':
-        return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
-      case 'low':
-        return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
-    }
-  }
-
-  const getGradeLevelColor = (level: string) => {
-    switch (level.toLowerCase()) {
-      case 'hd':
-        return 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
-      case 'd':
-        return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
-      case 'c':
-        return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-      case 'p':
-        return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
-      case 'f':
-        return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-      default:
-        return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
-    }
-  }
+  const totalChecklistItems = data.checklist?.length || 0
 
   // Compact view: Show only summary card with button
   if (compact) {
@@ -157,31 +93,20 @@ export function RubricAnalysisUI({ data, messageId, compact = false, onViewFull 
           <CardContent>
             <div className="space-y-2">
               <h4 className="font-semibold text-sm">Overview</h4>
-              <p className="text-sm text-muted-foreground line-clamp-3">{data.summary.overview}</p>
-              {data.summary.keyRequirements.length > 0 && (
+              <p className="text-sm text-muted-foreground line-clamp-3">{data.overview}</p>
+              {data.keyStrategies.length > 0 && (
                 <div className="mt-3">
-                  <h5 className="font-medium text-sm mb-2">Key Requirements:</h5>
+                  <h5 className="font-medium text-sm mb-2">Key Strategies:</h5>
                   <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
-                    {data.summary.keyRequirements.slice(0, 3).map((req, i) => (
-                      <li key={i}>{req}</li>
+                    {data.keyStrategies.slice(0, 3).map((strategy, i) => (
+                      <li key={i}>{strategy}</li>
                     ))}
-                    {data.summary.keyRequirements.length > 3 && (
+                    {data.keyStrategies.length > 3 && (
                       <li className="text-muted-foreground/70">
-                        +{data.summary.keyRequirements.length - 3} more...
+                        +{data.keyStrategies.length - 3} more...
                       </li>
                     )}
                   </ul>
-                </div>
-              )}
-              {data.summary.howToGetHD && (
-                <div className="mt-3 p-3 bg-purple-50 dark:bg-purple-950 rounded-md border border-purple-200 dark:border-purple-800">
-                  <h5 className="font-semibold text-sm mb-1 flex items-center gap-2">
-                    <span className="text-lg">🎓</span>
-                    How to Get HD
-                  </h5>
-                  <p className="text-sm text-muted-foreground line-clamp-2">
-                    {data.summary.howToGetHD}
-                  </p>
                 </div>
               )}
             </div>
@@ -210,311 +135,121 @@ export function RubricAnalysisUI({ data, messageId, compact = false, onViewFull 
     )
   }
 
-  // Full view: Show complete rubric analysis interface
-
+  // Full view: Two-column dashboard layout
   return (
-    <div className="w-full space-y-4">
-      {/* Header */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <CardTitle className="flex items-center gap-2">
-                <Target className="size-5" />
-                {data.assignmentName}
-              </CardTitle>
-              <CardDescription>
-                Total Points: {data.totalPoints} | {data.criteria.length} Criteria
-              </CardDescription>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setSaveDialogOpen(true)}
-              className="flex items-center gap-2"
-            >
-              <Save className="size-4" />
-              Save to Artifactory
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2">
-            <h4 className="font-semibold text-sm">Overview</h4>
-            <p className="text-sm text-muted-foreground">{data.summary.overview}</p>
-            {data.summary.keyRequirements.length > 0 && (
-              <div className="mt-3">
-                <h5 className="font-medium text-sm mb-2">Key Requirements:</h5>
-                <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
-                  {data.summary.keyRequirements.map((req, i) => (
-                    <li key={i}>{req}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {data.summary.howToGetHD && (
-              <div className="mt-3 p-4 bg-purple-50 dark:bg-purple-950 rounded-md border border-purple-200 dark:border-purple-800">
-                <h5 className="font-semibold text-sm mb-2 flex items-center gap-2">
-                  <span className="text-lg">🎓</span>
-                  How to Get HD (High Distinction)
-                </h5>
-                <div className="text-sm text-muted-foreground whitespace-pre-line">
-                  {data.summary.howToGetHD}
-                </div>
-              </div>
-            )}
-            {data.summary.gradeStrategy && (
-              <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-950 rounded-md">
-                <h5 className="font-medium text-sm mb-1">Grade Strategy:</h5>
-                <p className="text-sm text-muted-foreground">{data.summary.gradeStrategy}</p>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+    <div className="w-full space-y-4 lg:space-y-6">
+      {/* Collapsible Header */}
+      <CollapsibleOverview
+        assignmentName={data.assignmentName}
+        totalPoints={data.totalPoints}
+        criteriaCount={data.criteria.length}
+        overview={data.overview}
+        keyStrategies={data.keyStrategies}
+        howToSucceed={data.howToSucceed}
+      />
 
-      {/* Tabs for different views */}
-      <Tabs defaultValue="criteria" className="w-full">
-        <TabsList className="grid w-full grid-cols-4 h-10 lg:h-11 gap-1">
-          <TabsTrigger value="criteria" className="text-sm lg:text-base px-2 lg:px-3">Criteria</TabsTrigger>
-          <TabsTrigger value="checklist" className="text-sm lg:text-base px-2 lg:px-3">Checklist</TabsTrigger>
-          <TabsTrigger value="mistakes" className="text-sm lg:text-base px-2 lg:px-3">Mistakes</TabsTrigger>
-          <TabsTrigger value="scoring" className="text-sm lg:text-base px-2 lg:px-3">Scoring</TabsTrigger>
-        </TabsList>
+      {/* Two-Column Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-4 lg:gap-6">
+        {/* Left Column - Sticky Checklist */}
+        {data.checklist && data.checklist.length > 0 && (
+          <aside className="lg:sticky lg:top-4 lg:h-fit">
+            <PriorityGroupedChecklist
+              items={data.checklist}
+              checkedItems={checkedItems}
+              onToggle={toggleChecklistItem}
+              completed={completedChecklistItems}
+              total={totalChecklistItems}
+            />
+          </aside>
+        )}
 
-        {/* Criteria Breakdown Tab */}
-        <TabsContent value="criteria" className="space-y-3">
-          {data.criteria.map((criterion) => (
-            <Card key={criterion.id}>
-              <CardHeader
-                className="cursor-pointer hover:bg-muted/50 transition-colors"
-                onClick={() => toggleCriterion(criterion.id)}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <CardTitle className="text-base flex items-center gap-2">
-                      {criterion.name}
-                      <Badge variant="outline">{criterion.pointsPossible} pts</Badge>
-                    </CardTitle>
-                    <CardDescription className="mt-1">{criterion.description}</CardDescription>
-                  </div>
-                  {expandedCriteria.has(criterion.id) ? (
-                    <ChevronUp className="size-5 text-muted-foreground" />
-                  ) : (
-                    <ChevronDown className="size-5 text-muted-foreground" />
-                  )}
-                </div>
-              </CardHeader>
-              {expandedCriteria.has(criterion.id) && (
-                <CardContent className="space-y-4">
-                  {/* Plain English Explanation */}
-                  {criterion.plainEnglishExplanation && (
-                    <div className="p-3 bg-muted/30 rounded-md border border-muted">
-                      <h5 className="font-medium text-sm mb-2 flex items-center gap-2">
-                        <span>💡</span>
-                        In Plain English:
-                      </h5>
-                      <p className="text-sm text-muted-foreground">
-                        {criterion.plainEnglishExplanation}
-                      </p>
-                    </div>
-                  )}
-                  {/* Grade Levels */}
-                  <div>
-                    <h5 className="font-semibold text-sm mb-3">Grade Level Requirements</h5>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                      {Object.entries(criterion.gradeLevels).map(([level, data]) => (
-                        <div
-                          key={level}
-                          className="p-3 rounded-md border bg-card"
-                        >
-                          <div className="flex items-center gap-2 mb-2">
-                            <Badge className={getGradeLevelColor(level)}>
-                              {level.toUpperCase()}
-                            </Badge>
-                            <span className="text-xs text-muted-foreground">
-                              {data.points} pts
-                            </span>
-                          </div>
-                          {data.requirements.length > 0 ? (
-                            <ul className="list-disc list-inside space-y-1 text-xs text-muted-foreground">
-                              {data.requirements.map((req, i) => (
-                                <li key={i}>{req}</li>
-                              ))}
-                            </ul>
-                          ) : (
-                            <p className="text-xs text-muted-foreground italic">
-                              No specific requirements listed
-                            </p>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <Separator />
-
-                  {/* Action Items */}
-                  {criterion.actionItems.length > 0 && (
-                    <div>
-                      <h5 className="font-semibold text-sm mb-2">Action Items</h5>
-                      <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
-                        {criterion.actionItems.map((item, i) => (
-                          <li key={i}>{item}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {/* Scoring Tips */}
-                  {criterion.scoringTips.length > 0 && (
-                    <div>
-                      <h5 className="font-semibold text-sm mb-2 flex items-center gap-2">
-                        <TrendingUp className="size-4" />
-                        Scoring Tips
-                      </h5>
-                      <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
-                        {criterion.scoringTips.map((tip, i) => (
-                          <li key={i}>{tip}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </CardContent>
-              )}
-            </Card>
-          ))}
-        </TabsContent>
-
-        {/* Action Checklist Tab */}
-        <TabsContent value="checklist" className="space-y-3">
+        {/* Right Column - Scrollable Criteria */}
+        <main className="space-y-3">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <CheckCircle2 className="size-5" />
-                Action Checklist
+                <Target className="size-5" />
+                Criteria Breakdown
               </CardTitle>
               <CardDescription>
-                Track your progress: {completedChecklistItems}/{totalChecklistItems} completed
+                Expand each criterion to see what to aim for and what to avoid
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Progress value={checklistProgress} className="mb-4" />
-              <ScrollArea className="h-[400px]">
-                <div className="space-y-2">
-                  {data.actionChecklist.map((item) => {
-                    const isChecked = checkedItems.has(item.id)
-                    return (
-                      <label
-                        key={item.id}
-                        className={`flex items-start gap-3 p-3 rounded-md border cursor-pointer transition-colors ${
-                          isChecked
-                            ? 'bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800'
-                            : 'bg-card hover:bg-muted/50'
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={() => toggleChecklistItem(item.id)}
-                          className="mt-1 rounded border-gray-300 dark:border-gray-600"
-                        />
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className={`text-sm font-medium ${isChecked ? 'line-through text-muted-foreground' : ''}`}>
-                              {item.item}
-                            </span>
-                            <Badge className={getPriorityColor(item.priority)} variant="outline">
-                              {item.priority}
-                            </Badge>
-                          </div>
-                          <p className="text-xs text-muted-foreground">
-                            Criterion: {item.criterion}
-                          </p>
+              <Accordion type="multiple" className="w-full space-y-3">
+                {data.criteria.map((criterion, index) => (
+                  <AccordionItem
+                    key={index}
+                    value={`criterion-${index}`}
+                    className="border rounded-lg bg-card"
+                  >
+                    <AccordionTrigger className="px-4 lg:px-6 py-4 hover:no-underline">
+                      <div className="flex-1 text-left">
+                        <div className="flex items-center gap-2 mb-2 flex-wrap">
+                          <span className="font-semibold text-base lg:text-lg">{criterion.name}</span>
+                          <Badge variant="outline" className="text-sm">
+                            {criterion.points} pts
+                          </Badge>
                         </div>
-                        {isChecked && (
-                          <CheckCircle2 className="size-5 text-green-600 dark:text-green-400 flex-shrink-0" />
-                        )}
-                      </label>
-                    )
-                  })}
-                </div>
-              </ScrollArea>
+                        <p className="text-sm text-muted-foreground">{criterion.description}</p>
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent className="px-4 lg:px-6 pb-4 lg:pb-6 space-y-4">
+                      {/* What to Aim For */}
+                      {criterion.whatToAim.length > 0 && (
+                        <div>
+                          <h5 className="font-semibold text-sm lg:text-base mb-3 flex items-center gap-2">
+                            <CheckCircle className="size-4 lg:size-5 text-green-600 dark:text-green-400" />
+                            What to Aim For
+                          </h5>
+                          <ul className="space-y-2">
+                            {criterion.whatToAim.map((item, i) => (
+                              <li key={i} className="flex items-start gap-2 text-sm lg:text-base">
+                                <CheckCircle2 className="size-4 lg:size-5 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
+                                <span className="text-muted-foreground">{item}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* What to Avoid */}
+                      {criterion.whatToAvoid.length > 0 && (
+                        <div>
+                          <h5 className="font-semibold text-sm lg:text-base mb-3 flex items-center gap-2">
+                            <AlertCircle className="size-4 lg:size-5 text-red-600 dark:text-red-400" />
+                            What to Avoid
+                          </h5>
+                          <ul className="space-y-2">
+                            {criterion.whatToAvoid.map((item, i) => (
+                              <li key={i} className="flex items-start gap-2 text-sm lg:text-base">
+                                <AlertCircle className="size-4 lg:size-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                                <span className="text-muted-foreground">{item}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* Tip */}
+                      {criterion.tip && (
+                        <div className="p-3 bg-blue-50 dark:bg-blue-950 rounded-md border border-blue-200 dark:border-blue-800">
+                          <h5 className="font-semibold text-sm lg:text-base mb-2 flex items-center gap-2">
+                            <TrendingUp className="size-4 lg:size-5 text-blue-600 dark:text-blue-400" />
+                            Pro Tip
+                          </h5>
+                          <p className="text-sm lg:text-base text-muted-foreground">{criterion.tip}</p>
+                        </div>
+                      )}
+                    </AccordionContent>
+                  </AccordionItem>
+                ))}
+              </Accordion>
             </CardContent>
           </Card>
-        </TabsContent>
+        </main>
+      </div>
 
-        {/* Common Mistakes Tab */}
-        <TabsContent value="mistakes" className="space-y-3">
-          {data.commonMistakes.map((mistakeGroup, idx) => (
-            <Card key={idx}>
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <AlertCircle className="size-5 text-orange-500" />
-                  {mistakeGroup.criterion}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ul className="list-disc list-inside space-y-2">
-                  {mistakeGroup.mistakes.map((mistake, i) => (
-                    <li key={i} className="text-sm text-muted-foreground">
-                      {mistake}
-                    </li>
-                  ))}
-                </ul>
-              </CardContent>
-            </Card>
-          ))}
-        </TabsContent>
-
-        {/* Scoring Breakdown Tab */}
-        <TabsContent value="scoring" className="space-y-3">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <TrendingUp className="size-5" />
-                Points Distribution
-              </CardTitle>
-              <CardDescription>
-                Total: {data.scoringBreakdown.totalPoints} points
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {data.scoringBreakdown.pointsByCriterion.map((item, idx) => (
-                <div key={idx} className="space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="font-medium">{item.criterion}</span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-muted-foreground">
-                        {item.points} pts
-                      </span>
-                      <Badge variant="outline">{item.percentage}%</Badge>
-                    </div>
-                  </div>
-                  <Progress value={item.percentage} className="h-2" />
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-
-          {data.scoringBreakdown.maximizationTips.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Maximization Tips</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ul className="list-disc list-inside space-y-2">
-                  {data.scoringBreakdown.maximizationTips.map((tip, i) => (
-                    <li key={i} className="text-sm text-muted-foreground">
-                      {tip}
-                    </li>
-                  ))}
-                </ul>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
-      </Tabs>
       <SaveArtifactDialog
         open={saveDialogOpen}
         onOpenChange={setSaveDialogOpen}
