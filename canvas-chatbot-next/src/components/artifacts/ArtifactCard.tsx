@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { FileQuestion, FileText, Calendar, Edit2, Trash2, Eye } from 'lucide-react'
+import { FileQuestion, FileText, StickyNote, Calendar, Edit2, Trash2, Eye } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -14,7 +14,7 @@ interface Artifact {
   title: string
   description: string | null
   tags: string[]
-  artifact_type: 'quiz' | 'rubric_analysis'
+  artifact_type: 'quiz' | 'rubric_analysis' | 'note'
   created_at: string
   updated_at: string
 }
@@ -30,15 +30,17 @@ export function ArtifactCard({ artifact, onDelete, onUpdate }: ArtifactCardProps
   const [editorOpen, setEditorOpen] = useState(false)
 
   const getArtifactTypeIcon = () => {
-    return artifact.artifact_type === 'quiz' ? (
-      <FileQuestion className="size-3.5" />
-    ) : (
-      <FileText className="size-3.5" />
-    )
+    if (artifact.artifact_type === 'quiz') return <FileQuestion className="size-3.5" />
+    if (artifact.artifact_type === 'rubric_analysis') return <FileText className="size-3.5" />
+    if (artifact.artifact_type === 'note') return <StickyNote className="size-3.5" />
+    return <FileText className="size-3.5" />
   }
 
   const getArtifactTypeLabel = () => {
-    return artifact.artifact_type === 'quiz' ? 'Quiz' : 'Rubric Analysis'
+    if (artifact.artifact_type === 'quiz') return 'Quiz'
+    if (artifact.artifact_type === 'rubric_analysis') return 'Rubric Analysis'
+    if (artifact.artifact_type === 'note') return 'Note'
+    return 'Artifact'
   }
 
   const formatDate = (dateString: string) => {

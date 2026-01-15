@@ -646,5 +646,49 @@ export function createCanvasTools(token: string, url: string) {
 				return quizData;
 			},
 		}),
+
+		provide_note_output: tool({
+			description: 'CRITICAL: After generating notes from course materials, you MUST call this tool with the fully generated note data. This tool provides the structured note data for rendering in the NoteUI component. DO NOT generate text responses before calling this tool - call it immediately after note generation completes. This tool accepts the complete note structure matching the NoteOutput interface.',
+			inputSchema: z.object({
+				title: z.string().describe('Title of the notes'),
+				description: z.string().optional().describe('Optional description or summary of the notes'),
+				summary: z.string().optional().describe('Quick summary at the top of the notes - a brief overview of the entire note content'),
+				sections: z.array(
+					z.object({
+						id: z.string().describe('Unique identifier for the section'),
+						heading: z.string().describe('Section heading'),
+						content: z.string().describe('Main content of the section (supports markdown formatting)'),
+						keyPoints: z.array(z.string()).optional().describe('Key points or bullet points for this section (will be displayed as checkboxes)'),
+						level: z.number().int().min(1).max(3).optional().describe('Heading level: 1 for H1 (main sections), 2 for H2 (subsections), 3 for H3 (sub-subsections)'),
+					})
+				).describe('Array of note sections with headings, content, and key points'),
+				keyTakeaways: z.array(z.string()).optional().describe('Key takeaways at the end - main points the student should remember'),
+				successCriteria: z.array(z.string()).optional().describe('Success criteria - "You should be able to..." statements that define learning goals'),
+				practiceQuestions: z.array(
+					z.object({
+						question: z.string().describe('Practice question text'),
+						answer: z.string().optional().describe('Answer or explanation for the practice question'),
+					})
+				).optional().describe('Practice questions to test understanding'),
+				resources: z.array(
+					z.object({
+						type: z.enum(['module', 'assignment', 'course', 'page', 'file', 'url']).describe('Type of resource'),
+						name: z.string().describe('Name of the resource'),
+						url: z.string().optional().describe('URL to the resource if available'),
+					})
+				).optional().describe('Array of related resources and links'),
+				metadata: z.object({
+					topics: z.array(z.string()).optional().describe('Topics covered in the notes'),
+					estimatedReadingTime: z.number().optional().describe('Estimated reading time in minutes'),
+					sourcesUsed: z.array(z.string()).optional().describe('List of sources used to generate the notes'),
+				}).optional().describe('Additional metadata about the notes'),
+			}),
+			execute: async (noteData: any) => {
+				// Simply return the note data as-is
+				// This tool exists to allow the AI to provide structured output
+				// that will be rendered by the NoteUI component
+				return noteData;
+			},
+		}),
 	};
 }
