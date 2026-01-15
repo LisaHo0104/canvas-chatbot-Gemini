@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Loader2, FileQuestion, FileText } from 'lucide-react'
+import { Loader2, FileQuestion, FileText, Calendar } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -20,7 +20,7 @@ import { getModeFromArtifactType, getModeBadgeColors } from '@/lib/mode-colors'
 interface SaveArtifactDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  artifactType: 'quiz' | 'rubric_analysis'
+  artifactType: 'quiz' | 'rubric_analysis' | 'study_plan'
   artifactData: any
   onSave: () => void
 }
@@ -45,6 +45,8 @@ export function SaveArtifactDialog({
         setTitle(artifactData.title)
       } else if (artifactType === 'rubric_analysis' && artifactData?.assignmentName) {
         setTitle(`Rubric Analysis: ${artifactData.assignmentName}`)
+      } else if (artifactType === 'study_plan' && artifactData?.title) {
+        setTitle(artifactData.title)
       }
     }
   }, [open, artifactType, artifactData, title])
@@ -102,15 +104,25 @@ export function SaveArtifactDialog({
   }
 
   const getArtifactTypeLabel = () => {
-    return artifactType === 'quiz' ? 'Quiz' : 'Rubric Analysis'
+    switch (artifactType) {
+      case 'quiz': return 'Quiz'
+      case 'rubric_analysis': return 'Rubric Analysis'
+      case 'study_plan': return 'Study Plan'
+      default: return artifactType
+    }
   }
 
   const getArtifactTypeIcon = () => {
-    return artifactType === 'quiz' ? (
-      <FileQuestion className="size-4" />
-    ) : (
-      <FileText className="size-4" />
-    )
+    switch (artifactType) {
+      case 'quiz':
+        return <FileQuestion className="size-4" />
+      case 'rubric_analysis':
+        return <FileText className="size-4" />
+      case 'study_plan':
+        return <Calendar className="size-4" />
+      default:
+        return <FileText className="size-4" />
+    }
   }
 
   return (

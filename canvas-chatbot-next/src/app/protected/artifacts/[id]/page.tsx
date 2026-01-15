@@ -7,6 +7,7 @@ import { ArrowLeft, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { QuizUI } from '@/components/quiz/quiz-ui'
 import { RubricAnalysisUI } from '@/components/rubric-interpreter/rubric-analysis-ui'
+import { StudyPlanUI } from '@/components/study-plan'
 import { Spinner } from '@/components/ui/spinner'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Breadcrumb, BreadcrumbList, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator } from '@/components/ui/breadcrumb'
@@ -16,7 +17,7 @@ interface Artifact {
   title: string
   description: string | null
   tags: string[]
-  artifact_type: 'quiz' | 'rubric_analysis'
+  artifact_type: 'quiz' | 'rubric_analysis' | 'study_plan'
   artifact_data: any
   created_at: string
   updated_at: string
@@ -32,11 +33,13 @@ export default function ArtifactPage() {
   const [error, setError] = useState<string | null>(null)
   const [quizHistory, setQuizHistory] = useState<any[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
+  const [studyPlanProgress, setStudyPlanProgress] = useState<any[]>([])
 
   useEffect(() => {
     if (artifactId) {
       loadArtifact()
       loadQuizHistory()
+      loadStudyPlanProgress()
     }
   }, [artifactId])
   
@@ -54,6 +57,20 @@ export default function ArtifactPage() {
       console.error('Error loading quiz history:', err)
     } finally {
       setHistoryLoading(false)
+    }
+  }
+
+  const loadStudyPlanProgress = async () => {
+    if (!artifactId) return
+    
+    try {
+      const response = await fetch(`/api/study-plan-progress?artifact_id=${artifactId}`)
+      if (response.ok) {
+        const data = await response.json()
+        setStudyPlanProgress(data.progress || [])
+      }
+    } catch (err) {
+      console.error('Error loading study plan progress:', err)
     }
   }
 
@@ -126,6 +143,14 @@ export default function ArtifactPage() {
             )}
             {artifact.artifact_type === 'rubric_analysis' && (
               <RubricAnalysisUI data={artifact.artifact_data} compact={false} />
+            )}
+            {artifact.artifact_type === 'study_plan' && (
+              <StudyPlanUI 
+                data={artifact.artifact_data} 
+                compact={false}
+                artifactId={artifactId}
+                progress={studyPlanProgress}
+              />
             )}
           </div>
         )}

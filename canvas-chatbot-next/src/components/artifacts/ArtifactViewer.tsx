@@ -12,6 +12,7 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { QuizUI } from '@/components/quiz/quiz-ui'
 import { RubricAnalysisUI } from '@/components/rubric-interpreter/rubric-analysis-ui'
+import { StudyPlanUI } from '@/components/study-plan'
 import { Spinner } from '@/components/ui/spinner'
 
 interface ArtifactViewerProps {
@@ -88,6 +89,9 @@ export function ArtifactViewer({ artifactId, open, onOpenChange }: ArtifactViewe
                 )}
                 {artifact.artifact_type === 'rubric_analysis' && (
                   <RubricAnalysisUI data={artifact.artifact_data} compact={false} />
+                )}
+                {artifact.artifact_type === 'study_plan' && (
+                  <StudyPlanUI data={artifact.artifact_data} compact={false} artifactId={artifactId} />
                 )}
               </>
             )}

@@ -20,7 +20,7 @@ interface Artifact {
   title: string
   description: string | null
   tags: string[]
-  artifact_type: 'quiz' | 'rubric_analysis'
+  artifact_type: 'quiz' | 'rubric_analysis' | 'study_plan'
   created_at: string
   updated_at: string
 }

@@ -11,6 +11,7 @@ import { RubricAnalysisUI } from '@/components/rubric-interpreter/rubric-analysi
 import { RubricModal } from '@/components/rubric-interpreter/rubric-modal'
 import { QuizUI } from '@/components/quiz/quiz-ui'
 import { QuizModal } from '@/components/quiz/quiz-modal'
+import { StudyPlanUI, StudyPlanModal } from '@/components/study-plan'
 import { Plan, PlanHeader, PlanTitle, PlanDescription, PlanContent, PlanTrigger, PlanFooter, PlanAction } from '@/components/ai-elements/plan'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -28,8 +29,8 @@ interface ToolRendererProps {
 }
 
 export function ToolRenderer({ toolName, result, toolPart, onApprove, onReject }: ToolRendererProps) {
-  // For generate_quiz_plan, we need to show the plan even if result is null (use input instead)
-  if (toolName === 'generate_quiz_plan') {
+  // For generate_quiz_plan and generate_study_plan_proposal, we need to show the plan even if result is null (use input instead)
+  if (toolName === 'generate_quiz_plan' || toolName === 'generate_study_plan_proposal') {
     // Use result if available, otherwise use input from toolPart
     const planData = result || (toolPart?.input as any)
     if (!planData && !toolPart) return null
@@ -126,11 +127,11 @@ export function ToolRenderer({ toolName, result, toolPart, onApprove, onReject }
           </div>
         )
       }
-      // Check if result has the expected structure for RubricAnalysisUI
+      // Check if result has the expected structure for RubricAnalysisUI (simplified schema)
       if (result && typeof result === 'object' && 'criteria' in result && Array.isArray(result.criteria)) {
-        // Verify it has the full analysis structure
+        // Verify it has the simplified analysis structure
         const firstCriterion = result.criteria[0]
-        if (firstCriterion && 'gradeLevels' in firstCriterion && 'commonMistakes' in firstCriterion) {
+        if (firstCriterion && 'whatToAim' in firstCriterion && 'whatToAvoid' in firstCriterion) {
           // Fully analyzed data - render with compact RubricAnalysisUI and modal
           return <RubricOutputRenderer rubricData={result as any} messageId={(toolPart as any)?.toolCallId} />
         }
@@ -142,7 +143,7 @@ export function ToolRenderer({ toolName, result, toolPart, onApprove, onReject }
             <strong>⚠️ Incomplete Analysis Data</strong>
           </p>
           <p className="text-xs text-yellow-600 dark:text-yellow-300 mt-1">
-            The analysis data structure is incomplete. Expected full RubricAnalysisOutput format.
+            The analysis data structure is incomplete. Expected simplified RubricAnalysisOutput format with whatToAim and whatToAvoid fields.
           </p>
         </div>
       )
@@ -357,6 +358,182 @@ export function ToolRenderer({ toolName, result, toolPart, onApprove, onReject }
         </div>
       )
 
+    case 'generate_study_plan_proposal':
+      // This tool provides the study plan proposal for user approval
+      if (result?.error) {
+        return (
+          <div className="p-4 border rounded-lg bg-red-50 dark:bg-red-950">
+            <p className="text-sm text-red-800 dark:text-red-200">
+              <strong>Error:</strong> {result.error}
+            </p>
+          </div>
+        )
+      }
+      const studyPlanData = result || (toolPart?.input as any)
+      if (studyPlanData && typeof studyPlanData === 'object' && 'planType' in studyPlanData && 'estimatedMilestones' in studyPlanData) {
+        const sources = studyPlanData.sources || {}
+        const sourcesList: string[] = []
+        if (sources.courses && Array.isArray(sources.courses)) {
+          sourcesList.push(...sources.courses.map((c: any) => `Course: ${c.name}`))
+        }
+        if (sources.modules && Array.isArray(sources.modules)) {
+          sourcesList.push(...sources.modules.map((m: any) => `Module: ${m.name}`))
+        }
+        if (sources.assignments && Array.isArray(sources.assignments)) {
+          sourcesList.push(...sources.assignments.map((a: any) => `Assignment: ${a.name}`))
+        }
+
+        const planTypeLabels: Record<string, string> = {
+          'exam_prep': 'Exam Preparation',
+          'course_mastery': 'Course Mastery',
+          'assignment_focused': 'Assignment Focused'
+        }
+
+        return (
+          <Plan defaultOpen className="w-full">
+            <PlanHeader>
+              <div className="flex items-start justify-between w-full">
+                <div className="flex-1">
+                  <PlanTitle>Study Plan Proposal</PlanTitle>
+                  <PlanDescription>
+                    Review the plan below and approve to generate the full study plan
+                  </PlanDescription>
+                </div>
+                <PlanTrigger />
+              </div>
+            </PlanHeader>
+            <PlanContent>
+              <div className="space-y-4">
+                <div>
+                  <h4 className="font-semibold text-sm mb-2">Plan Type</h4>
+                  <Badge variant="outline" className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200">
+                    {planTypeLabels[studyPlanData.planType] || studyPlanData.planType}
+                  </Badge>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <h4 className="font-semibold text-sm mb-2">Estimated Milestones</h4>
+                    <p className="text-sm text-muted-foreground">{studyPlanData.estimatedMilestones} milestones</p>
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-sm mb-2">Estimated Hours</h4>
+                    <p className="text-sm text-muted-foreground">{studyPlanData.estimatedHours} hours total</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <h4 className="font-semibold text-sm mb-2">Start Date</h4>
+                    <p className="text-sm text-muted-foreground">
+                      {new Date(studyPlanData.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </p>
+                  </div>
+                  {studyPlanData.targetDate && (
+                    <div>
+                      <h4 className="font-semibold text-sm mb-2">Target Date</h4>
+                      <p className="text-sm text-muted-foreground">
+                        {new Date(studyPlanData.targetDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {studyPlanData.topics && Array.isArray(studyPlanData.topics) && studyPlanData.topics.length > 0 && (
+                  <div>
+                    <h4 className="font-semibold text-sm mb-2">Topics Covered</h4>
+                    <div className="flex flex-wrap gap-2">
+                      {studyPlanData.topics.map((topic: string, i: number) => (
+                        <Badge key={i} variant="outline">{topic}</Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {sourcesList.length > 0 && (
+                  <div>
+                    <h4 className="font-semibold text-sm mb-2">Sources</h4>
+                    <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
+                      {sourcesList.map((source: string, i: number) => (
+                        <li key={i}>{source}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {studyPlanData.userPrompt && (
+                  <div>
+                    <h4 className="font-semibold text-sm mb-2">User Requirements</h4>
+                    <p className="text-sm text-muted-foreground">{studyPlanData.userPrompt}</p>
+                  </div>
+                )}
+              </div>
+            </PlanContent>
+            {toolPart?.state === 'approval-requested' && toolPart.approval && 'id' in toolPart.approval && onApprove && (
+              <PlanFooter>
+                <div className="flex items-center justify-end gap-2 w-full">
+                  <PlanAction>
+                    <Button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onApprove(toolPart.approval.id);
+                      }}
+                      className="bg-emerald-600 hover:bg-emerald-700"
+                    >
+                      Approve
+                    </Button>
+                  </PlanAction>
+                </div>
+              </PlanFooter>
+            )}
+          </Plan>
+        )
+      }
+      // If no data at all, show a message
+      return (
+        <div className="p-4 border rounded-lg bg-yellow-50 dark:bg-yellow-950">
+          <p className="text-sm text-yellow-800 dark:text-yellow-200">
+            <strong>⚠️ No Plan Data</strong>
+          </p>
+          <p className="text-xs text-yellow-600 dark:text-yellow-300 mt-1">
+            Waiting for study plan proposal data...
+          </p>
+        </div>
+      )
+
+    case 'provide_study_plan_output':
+      // This tool provides the fully generated study plan data for rendering
+      if (result?.error) {
+        return (
+          <div className="p-4 border rounded-lg bg-red-50 dark:bg-red-950">
+            <p className="text-sm text-red-800 dark:text-red-200">
+              <strong>Error:</strong> {result.error}
+            </p>
+          </div>
+        )
+      }
+      // Check if result has the expected structure for StudyPlanUI
+      if (result && typeof result === 'object' && 'milestones' in result && Array.isArray(result.milestones)) {
+        // Verify it has the full study plan structure
+        const firstMilestone = result.milestones[0]
+        if (firstMilestone && 'title' in firstMilestone && 'studyTasks' in firstMilestone) {
+          // Fully generated study plan data - render with compact StudyPlanUI and modal
+          return <StudyPlanOutputRenderer studyPlanData={result as any} />
+        }
+      }
+      // If structure is incomplete, show a message
+      return (
+        <div className="p-4 border rounded-lg bg-yellow-50 dark:bg-yellow-950">
+          <p className="text-sm text-yellow-800 dark:text-yellow-200">
+            <strong>⚠️ Incomplete Study Plan Data</strong>
+          </p>
+          <p className="text-xs text-yellow-600 dark:text-yellow-300 mt-1">
+            The study plan data structure is incomplete. Expected full StudyPlanOutput format with milestones array.
+          </p>
+        </div>
+      )
+
     case 'webSearch':
       const results = result?.results || (Array.isArray(result) ? result : [])
       if (!results.length) return <div className="text-sm text-muted-foreground">No results found</div>
@@ -434,6 +611,39 @@ function RubricOutputRenderer({ rubricData, messageId }: { rubricData: any; mess
         onOpenChange={setIsModalOpen}
         data={rubricData}
         messageId={messageId}
+      />
+    </>
+  )
+}
+
+// Separate component for study plan output to manage modal state
+function StudyPlanOutputRenderer({ studyPlanData }: { studyPlanData: any }) {
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false)
+
+  return (
+    <>
+      <div className="space-y-2">
+        <StudyPlanUI 
+          data={studyPlanData} 
+          compact={true} 
+          onViewFull={() => setIsModalOpen(true)}
+          onSaveClick={() => setSaveDialogOpen(true)}
+        />
+      </div>
+      <StudyPlanModal
+        open={isModalOpen}
+        onOpenChange={setIsModalOpen}
+        data={studyPlanData}
+      />
+      <SaveArtifactDialog
+        open={saveDialogOpen}
+        onOpenChange={setSaveDialogOpen}
+        artifactType="study_plan"
+        artifactData={studyPlanData}
+        onSave={() => {
+          // Optionally show a success message or refresh
+        }}
       />
     </>
   )

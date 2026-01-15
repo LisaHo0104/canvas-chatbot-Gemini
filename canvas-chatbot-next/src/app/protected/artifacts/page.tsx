@@ -15,7 +15,7 @@ interface Artifact {
   title: string
   description: string | null
   tags: string[]
-  artifact_type: 'quiz' | 'rubric_analysis'
+  artifact_type: 'quiz' | 'rubric_analysis' | 'study_plan'
   created_at: string
   updated_at: string
 }
@@ -25,7 +25,7 @@ export default function ArtifactsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
-  const [typeFilter, setTypeFilter] = useState<'all' | 'quiz' | 'rubric_analysis'>('all')
+  const [typeFilter, setTypeFilter] = useState<'all' | 'quiz' | 'rubric_analysis' | 'study_plan'>('all')
   const [sortBy, setSortBy] = useState<'created_at' | 'updated_at' | 'title'>('created_at')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
 
@@ -102,7 +102,7 @@ export default function ArtifactsPage() {
               Artifacts
             </h1>
             <p className="text-sm text-muted-foreground mt-1">
-              View and manage your saved quizzes and rubric analyses
+              View and manage your saved quizzes, rubric analyses, and study plans
             </p>
           </div>
         </div>
@@ -127,6 +127,7 @@ export default function ArtifactsPage() {
               <SelectItem value="all">All Types</SelectItem>
               <SelectItem value="quiz">Quizzes</SelectItem>
               <SelectItem value="rubric_analysis">Rubric Analyses</SelectItem>
+              <SelectItem value="study_plan">Study Plans</SelectItem>
             </SelectContent>
           </Select>
           <Select value={sortBy} onValueChange={(value: any) => setSortBy(value)}>
@@ -177,7 +178,7 @@ export default function ArtifactsPage() {
                     <p className="text-sm text-muted-foreground mt-1">
                       {searchQuery || typeFilter !== 'all'
                         ? 'Try adjusting your filters'
-                        : 'Save quizzes and rubric analyses from the chat to see them here'}
+                        : 'Save quizzes, rubric analyses, and study plans from the chat to see them here'}
                     </p>
                   </div>
                 </div>
