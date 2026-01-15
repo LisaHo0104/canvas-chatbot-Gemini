@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback, startTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient as createSupabaseClient } from '@/lib/supabase/client'
-import { X, CopyIcon, RefreshCcwIcon, GlobeIcon, CheckIcon, SparklesIcon, FolderIcon, LayersIcon, FileText, BookOpen, GraduationCap, FileQuestion } from 'lucide-react'
+import { X, CopyIcon, RefreshCcwIcon, GlobeIcon, CheckIcon, SparklesIcon, FolderIcon, LayersIcon, FileText, BookOpen, GraduationCap, FileQuestion, StickyNote } from 'lucide-react'
 import { useChat } from '@ai-sdk/react'
 import { lastAssistantMessageIsCompleteWithApprovalResponses } from 'ai'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -28,6 +28,10 @@ import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover
 import { Spinner } from '@/components/ui/spinner'
 import { Badge } from '@/components/ui/badge'
 import { getModeColors, getModeBadgeColors, type ModeType } from '@/lib/mode-colors'
+import { TextSelector } from '@/components/ai-editing/text-selector'
+import { FloatingToolbar } from '@/components/ai-editing/floating-toolbar'
+import { ComparisonView } from '@/components/ai-editing/comparison-view'
+import type { EditOperation } from '@/components/ai-editing/editing-toolbar'
 
 let supabase: any = null
 
@@ -102,17 +106,31 @@ export default function ChatPage() {
   // Selected system prompts for current chat session
   const [selectedSystemPromptIds, setSelectedSystemPromptIds] = useState<string[]>([])
   
+  // AI editing state
+  const [textSelection, setTextSelection] = useState<{ text: string; range: Range | null; bounds: DOMRect | null; messageId: string; partIndex: number } | null>(null)
+  const [editingState, setEditingState] = useState<{
+    messageId: string
+    partIndex: number
+    originalText: string
+    generatedText: string | null
+    loading: boolean
+    error: string | null
+    operation: EditOperation
+  } | null>(null)
+  
   // Mapping between modes and system prompt template types
   const MODE_TO_TEMPLATE_TYPE: Record<string, string> = {
     'rubric': 'rubric_analysis',
     'quiz': 'quiz_generation',
     'study-plan': 'study_plan',
+    'note': 'note_generation',
   }
   
   const TEMPLATE_TYPE_TO_MODE: Record<string, string | null> = {
     'rubric_analysis': 'rubric',
     'quiz_generation': 'quiz',
     'study_plan': 'study-plan',
+    'note_generation': 'note',
     'default': null,
   }
   
@@ -1276,6 +1294,7 @@ export default function ChatPage() {
                               'provide_rubric_analysis',
                               'generate_quiz_plan',
                               'provide_quiz_output',
+                              'provide_note_output',
                               'webSearch'
                             ].includes(toolName)
 
@@ -1659,12 +1678,14 @@ export default function ChatPage() {
                           <FileQuestion className="size-4" />
                         ) : mode === 'study-plan' ? (
                           <BookOpen className="size-4" />
+                        ) : mode === 'note' ? (
+                          <StickyNote className="size-4" />
                         ) : (
                           <GraduationCap className="size-4" />
                         )}
                         <span className="ml-1 flex items-center gap-1.5">
-                          {mode === 'rubric' ? 'Rubric' : mode === 'quiz' ? 'Quiz Generation' : mode === 'study-plan' ? 'Study Plan' : 'Generic'}
-                          {(mode === 'rubric' || mode === 'quiz' || mode === 'study-plan') && (
+                          {mode === 'rubric' ? 'Rubric' : mode === 'quiz' ? 'Quiz Generation' : mode === 'study-plan' ? 'Study Plan' : mode === 'note' ? 'Note Mode' : 'Generic'}
+                          {(mode === 'rubric' || mode === 'quiz' || mode === 'study-plan' || mode === 'note') && (
                             <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 h-4 border ${getModeBadgeColors(mode as ModeType)}`}>Beta</Badge>
                           )}
                         </span>
@@ -1728,6 +1749,20 @@ export default function ChatPage() {
                                 <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 h-4 border ${getModeBadgeColors('study-plan')}`}>Beta</Badge>
                               </span>
                               {mode === 'study-plan' && <CheckIcon className="ml-auto size-4" />}
+                            </PromptInputCommandItem>
+                            <PromptInputCommandItem
+                              value="note"
+                              onSelect={() => {
+                                handleModeChange('note')
+                                setModeOpen(false)
+                              }}
+                            >
+                              <StickyNote className={`size-4 ${getModeColors('note').text}`} />
+                              <span className="flex items-center gap-1.5">
+                                Note Mode
+                                <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 h-4 border ${getModeBadgeColors('note')}`}>Beta</Badge>
+                              </span>
+                              {mode === 'note' && <CheckIcon className="ml-auto size-4" />}
                             </PromptInputCommandItem>
                           </PromptInputCommandGroup>
                         </PromptInputCommandList>
