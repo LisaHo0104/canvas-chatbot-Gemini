@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback, startTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient as createSupabaseClient } from '@/lib/supabase/client'
-import { X, CopyIcon, RefreshCcwIcon, GlobeIcon, CheckIcon, SparklesIcon, FolderIcon, LayersIcon, FileText, BookOpen, GraduationCap, FileQuestion, Info } from 'lucide-react'
+import { X, CopyIcon, RefreshCcwIcon, GlobeIcon, CheckIcon, SparklesIcon, FolderIcon, LayersIcon, FileText, BookOpen, GraduationCap, FileQuestion, Info, History } from 'lucide-react'
 import { useChat } from '@ai-sdk/react'
 import { lastAssistantMessageIsCompleteWithApprovalResponses } from 'ai'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -70,6 +70,7 @@ export default function ChatPage() {
   const [canvasToken, setCanvasToken] = useState('')
   const [canvasStatus, setCanvasStatus] = useState<'connected' | 'missing' | 'error'>('missing')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false)
   const [webSearch, setWebSearch] = useState(false)
   const [mode, setMode] = useState<string | null>(null)
   const [modeOpen, setModeOpen] = useState(false)
@@ -119,6 +120,28 @@ export default function ChatPage() {
   // Store system prompt templates and user prompts for sync logic
   const [systemPromptTemplates, setSystemPromptTemplates] = useState<Array<{ id: string; template_type: string }>>([])
   const [userPrompts, setUserPrompts] = useState<Array<{ id: string; template_type: string | null }>>([])
+  // Helper functions for date formatting
+  const formatDate = (date: Date) => {
+    const now = new Date()
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const startOfDate = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+    const diffDays = Math.floor((startOfToday.getTime() - startOfDate.getTime()) / (1000 * 60 * 60 * 24))
+
+    if (diffDays === 0) {
+      return 'Today'
+    } else if (diffDays === 1) {
+      return 'Yesterday'
+    } else if (diffDays > 1 && diffDays < 7) {
+      return `${diffDays} days ago`
+    } else {
+      return date.toLocaleDateString()
+    }
+  }
+
+  const formatTime = (date: Date) => {
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  }
+
   const { messages: uiMessages, sendMessage: sendChatMessage, status, regenerate, setMessages: setUIMessages, addToolApprovalResponse, error } = useChat({
     api: '/api/chat',
     experimental_throttle: 50,
@@ -1025,7 +1048,7 @@ export default function ChatPage() {
   }
 
   const handleSessionSelect = async (session: ChatSession) => {
-    setMobileMenuOpen(false)
+    setHistoryDrawerOpen(false)
     suppressAutoSuggestionsRef.current = true
     setSuggestionsVisible(false)
     setDynamicSuggestions([])
@@ -1130,44 +1153,85 @@ export default function ChatPage() {
 
   return (
     <div className="flex h-full overflow-x-hidden">
-      <div className="hidden md:block flex-shrink-0">
-        <EnhancedSidebar
-          sessions={sessions}
-          currentSession={currentSession}
-          onSessionSelect={handleSessionSelect}
-          onNewSession={startEphemeralSession}
-          onSessionDelete={handleSessionDelete}
-          onSessionRename={handleSessionRename}
-          status={status}
-          titleGenerating={titleGenerating}
-        />
-      </div>
-
-      {mobileMenuOpen && (
-        <div className="fixed inset-0 z-50 md:hidden">
-          <div className="absolute inset-0 bg-black bg-opacity-50" onClick={() => setMobileMenuOpen(false)} />
-          <Button onClick={() => setMobileMenuOpen(false)} aria-label="Close menu" variant="ghost" size="icon" className="absolute right-3 top-3 z-50">
-            <X className="w-4 h-4" />
-          </Button>
-          <div className="absolute left-0 top-0 h-full w-80">
-            <EnhancedSidebar
-              sessions={sessions}
-              currentSession={currentSession}
-              onSessionSelect={handleSessionSelect}
-              onNewSession={startEphemeralSession}
-              onSessionDelete={handleSessionDelete}
-              onSessionRename={handleSessionRename}
-              status={status}
-              titleGenerating={titleGenerating}
-            />
-          </div>
-        </div>
-      )}
+      <EnhancedSidebar
+        sessions={sessions}
+        currentSession={currentSession}
+        onSessionSelect={handleSessionSelect}
+        onNewSession={startEphemeralSession}
+        onSessionDelete={handleSessionDelete}
+        onSessionRename={handleSessionRename}
+        status={status}
+        titleGenerating={titleGenerating}
+        open={historyDrawerOpen}
+        onOpenChange={setHistoryDrawerOpen}
+      />
 
       <div className="flex-1 flex flex-col min-h-0 overflow-x-hidden">
         <Conversation className="h-full relative">
+
+
           <ConversationContent className="chat-content relative">
-            {status === 'error' && (
+            {/* Sticky Header */}
+            <div className="sticky top-0 z-10 -mx-4 -mt-4 mb-4 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
+              <div className="px-4 py-3 flex items-center justify-between gap-4">
+              {/* Left: History Button and Title */}
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      onClick={() => setHistoryDrawerOpen(true)}
+                      aria-label="Open conversation history"
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9 shrink-0"
+                    >
+                      <History className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Conversation History</p>
+                  </TooltipContent>
+                </Tooltip>
+                
+                {/* Chat Title */}
+                <div className="flex-1 min-w-0">
+                  {titleGenerating ? (
+                    <Skeleton className="h-5 w-48" />
+                  ) : (status === 'streaming' || status === 'submitted') && currentSession?.id ? (
+                    <Shimmer as="h2" duration={1} className="text-lg font-semibold truncate">
+                      {currentSession.title}
+                    </Shimmer>
+                  ) : (
+                    <h2 className="text-lg font-semibold truncate">
+                      {currentSession?.title || 'New Chat'}
+                    </h2>
+                  )}
+                </div>
+              </div>
+
+              {/* Right: Metadata */}
+              {currentSession && (
+                <div className="flex items-center gap-4 text-sm text-slate-500 shrink-0">
+                  <div className="hidden sm:flex items-center gap-2">
+                    <span>{formatDate(currentSession.lastMessage)}</span>
+                    <span>•</span>
+                    <span>{formatTime(currentSession.lastMessage)}</span>
+                  </div>
+                  <div className="hidden md:flex items-center gap-2">
+                    <span>
+                      {currentSession.messages?.length || uiMessages.length} {((currentSession.messages?.length || uiMessages.length) === 1) ? 'message' : 'messages'}
+                    </span>
+                  </div>
+                  <div className="hidden lg:flex items-center gap-2">
+                    <span>•</span>
+                    <span>
+                      Created {currentSession.created_at.toLocaleDateString()}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>           {status === 'error' && (
               <Alert className="max-w-3xl mx-auto" variant="destructive">
                 <AlertTitle>Message failed</AlertTitle>
                 <AlertDescription>
