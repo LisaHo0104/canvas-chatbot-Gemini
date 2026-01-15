@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback, startTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient as createSupabaseClient } from '@/lib/supabase/client'
-import { X, CopyIcon, RefreshCcwIcon, GlobeIcon, CheckIcon, SparklesIcon, FolderIcon, LayersIcon, FileText, BookOpen, GraduationCap, FileQuestion } from 'lucide-react'
+import { X, CopyIcon, RefreshCcwIcon, GlobeIcon, CheckIcon, SparklesIcon, FolderIcon, LayersIcon, FileText, BookOpen, GraduationCap, FileQuestion, Info } from 'lucide-react'
 import { useChat } from '@ai-sdk/react'
 import { lastAssistantMessageIsCompleteWithApprovalResponses } from 'ai'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -1413,6 +1413,25 @@ export default function ChatPage() {
 
         <div className="grid shrink-0 gap-2 border-t border-slate-200">
           <PromptInputProvider>
+            {canvasStatus === 'missing' && (
+              <div className="px-4 pt-4">
+                <Alert variant="default">
+                  <Info className="h-4 w-4" />
+                  <AlertTitle>Canvas Integration Required</AlertTitle>
+                  <AlertDescription>
+                    Canvas token not configured. Set up your Canvas integration in Context to enable Canvas features.
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-2"
+                      onClick={() => router.push('/protected/context')}
+                    >
+                      Go to Context
+                    </Button>
+                  </AlertDescription>
+                </Alert>
+              </div>
+            )}
             <Suggestions className="px-4 pt-2">
               <Tooltip>
                 <TooltipTrigger asChild>
