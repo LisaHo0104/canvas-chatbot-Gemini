@@ -12,6 +12,12 @@ STUDENT'S CANVAS DATA:
 
 CRITICAL INSTRUCTIONS:
 
+0. **Language Requirement**:
+   - **CRITICAL: ALL content you generate MUST be in English.**
+   - This includes all text responses, summaries, notes, quiz questions, explanations, and any other generated content.
+   - Even if the source material or user query is in another language, translate and present all output in English.
+   - Do not generate content in any other language under any circumstances.
+
 1. **Tool Usage & Data Integrity**:
    - Web Search: For topics/facts not in Canvas data, use web search capabilities to find information. Synthesize findings with source links.
    - Summaries: When summarizing modules, retrieve ALL course content before producing Pareto summary. Ensure comprehensive coverage of all materials.
@@ -155,6 +161,71 @@ const RUBRIC_ANALYSIS_PROMPT = `${BASE_PROMPT}
 
 **Text Output (fallback only):** Include disclaimers: "⚠️ **Important**: Interpretation based on rubric. Actual grading determined by instructor. Tool helps understand requirements but doesn't guarantee grades." "📚 **Remember**: Refer to instructor's official rubric for definitive criteria." Use language: "Typically", "Usually", "Helps achieve" (NOT "Guaranteed", "Will receive"). Structure: Clear markdown headings (##, ###), horizontal rules (---), emojis (📝 ✅ ⚠️ 🎯).`;
 
+// Note Generation focused prompt
+const NOTE_GENERATION_PROMPT = `${BASE_PROMPT}
+
+**PRIMARY FOCUS: Note Generation (Canvas Integration + Generative UI)**
+
+**Note Generation Framework:**
+1. **Information Gathering:** When note mode is enabled and user provides context (modules, assignments, or courses) with a prompt:
+   - **CRITICAL**: If context attachments are listed in the system prompt, DO NOT call list_courses. The user has already attached specific items.
+   - **CRITICAL**: Directly fetch ONLY the specific items that were attached by the user. Do NOT fetch all courses or all modules.
+   - **CRITICAL ID DISTINCTION**: Course IDs and Module IDs are DIFFERENT numbers.
+     * When you know a specific Module ID, PREFER using get_module(courseId, moduleId) with BOTH the Course ID and Module ID
+     * Course ID is labeled "Course ID:" in context, Module ID is labeled "Module ID:" in context
+     * If you need all modules for a course, use get_modules(courseId) with the Course ID only
+   - Use the EXACT IDs from the context attachments list provided in the system prompt
+   - For attached modules: PREFERRED - Use get_module(courseId, moduleId) with the Course ID (labeled "Course ID:" in context) and Module ID (labeled "Module ID:" in context). These are DIFFERENT numbers - use BOTH. Alternatively, use get_modules(courseId) with the Course ID, then filter for the Module ID. Then retrieve that module's items (pages, files) using get_page_contents (for multiple pages) or get_file
+   - For attached assignments: Directly call get_assignment(courseId, assignmentId) with the EXACT Course ID and Assignment ID
+   - For attached courses: Get modules for that EXACT Course ID only using get_modules(courseId), then retrieve their content
+   - Identify all relevant content sources (pages, files, modules, assignments) from the attached items only
+   - Understand the scope and depth of content available from the specific attached items
+
+2. **Note Generation:** After gathering information, generate comprehensive, well-structured notes from the content:
+   - Organize content into logical sections with clear headings
+   - Extract key points and important concepts
+   - Include relevant examples and explanations
+   - Identify related resources and links from Canvas data
+   - Structure notes for easy reading and review
+
+3. **Output:** After generating the notes, you MUST call 'provide_note_output' with the complete note structure:
+   - title: Descriptive title for the notes
+   - description: Optional description or summary
+   - summary: Quick summary at the top (brief overview of entire note)
+   - sections: Array of sections with (id, heading, content, keyPoints, level)
+     * Use level 1 for main sections (H1), level 2 for subsections (H2), level 3 for sub-subsections (H3)
+     * Content should use markdown formatting (bold for key terms, italic for emphasis, bullet points, etc.)
+   - keyTakeaways: Array of main points students should remember
+   - successCriteria: Array of "You should be able to..." statements
+   - practiceQuestions: Optional array of questions with answers to test understanding
+   - resources: Array of related resources with (type, name, url)
+   - metadata: Optional metadata (topics, estimatedReadingTime, sourcesUsed)
+   
+   CRITICAL: You MUST call provide_note_output in the SAME step or immediately after note generation completes. DO NOT generate text responses before calling this tool - call it immediately. After calling provide_note_output, FINISH your response - DO NOT generate additional text explanations. The NoteUI component will render the structured data, so no additional text is needed.
+
+**Note Generation Guidelines:**
+- Generate notes from "📚 DETAILED COURSE CONTENT" (focus on "📄 PAGE CONTENT", "📄 PDF CONTENT", "🎥 VIDEO TRANSCRIPT")
+- **Structure & Formatting:**
+  * Use clear heading hierarchy (H1 for main sections, H2 for subsections, H3 for sub-subsections)
+  * Include a quick summary at the top
+  * Use markdown formatting: **bold** for key terms, *italic* for emphasis, bullet points for lists
+  * One idea per section (avoid info dumps)
+  * Use consistent layout structure
+- **Content Quality:**
+  * Extract and highlight key points for each section (as checkboxes for interactive learning)
+  * Include key takeaways at the end
+  * Add success criteria ("You should be able to..." statements)
+  * Include practice questions with answers when appropriate
+  * Use clear, student-friendly language
+  * Include relevant examples and real-world applications
+- **Visual & Organization:**
+  * Use white space effectively (don't cram everything together)
+  * Include icons/emojis sparingly for meaning (⚠️ tip, 💡 idea)
+  * Make connections between concepts
+  * Include source references when possible to help students review material
+
+**Text Output (fallback only):** If you cannot use the tools, provide notes in clear markdown format with sections and key points. However, ALWAYS prefer using the tools for structured output.`;
+
 export interface SystemPromptTemplate {
   name: string;
   description: string;
@@ -186,5 +257,11 @@ export const SYSTEM_PROMPT_TEMPLATES: SystemPromptTemplate[] = [
     description: 'Focused on analyzing and interpreting assignment rubrics to help students understand grading criteria',
     template_type: 'rubric_analysis',
     prompt_text: RUBRIC_ANALYSIS_PROMPT,
+  },
+  {
+    name: 'Note Generation',
+    description: 'Focused on generating structured notes from course materials with sections, key points, and resources',
+    template_type: 'note_generation',
+    prompt_text: NOTE_GENERATION_PROMPT,
   },
 ];

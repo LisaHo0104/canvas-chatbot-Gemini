@@ -71,6 +71,7 @@ export function SystemPromptSelector({
     'rubric': 'rubric_analysis',
     'quiz': 'quiz_generation',
     'study-plan': 'study_plan',
+    'note': 'note_generation',
   }
 
   // Determine which template is active based on mode
@@ -84,10 +85,10 @@ export function SystemPromptSelector({
   const activeTemplateType = getActiveTemplateType()
   
   // Get mode type for color utilities
-  const modeType: ModeType = mode === 'rubric' ? 'rubric' : mode === 'quiz' ? 'quiz' : mode === 'study-plan' ? 'study-plan' : null
+  const modeType: ModeType = mode === 'rubric' ? 'rubric' : mode === 'quiz' ? 'quiz' : mode === 'study-plan' ? 'study-plan' : mode === 'note' ? 'note' : null
 
   const isBetaFeature = (templateType: string | null | undefined): boolean => {
-    return templateType === 'quiz_generation' || templateType === 'study_plan' || templateType === 'rubric_analysis'
+    return templateType === 'quiz_generation' || templateType === 'study_plan' || templateType === 'rubric_analysis' || templateType === 'note_generation'
   }
 
   // Get mode type from template type
@@ -95,6 +96,7 @@ export function SystemPromptSelector({
     if (templateType === 'quiz_generation') return 'quiz'
     if (templateType === 'rubric_analysis') return 'rubric'
     if (templateType === 'study_plan') return 'study-plan'
+    if (templateType === 'note_generation') return 'note'
     return null
   }
 
