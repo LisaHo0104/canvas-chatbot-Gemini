@@ -116,7 +116,7 @@ export default function ArtifactPage() {
         {/* Artifact Content */}
         {!loading && !error && artifact && (
           <div className="w-full">
-            {artifact.artifact_type === 'quiz' && (
+            {artifact.artifact_type === 'quiz' && artifact.artifact_data && (
               <QuizUI 
                 data={artifact.artifact_data} 
                 compact={false}
@@ -124,8 +124,14 @@ export default function ArtifactPage() {
                 history={quizHistory}
               />
             )}
-            {artifact.artifact_type === 'rubric_analysis' && (
+            {artifact.artifact_type === 'rubric_analysis' && artifact.artifact_data && (
               <RubricAnalysisUI data={artifact.artifact_data} compact={false} />
+            )}
+            {(!artifact.artifact_data) && (
+              <Alert variant="destructive" className="max-w-2xl mx-auto">
+                <AlertTitle>Error</AlertTitle>
+                <AlertDescription>Artifact data is missing or invalid.</AlertDescription>
+              </Alert>
             )}
           </div>
         )}
