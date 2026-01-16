@@ -8,11 +8,8 @@ import { FileCard } from './file-card'
 import { GradeCard } from './grade-card'
 import { FeedbackRubric } from './feedback-rubric'
 import { RubricAnalysisUI } from '@/components/rubric-interpreter/rubric-analysis-ui'
-import { RubricModal } from '@/components/rubric-interpreter/rubric-modal'
 import { QuizUI } from '@/components/quiz/quiz-ui'
-import { QuizModal } from '@/components/quiz/quiz-modal'
 import { NoteUI } from '@/components/note/note-ui'
-import { NoteModal } from '@/components/note/note-modal'
 import { Plan, PlanHeader, PlanTitle, PlanDescription, PlanContent, PlanTrigger, PlanFooter, PlanAction } from '@/components/ai-elements/plan'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -27,9 +24,10 @@ interface ToolRendererProps {
   toolPart?: ToolUIPart
   onApprove?: (approvalId: string) => void
   onReject?: (approvalId: string) => void
+  onViewFull?: (type: 'quiz' | 'rubric' | 'note', data: any, messageId?: string) => void
 }
 
-export function ToolRenderer({ toolName, result, toolPart, onApprove, onReject }: ToolRendererProps) {
+export function ToolRenderer({ toolName, result, toolPart, onApprove, onReject, onViewFull }: ToolRendererProps) {
   // For generate_quiz_plan, we need to show the plan even if result is null (use input instead)
   if (toolName === 'generate_quiz_plan') {
     // Use result if available, otherwise use input from toolPart
@@ -133,8 +131,8 @@ export function ToolRenderer({ toolName, result, toolPart, onApprove, onReject }
         // Verify it has the full analysis structure
         const firstCriterion = result.criteria[0]
         if (firstCriterion && 'gradeLevels' in firstCriterion && 'commonMistakes' in firstCriterion) {
-          // Fully analyzed data - render with compact RubricAnalysisUI and modal
-          return <RubricOutputRenderer rubricData={result as any} messageId={(toolPart as any)?.toolCallId} />
+          // Fully analyzed data - render with compact RubricAnalysisUI
+          return <RubricOutputRenderer rubricData={result as any} messageId={(toolPart as any)?.toolCallId} onViewFull={onViewFull} />
         }
       }
       // If structure is incomplete, show a message
@@ -343,8 +341,8 @@ export function ToolRenderer({ toolName, result, toolPart, onApprove, onReject }
         // Verify it has the full quiz structure
         const firstQuestion = result.questions[0]
         if (firstQuestion && 'question' in firstQuestion && 'type' in firstQuestion && 'correctAnswer' in firstQuestion) {
-          // Fully generated quiz data - render with compact QuizUI and modal
-          return <QuizOutputRenderer quizData={result as any} />
+          // Fully generated quiz data - render with compact QuizUI
+          return <QuizOutputRenderer quizData={result as any} onViewFull={onViewFull} messageId={(toolPart as any)?.toolCallId} />
         }
       }
       // If structure is incomplete, show a message
@@ -376,8 +374,8 @@ export function ToolRenderer({ toolName, result, toolPart, onApprove, onReject }
         // Verify it has the full note structure
         const firstSection = result.sections[0]
         if (firstSection && 'heading' in firstSection && 'content' in firstSection) {
-          // Fully generated note data - render with compact NoteUI and modal
-          return <NoteOutputRenderer noteData={result as any} messageId={(toolPart as any)?.toolCallId} />
+          // Fully generated note data - render with compact NoteUI
+          return <NoteOutputRenderer noteData={result as any} messageId={(toolPart as any)?.toolCallId} onViewFull={onViewFull} />
         }
       }
       // If structure is incomplete, show a message
@@ -419,9 +417,8 @@ export function ToolRenderer({ toolName, result, toolPart, onApprove, onReject }
   }
 }
 
-// Separate component for quiz output to manage modal state
-function QuizOutputRenderer({ quizData }: { quizData: any }) {
-  const [isModalOpen, setIsModalOpen] = useState(false)
+// Separate component for quiz output
+function QuizOutputRenderer({ quizData, onViewFull, messageId }: { quizData: any; onViewFull?: (type: 'quiz' | 'rubric' | 'note', data: any, messageId?: string) => void; messageId?: string }) {
   const [saveDialogOpen, setSaveDialogOpen] = useState(false)
 
   return (
@@ -430,15 +427,10 @@ function QuizOutputRenderer({ quizData }: { quizData: any }) {
         <QuizUI 
           data={quizData} 
           compact={true} 
-          onViewFull={() => setIsModalOpen(true)}
+          onViewFull={() => onViewFull?.('quiz', quizData, messageId)}
           onSaveClick={() => setSaveDialogOpen(true)}
         />
       </div>
-      <QuizModal
-        open={isModalOpen}
-        onOpenChange={setIsModalOpen}
-        data={quizData}
-      />
       <SaveArtifactDialog
         open={saveDialogOpen}
         onOpenChange={setSaveDialogOpen}
@@ -452,31 +444,20 @@ function QuizOutputRenderer({ quizData }: { quizData: any }) {
   )
 }
 
-// Separate component for rubric output to manage modal state
-function RubricOutputRenderer({ rubricData, messageId }: { rubricData: any; messageId?: string }) {
-  const [isModalOpen, setIsModalOpen] = useState(false)
-
+// Separate component for rubric output
+function RubricOutputRenderer({ rubricData, messageId, onViewFull }: { rubricData: any; messageId?: string; onViewFull?: (type: 'quiz' | 'rubric' | 'note', data: any, messageId?: string) => void }) {
   return (
-    <>
-      <RubricAnalysisUI 
-        data={rubricData} 
-        messageId={messageId}
-        compact={true} 
-        onViewFull={() => setIsModalOpen(true)} 
-      />
-      <RubricModal
-        open={isModalOpen}
-        onOpenChange={setIsModalOpen}
-        data={rubricData}
-        messageId={messageId}
-      />
-    </>
+    <RubricAnalysisUI 
+      data={rubricData} 
+      messageId={messageId}
+      compact={true} 
+      onViewFull={() => onViewFull?.('rubric', rubricData, messageId)} 
+    />
   )
 }
 
-// Separate component for note output to manage modal state
-function NoteOutputRenderer({ noteData, messageId }: { noteData: any; messageId?: string }) {
-  const [isModalOpen, setIsModalOpen] = useState(false)
+// Separate component for note output
+function NoteOutputRenderer({ noteData, messageId, onViewFull }: { noteData: any; messageId?: string; onViewFull?: (type: 'quiz' | 'rubric' | 'note', data: any, messageId?: string) => void }) {
   const [saveDialogOpen, setSaveDialogOpen] = useState(false)
 
   return (
@@ -486,16 +467,10 @@ function NoteOutputRenderer({ noteData, messageId }: { noteData: any; messageId?
           data={noteData} 
           messageId={messageId}
           compact={true} 
-          onViewFull={() => setIsModalOpen(true)}
+          onViewFull={() => onViewFull?.('note', noteData, messageId)}
           onSaveClick={() => setSaveDialogOpen(true)}
         />
       </div>
-      <NoteModal
-        open={isModalOpen}
-        onOpenChange={setIsModalOpen}
-        data={noteData}
-        messageId={messageId}
-      />
       <SaveArtifactDialog
         open={saveDialogOpen}
         onOpenChange={setSaveDialogOpen}
