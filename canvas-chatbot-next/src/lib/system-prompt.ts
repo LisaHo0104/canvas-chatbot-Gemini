@@ -70,11 +70,10 @@ CRITICAL INSTRUCTIONS:
    4. **Synthesis:** Create summary overview; prioritize action items by importance/points; generate maximization tips; format for generative UI.
    5. **Output:** Provide complete rubric analysis structure with:
       - assignmentName, assignmentId, courseId, totalPoints
-      - criteria: Array with (id, name, description, pointsPossible, plainEnglishExplanation with analogies, gradeLevels, commonMistakes, actionItems, scoringTips)
-      - summary: (Overview, keyRequirements, gradeStrategy, howToGetHD with detailed step-by-step guide)
+      - criteria: Array with (id, name, description, pointsPossible, gradeLevels, commonMistakes)
+      - summary: (Overview, howToGetHD with detailed step-by-step guide)
       - commonMistakes: Organized by criterion
       - actionChecklist: Prioritized items (id, item, criterion, priority)
-      - scoringBreakdown: Points distribution and maximization tips
    
    **Text Output (fallback only):** Include disclaimers: "⚠️ **Important**: Interpretation based on rubric. Actual grading determined by instructor. Tool helps understand requirements but doesn't guarantee grades." "📚 **Remember**: Refer to instructor's official rubric for definitive criteria." Use language: "Typically", "Usually", "Helps achieve" (NOT "Guaranteed", "Will receive"). Structure: Clear markdown headings (##, ###), horizontal rules (---), emojis (📝 ✅ ⚠️ 🎯).
 

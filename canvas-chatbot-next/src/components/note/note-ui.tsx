@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { StickyNote, Clock, ExternalLink, Maximize2, Save, BookOpen, CheckCircle2, Lightbulb, Target, HelpCircle, AlertCircle, BookMarked, List } from 'lucide-react'
+import { StickyNote, ExternalLink, Maximize2, Save, BookOpen, Lightbulb, List } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
@@ -9,7 +9,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { MessageResponse } from '@/components/ai-elements/message'
 import { detectGraphData, detectTableData, detectContentType } from '@/lib/note-content-parser'
@@ -19,30 +18,18 @@ import { NoteTable } from './note-table'
 export interface NoteOutput {
   title: string
   description?: string
-  summary?: string // Quick summary at the top
   sections: Array<{
     id: string
     heading: string
-    content: string
-    keyPoints?: string[]
+    content: string // Markdown supported
     level?: number // Heading level (1, 2, 3 for H1, H2, H3)
   }>
   keyTakeaways?: string[] // Key takeaways at the end
-  successCriteria?: string[] // "You should be able to..." statements
-  practiceQuestions?: Array<{
-    question: string
-    answer?: string
-  }>
   resources?: Array<{
     type: 'module' | 'assignment' | 'course' | 'page' | 'file' | 'url'
     name: string
     url?: string
   }>
-  metadata?: {
-    topics?: string[]
-    estimatedReadingTime?: number
-    sourcesUsed?: string[]
-  }
 }
 
 interface NoteUIProps {
@@ -56,11 +43,6 @@ interface NoteUIProps {
 
 export function NoteUI({ data, messageId, compact = false, onViewFull, onSaveClick, artifactId }: NoteUIProps) {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
-  const [checkedKeyPoints, setCheckedKeyPoints] = useState<Set<string>>(() => {
-    if (typeof window === 'undefined' || !messageId) return new Set()
-    const saved = localStorage.getItem(`note-keypoints-${messageId}`)
-    return saved ? new Set(JSON.parse(saved)) : new Set()
-  })
 
   const toggleSection = (id: string) => {
     const newExpanded = new Set(expandedSections)
@@ -70,20 +52,6 @@ export function NoteUI({ data, messageId, compact = false, onViewFull, onSaveCli
       newExpanded.add(id)
     }
     setExpandedSections(newExpanded)
-  }
-
-  const toggleKeyPoint = (sectionId: string, pointIndex: number) => {
-    const key = `${sectionId}-${pointIndex}`
-    const newChecked = new Set(checkedKeyPoints)
-    if (newChecked.has(key)) {
-      newChecked.delete(key)
-    } else {
-      newChecked.add(key)
-    }
-    setCheckedKeyPoints(newChecked)
-    if (messageId && typeof window !== 'undefined') {
-      localStorage.setItem(`note-keypoints-${messageId}`, JSON.stringify([...newChecked]))
-    }
   }
 
   // Compact view: Show only summary card with button
@@ -99,12 +67,6 @@ export function NoteUI({ data, messageId, compact = false, onViewFull, onSaveCli
               </CardTitle>
               <CardDescription className="flex items-center gap-4 flex-wrap">
                 <span>{data.sections.length} Sections</span>
-                {data.metadata?.estimatedReadingTime && (
-                  <span className="flex items-center gap-1">
-                    <Clock className="size-4" />
-                    ~{data.metadata.estimatedReadingTime} min
-                  </span>
-                )}
               </CardDescription>
             </div>
             {onSaveClick && (
@@ -123,19 +85,6 @@ export function NoteUI({ data, messageId, compact = false, onViewFull, onSaveCli
         {data.description && (
           <CardContent>
             <p className="text-sm text-muted-foreground">{data.description}</p>
-          </CardContent>
-        )}
-        {data.metadata?.topics && data.metadata.topics.length > 0 && (
-          <CardContent>
-            <div className="flex flex-wrap gap-2">
-              <span className="text-sm font-medium">Topics:</span>
-              {data.metadata.topics.slice(0, 5).map((topic, i) => (
-                <Badge key={i} variant="outline">{topic}</Badge>
-              ))}
-              {data.metadata.topics.length > 5 && (
-                <Badge variant="outline">+{data.metadata.topics.length - 5} more</Badge>
-              )}
-            </div>
           </CardContent>
         )}
         <CardContent>
@@ -171,19 +120,6 @@ export function NoteUI({ data, messageId, compact = false, onViewFull, onSaveCli
               )}
               <div className="flex items-center gap-4 flex-wrap mt-4">
                 <span className="text-sm text-muted-foreground">{data.sections.length} Sections</span>
-                {data.metadata?.estimatedReadingTime && (
-                  <span className="flex items-center gap-1 text-sm text-muted-foreground">
-                    <Clock className="size-4" />
-                    ~{data.metadata.estimatedReadingTime} min read
-                  </span>
-                )}
-                {data.metadata?.topics && data.metadata.topics.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    {data.metadata.topics.map((topic, i) => (
-                      <Badge key={i} variant="outline" className="text-xs">{topic}</Badge>
-                    ))}
-                  </div>
-                )}
               </div>
             </div>
             {onSaveClick && (
@@ -201,20 +137,6 @@ export function NoteUI({ data, messageId, compact = false, onViewFull, onSaveCli
         </CardHeader>
       </Card>
 
-      {/* Quick Summary */}
-      {data.summary && (
-        <Alert className="bg-primary/5 border-primary/20">
-          <BookMarked className="size-4" />
-          <AlertTitle className="flex items-center gap-2">
-            <span>📚 Quick Summary</span>
-          </AlertTitle>
-          <AlertDescription className="mt-2">
-            <MessageResponse className="prose prose-sm dark:prose-invert max-w-none">
-              {data.summary}
-            </MessageResponse>
-          </AlertDescription>
-        </Alert>
-      )}
 
       {/* Table of Contents for long notes */}
       {data.sections.length > 3 && (
@@ -251,10 +173,9 @@ export function NoteUI({ data, messageId, compact = false, onViewFull, onSaveCli
 
       {/* Tabs for different views */}
       <Tabs defaultValue="sections" className="w-full">
-        <TabsList className="grid w-full grid-cols-3 h-10 lg:h-11 gap-1">
+        <TabsList className="grid w-full grid-cols-2 h-10 lg:h-11 gap-1">
           <TabsTrigger value="sections" className="text-sm lg:text-base px-2 lg:px-3">Sections</TabsTrigger>
           <TabsTrigger value="resources" className="text-sm lg:text-base px-2 lg:px-3">Resources</TabsTrigger>
-          <TabsTrigger value="practice" className="text-sm lg:text-base px-2 lg:px-3">Practice</TabsTrigger>
         </TabsList>
 
         {/* Sections Tab */}
@@ -315,73 +236,11 @@ export function NoteUI({ data, messageId, compact = false, onViewFull, onSaveCli
                         </>
                       )
                     })()}
-                    {section.keyPoints && section.keyPoints.length > 0 && (
-                      <>
-                        <Separator />
-                        <div>
-                          <h4 className="font-semibold text-sm lg:text-base mb-3 flex items-center gap-2">
-                            <Lightbulb className="size-4 text-amber-500" />
-                            Key Points
-                          </h4>
-                          <div className="space-y-2">
-                            {section.keyPoints.map((point, i) => {
-                              const key = `${section.id}-${i}`
-                              const isChecked = checkedKeyPoints.has(key)
-                              return (
-                                <label
-                                  key={i}
-                                  className={`flex items-start gap-3 p-2 rounded-md border cursor-pointer transition-colors ${
-                                    isChecked
-                                      ? 'bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800'
-                                      : 'bg-card hover:bg-muted/50'
-                                  }`}
-                                >
-                                  <Checkbox
-                                    checked={isChecked}
-                                    onChange={() => toggleKeyPoint(section.id, i)}
-                                    className="mt-0.5"
-                                  />
-                                  <span className={`text-sm lg:text-base flex-1 ${isChecked ? 'line-through text-muted-foreground' : ''}`}>
-                                    {point}
-                                  </span>
-                                  {isChecked && (
-                                    <CheckCircle2 className="size-4 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
-                                  )}
-                                </label>
-                              )
-                            })}
-                          </div>
-                        </div>
-                      </>
-                    )}
                   </AccordionContent>
                 </AccordionItem>
               )
             })}
           </Accordion>
-
-          {/* Success Criteria */}
-          {data.successCriteria && data.successCriteria.length > 0 && (
-            <Card className="mt-6">
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Target className="size-4 text-blue-500" />
-                  Success Criteria
-                </CardTitle>
-                <CardDescription>You should be able to...</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ul className="space-y-2">
-                  {data.successCriteria.map((criterion, i) => (
-                    <li key={i} className="flex items-start gap-2 text-sm lg:text-base">
-                      <CheckCircle2 className="size-4 text-blue-500 mt-0.5 flex-shrink-0" />
-                      <span>{criterion}</span>
-                    </li>
-                  ))}
-                </ul>
-              </CardContent>
-            </Card>
-          )}
 
           {/* Key Takeaways */}
           {data.keyTakeaways && data.keyTakeaways.length > 0 && (
@@ -450,59 +309,8 @@ export function NoteUI({ data, messageId, compact = false, onViewFull, onSaveCli
               </CardContent>
             </Card>
           )}
-          {data.metadata?.sourcesUsed && data.metadata.sourcesUsed.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base lg:text-lg">Sources Used</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ul className="list-disc list-inside space-y-2">
-                  {data.metadata.sourcesUsed.map((source, i) => (
-                    <li key={i} className="text-sm lg:text-base text-muted-foreground">{source}</li>
-                  ))}
-                </ul>
-              </CardContent>
-            </Card>
-          )}
         </TabsContent>
 
-        {/* Practice Tab */}
-        <TabsContent value="practice" className="space-y-4 mt-4">
-          {data.practiceQuestions && data.practiceQuestions.length > 0 ? (
-            <div className="space-y-4">
-              {data.practiceQuestions.map((item, i) => (
-                <Card key={i}>
-                  <CardHeader>
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <HelpCircle className="size-4 text-purple-500" />
-                      Question {i + 1}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <p className="text-sm lg:text-base font-medium">{item.question}</p>
-                    {item.answer && (
-                      <Alert className="bg-purple-50 dark:bg-purple-950 border-purple-200 dark:border-purple-800">
-                        <AlertCircle className="size-4 text-purple-600 dark:text-purple-400" />
-                        <AlertTitle className="text-sm">Answer</AlertTitle>
-                        <AlertDescription className="mt-2">
-                          <MessageResponse className="prose prose-sm dark:prose-invert max-w-none">
-                            {item.answer}
-                          </MessageResponse>
-                        </AlertDescription>
-                      </Alert>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          ) : (
-            <Card>
-              <CardContent className="py-8 lg:py-12 text-center text-sm lg:text-base text-muted-foreground">
-                No practice questions available
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
       </Tabs>
     </div>
   )

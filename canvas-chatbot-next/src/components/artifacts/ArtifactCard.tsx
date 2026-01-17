@@ -14,7 +14,7 @@ interface Artifact {
   title: string
   description: string | null
   tags: string[]
-  artifact_type: 'quiz' | 'rubric_analysis' | 'note'
+  artifact_type: 'quiz' | 'rubric_analysis' | 'note' | 'assignment_plan' | 'assignment_summary'
   created_at: string
   updated_at: string
 }
@@ -33,6 +33,8 @@ export function ArtifactCard({ artifact, onDelete, onUpdate }: ArtifactCardProps
     if (artifact.artifact_type === 'quiz') return <FileQuestion className="size-3.5" />
     if (artifact.artifact_type === 'rubric_analysis') return <FileText className="size-3.5" />
     if (artifact.artifact_type === 'note') return <StickyNote className="size-3.5" />
+    if (artifact.artifact_type === 'assignment_plan') return <FileText className="size-3.5" />
+    if (artifact.artifact_type === 'assignment_summary') return <FileText className="size-3.5" />
     return <FileText className="size-3.5" />
   }
 
@@ -40,6 +42,8 @@ export function ArtifactCard({ artifact, onDelete, onUpdate }: ArtifactCardProps
     if (artifact.artifact_type === 'quiz') return 'Quiz'
     if (artifact.artifact_type === 'rubric_analysis') return 'Rubric Analysis'
     if (artifact.artifact_type === 'note') return 'Note'
+    if (artifact.artifact_type === 'assignment_plan') return 'Assignment Plan'
+    if (artifact.artifact_type === 'assignment_summary') return 'Assignment Summary'
     return 'Artifact'
   }
 
@@ -52,7 +56,7 @@ export function ArtifactCard({ artifact, onDelete, onUpdate }: ArtifactCardProps
     })
   }
 
-  const canEdit = artifact.artifact_type === 'quiz'
+  const canEdit = artifact.artifact_type === 'quiz' || artifact.artifact_type === 'assignment_plan'
 
   return (
     <>

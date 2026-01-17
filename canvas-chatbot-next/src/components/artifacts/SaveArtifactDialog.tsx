@@ -20,7 +20,7 @@ import { getModeFromArtifactType, getModeBadgeColors } from '@/lib/mode-colors'
 interface SaveArtifactDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  artifactType: 'quiz' | 'rubric_analysis' | 'note'
+  artifactType: 'quiz' | 'rubric_analysis' | 'note' | 'assignment_plan' | 'assignment_summary'
   artifactData: any
   onSave: () => void
 }
@@ -47,6 +47,10 @@ export function SaveArtifactDialog({
         setTitle(`Rubric Analysis: ${artifactData.assignmentName}`)
       } else if (artifactType === 'note' && artifactData?.title) {
         setTitle(artifactData.title)
+      } else if (artifactType === 'assignment_plan' && artifactData?.metadata?.assignmentName) {
+        setTitle(artifactData.metadata.assignmentName)
+      } else if (artifactType === 'assignment_summary' && artifactData?.metadata?.assignmentName) {
+        setTitle(artifactData.metadata.assignmentName)
       }
     }
   }, [open, artifactType, artifactData, title])
@@ -107,6 +111,8 @@ export function SaveArtifactDialog({
     if (artifactType === 'quiz') return 'Quiz'
     if (artifactType === 'rubric_analysis') return 'Rubric Analysis'
     if (artifactType === 'note') return 'Note'
+    if (artifactType === 'assignment_plan') return 'Assignment Plan'
+    if (artifactType === 'assignment_summary') return 'Assignment Summary'
     return 'Artifact'
   }
 
@@ -114,6 +120,8 @@ export function SaveArtifactDialog({
     if (artifactType === 'quiz') return <FileQuestion className="size-4" />
     if (artifactType === 'rubric_analysis') return <FileText className="size-4" />
     if (artifactType === 'note') return <StickyNote className="size-4" />
+    if (artifactType === 'assignment_plan') return <FileText className="size-4" />
+    if (artifactType === 'assignment_summary') return <FileText className="size-4" />
     return <FileText className="size-4" />
   }
 

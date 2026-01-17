@@ -10,6 +10,8 @@ import { FeedbackRubric } from './feedback-rubric'
 import { RubricAnalysisUI } from '@/components/rubric-interpreter/rubric-analysis-ui'
 import { QuizUI } from '@/components/quiz/quiz-ui'
 import { NoteUI } from '@/components/note/note-ui'
+import { AssignmentPlanUI } from '@/components/assignment-plan/assignment-plan-ui'
+import { AssignmentSummaryUI } from '@/components/artifacts/AssignmentSummaryUI'
 import { Plan, PlanHeader, PlanTitle, PlanDescription, PlanContent, PlanTrigger, PlanFooter, PlanAction } from '@/components/ai-elements/plan'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -24,7 +26,7 @@ interface ToolRendererProps {
   toolPart?: ToolUIPart
   onApprove?: (approvalId: string) => void
   onReject?: (approvalId: string) => void
-  onViewFull?: (type: 'quiz' | 'rubric' | 'note', data: any, messageId?: string) => void
+  onViewFull?: (type: 'quiz' | 'rubric' | 'note' | 'assignment_plan' | 'assignment_summary', data: any, messageId?: string) => void
 }
 
 export function ToolRenderer({ toolName, result, toolPart, onApprove, onReject, onViewFull }: ToolRendererProps) {
@@ -386,6 +388,127 @@ export function ToolRenderer({ toolName, result, toolPart, onApprove, onReject, 
           </p>
           <p className="text-xs text-yellow-600 dark:text-yellow-300 mt-1">
             The note data structure is incomplete. Expected full NoteOutput format with sections array.
+          </p>
+        </div>
+      )
+
+    case 'generate_assignment_summary':
+      // This tool provides assignment summary markdown
+      if (result?.error) {
+        return (
+          <div className="p-4 border rounded-lg bg-red-50 dark:bg-red-950">
+            <p className="text-sm text-red-800 dark:text-red-200">
+              <strong>Error:</strong> {result.error}
+            </p>
+          </div>
+        )
+      }
+      if (result && typeof result === 'object' && 'content' in result) {
+        return (
+          <AssignmentSummaryUI
+            content={result.content}
+            metadata={result.metadata}
+            compact={true}
+            onViewFull={onViewFull ? () => onViewFull('assignment_summary', result, (toolPart as any)?.toolCallId) : undefined}
+          />
+        )
+      }
+      return (
+        <div className="p-4 border rounded-lg bg-yellow-50 dark:bg-yellow-950">
+          <p className="text-sm text-yellow-800 dark:text-yellow-200">
+            <strong>⚠️ Incomplete Summary Data</strong>
+          </p>
+        </div>
+      )
+
+    case 'generate_assignment_plan':
+      // This tool provides the assignment plan for user approval
+      if (result?.error) {
+        return (
+          <div className="p-4 border rounded-lg bg-red-50 dark:bg-red-950">
+            <p className="text-sm text-red-800 dark:text-red-200">
+              <strong>Error:</strong> {result.error}
+            </p>
+          </div>
+        )
+      }
+      const assignmentPlanData = result || (toolPart?.input as any)
+      if (assignmentPlanData && typeof assignmentPlanData === 'object' && 'content' in assignmentPlanData) {
+        return (
+          <Plan defaultOpen className="w-full">
+            <PlanHeader>
+              <div className="flex items-start justify-between w-full">
+                <div className="flex-1">
+                  <PlanTitle>Assignment Plan</PlanTitle>
+                  <PlanDescription>
+                    Review the plan below and approve to proceed
+                  </PlanDescription>
+                </div>
+                <PlanTrigger />
+              </div>
+            </PlanHeader>
+            <PlanContent>
+              <div className="space-y-4">
+                <AssignmentPlanUI
+                  content={assignmentPlanData.content}
+                  metadata={assignmentPlanData.metadata}
+                  compact={false}
+                />
+              </div>
+            </PlanContent>
+            {toolPart?.state === 'approval-requested' && toolPart.approval && 'id' in toolPart.approval && onApprove && (
+              <PlanFooter>
+                <div className="flex items-center justify-end gap-2 w-full">
+                  <PlanAction>
+                    <Button
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        onApprove(toolPart.approval.id)
+                      }}
+                    >
+                      Approve
+                    </Button>
+                  </PlanAction>
+                </div>
+              </PlanFooter>
+            )}
+          </Plan>
+        )
+      }
+      return (
+        <div className="p-4 border rounded-lg bg-yellow-50 dark:bg-yellow-950">
+          <p className="text-sm text-yellow-800 dark:text-yellow-200">
+            <strong>⚠️ No Plan Data</strong>
+          </p>
+        </div>
+      )
+
+    case 'provide_assignment_plan_output':
+      // This tool provides the fully generated assignment plan data for rendering
+      if (result?.error) {
+        return (
+          <div className="p-4 border rounded-lg bg-red-50 dark:bg-red-950">
+            <p className="text-sm text-red-800 dark:text-red-200">
+              <strong>Error:</strong> {result.error}
+            </p>
+          </div>
+        )
+      }
+      if (result && typeof result === 'object' && 'content' in result) {
+        return (
+          <AssignmentPlanUI
+            content={result.content}
+            metadata={result.metadata}
+            compact={true}
+            onViewFull={onViewFull ? () => onViewFull('assignment_plan', result, (toolPart as any)?.toolCallId) : undefined}
+          />
+        )
+      }
+      return (
+        <div className="p-4 border rounded-lg bg-yellow-50 dark:bg-yellow-950">
+          <p className="text-sm text-yellow-800 dark:text-yellow-200">
+            <strong>⚠️ Incomplete Plan Data</strong>
           </p>
         </div>
       )

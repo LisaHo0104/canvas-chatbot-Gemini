@@ -1,15 +1,15 @@
 'use client'
 
 import { useState } from 'react'
-import { ChevronDown, ChevronUp, CheckCircle2, XCircle, AlertCircle, Target, TrendingUp, Maximize2, Save } from 'lucide-react'
+import { ChevronDown, ChevronUp, CheckCircle2, AlertCircle, Target, Maximize2, Save } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Progress } from '@/components/ui/progress'
 import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
 import { SaveArtifactDialog } from '@/components/artifacts/SaveArtifactDialog'
+import { Progress } from '../ui/progress'
 
 export interface RubricAnalysisOutput {
   assignmentName: string
@@ -21,7 +21,6 @@ export interface RubricAnalysisOutput {
     name: string
     description: string
     pointsPossible: number
-    plainEnglishExplanation?: string
     gradeLevels: {
       hd: { requirements: string[]; points: number }
       d: { requirements: string[]; points: number }
@@ -30,14 +29,10 @@ export interface RubricAnalysisOutput {
       f: { requirements: string[]; points: number }
     }
     commonMistakes: string[]
-    actionItems: string[]
-    scoringTips: string[]
   }>
   summary: {
     overview: string
-    keyRequirements: string[]
-    gradeStrategy: string
-    howToGetHD?: string
+    howToGetHD: string
   }
   commonMistakes: Array<{
     criterion: string
@@ -49,11 +44,6 @@ export interface RubricAnalysisOutput {
     criterion: string
     priority: 'high' | 'medium' | 'low'
   }>
-  scoringBreakdown: {
-    totalPoints: number
-    pointsByCriterion: Array<{ criterion: string; points: number; percentage: number }>
-    maximizationTips: string[]
-  }
 }
 
 interface RubricAnalysisUIProps {
@@ -61,9 +51,10 @@ interface RubricAnalysisUIProps {
   messageId?: string
   compact?: boolean
   onViewFull?: () => void
+  artifactId?: string
 }
 
-export function RubricAnalysisUI({ data, messageId, compact = false, onViewFull }: RubricAnalysisUIProps) {
+export function RubricAnalysisUI({ data, messageId, compact = false, onViewFull, artifactId }: RubricAnalysisUIProps) {
   const [expandedCriteria, setExpandedCriteria] = useState<Set<string>>(new Set())
   const [checkedItems, setCheckedItems] = useState<Set<string>>(() => {
     if (typeof window === 'undefined' || !messageId) return new Set()
@@ -85,9 +76,6 @@ export function RubricAnalysisUI({ data, messageId, compact = false, onViewFull 
   const criteria = (data.criteria && Array.isArray(data.criteria)) ? data.criteria : []
   const actionChecklist = (data.actionChecklist && Array.isArray(data.actionChecklist)) ? data.actionChecklist : []
   const commonMistakes = (data.commonMistakes && Array.isArray(data.commonMistakes)) ? data.commonMistakes : []
-  const keyRequirements = (data.summary?.keyRequirements && Array.isArray(data.summary.keyRequirements)) ? data.summary.keyRequirements : []
-  const pointsByCriterion = (data.scoringBreakdown?.pointsByCriterion && Array.isArray(data.scoringBreakdown.pointsByCriterion)) ? data.scoringBreakdown.pointsByCriterion : []
-  const maximizationTips = (data.scoringBreakdown?.maximizationTips && Array.isArray(data.scoringBreakdown.maximizationTips)) ? data.scoringBreakdown.maximizationTips : []
 
   const toggleCriterion = (id: string) => {
     const newExpanded = new Set(expandedCriteria)
@@ -160,36 +148,23 @@ export function RubricAnalysisUI({ data, messageId, compact = false, onViewFull 
                   Total Points: {data.totalPoints} | {criteria.length} Criteria
                 </CardDescription>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setSaveDialogOpen(true)}
-                className="flex items-center gap-2"
-              >
-                <Save className="size-4" />
-                Save to Artifactory
-              </Button>
+              {!artifactId && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSaveDialogOpen(true)}
+                  className="flex items-center gap-2"
+                >
+                  <Save className="size-4" />
+                  Save to Artifactory
+                </Button>
+              )}
             </div>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
               <h4 className="font-semibold text-sm">Overview</h4>
               <p className="text-sm text-muted-foreground line-clamp-3">{data.summary.overview}</p>
-              {keyRequirements.length > 0 && (
-                <div className="mt-3">
-                  <h5 className="font-medium text-sm mb-2">Key Requirements:</h5>
-                  <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
-                    {keyRequirements.slice(0, 3).map((req, i) => (
-                      <li key={i}>{req}</li>
-                    ))}
-                    {keyRequirements.length > 3 && (
-                      <li className="text-muted-foreground/70">
-                        +{keyRequirements.length - 3} more...
-                      </li>
-                    )}
-                  </ul>
-                </div>
-              )}
               {data.summary.howToGetHD && (
                 <div className="mt-3 p-3 bg-purple-50 dark:bg-purple-950 rounded-md border border-purple-200 dark:border-purple-800">
                   <h5 className="font-semibold text-sm mb-1 flex items-center gap-2">
@@ -244,31 +219,23 @@ export function RubricAnalysisUI({ data, messageId, compact = false, onViewFull 
                 Total Points: {data.totalPoints} | {criteria.length} Criteria
               </CardDescription>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setSaveDialogOpen(true)}
-              className="flex items-center gap-2"
-            >
-              <Save className="size-4" />
-              Save to Artifactory
-            </Button>
+            {!artifactId && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSaveDialogOpen(true)}
+                className="flex items-center gap-2"
+              >
+                <Save className="size-4" />
+                Save to Artifactory
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent>
           <div className="space-y-2">
             <h4 className="font-semibold text-sm">Overview</h4>
             <p className="text-sm text-muted-foreground">{data.summary.overview}</p>
-            {keyRequirements.length > 0 && (
-              <div className="mt-3">
-                <h5 className="font-medium text-sm mb-2">Key Requirements:</h5>
-                <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
-                  {keyRequirements.map((req, i) => (
-                    <li key={i}>{req}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
             {data.summary.howToGetHD && (
               <div className="mt-3 p-4 bg-purple-50 dark:bg-purple-950 rounded-md border border-purple-200 dark:border-purple-800">
                 <h5 className="font-semibold text-sm mb-2 flex items-center gap-2">
@@ -280,23 +247,16 @@ export function RubricAnalysisUI({ data, messageId, compact = false, onViewFull 
                 </div>
               </div>
             )}
-            {data.summary.gradeStrategy && (
-              <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-950 rounded-md">
-                <h5 className="font-medium text-sm mb-1">Grade Strategy:</h5>
-                <p className="text-sm text-muted-foreground">{data.summary.gradeStrategy}</p>
-              </div>
-            )}
           </div>
         </CardContent>
       </Card>
 
       {/* Tabs for different views */}
       <Tabs defaultValue="criteria" className="w-full">
-        <TabsList className="grid w-full grid-cols-4 h-10 lg:h-11 gap-1">
+        <TabsList className="grid w-full grid-cols-3 h-10 lg:h-11 gap-1">
           <TabsTrigger value="criteria" className="text-sm lg:text-base px-2 lg:px-3">Criteria</TabsTrigger>
           <TabsTrigger value="checklist" className="text-sm lg:text-base px-2 lg:px-3">Checklist</TabsTrigger>
           <TabsTrigger value="mistakes" className="text-sm lg:text-base px-2 lg:px-3">Mistakes</TabsTrigger>
-          <TabsTrigger value="scoring" className="text-sm lg:text-base px-2 lg:px-3">Scoring</TabsTrigger>
         </TabsList>
 
         {/* Criteria Breakdown Tab */}
@@ -324,18 +284,6 @@ export function RubricAnalysisUI({ data, messageId, compact = false, onViewFull 
               </CardHeader>
               {expandedCriteria.has(criterion.id) && (
                 <CardContent className="space-y-4">
-                  {/* Plain English Explanation */}
-                  {criterion.plainEnglishExplanation && (
-                    <div className="p-3 bg-muted/30 rounded-md border border-muted">
-                      <h5 className="font-medium text-sm mb-2 flex items-center gap-2">
-                        <span>💡</span>
-                        In Plain English:
-                      </h5>
-                      <p className="text-sm text-muted-foreground">
-                        {criterion.plainEnglishExplanation}
-                      </p>
-                    </div>
-                  )}
                   {/* Grade Levels */}
                   <div>
                     <h5 className="font-semibold text-sm mb-3">Grade Level Requirements</h5>
@@ -369,34 +317,6 @@ export function RubricAnalysisUI({ data, messageId, compact = false, onViewFull 
                     </div>
                   </div>
 
-                  <Separator />
-
-                  {/* Action Items */}
-                  {criterion.actionItems && Array.isArray(criterion.actionItems) && criterion.actionItems.length > 0 && (
-                    <div>
-                      <h5 className="font-semibold text-sm mb-2">Action Items</h5>
-                      <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
-                        {criterion.actionItems.map((item, i) => (
-                          <li key={i}>{item}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {/* Scoring Tips */}
-                  {criterion.scoringTips && Array.isArray(criterion.scoringTips) && criterion.scoringTips.length > 0 && (
-                    <div>
-                      <h5 className="font-semibold text-sm mb-2 flex items-center gap-2">
-                        <TrendingUp className="size-4" />
-                        Scoring Tips
-                      </h5>
-                      <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
-                        {criterion.scoringTips.map((tip, i) => (
-                          <li key={i}>{tip}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
                 </CardContent>
               )}
             </Card>
@@ -496,58 +416,6 @@ export function RubricAnalysisUI({ data, messageId, compact = false, onViewFull 
           )}
         </TabsContent>
 
-        {/* Scoring Breakdown Tab */}
-        <TabsContent value="scoring" className="space-y-3">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <TrendingUp className="size-5" />
-                Points Distribution
-              </CardTitle>
-              <CardDescription>
-                Total: {data.scoringBreakdown.totalPoints} points
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {pointsByCriterion.length > 0 ? (
-                pointsByCriterion.map((item, idx) => (
-                <div key={idx} className="space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="font-medium">{item.criterion}</span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-muted-foreground">
-                        {item.points} pts
-                      </span>
-                      <Badge variant="outline">{item.percentage}%</Badge>
-                    </div>
-                  </div>
-                  <Progress value={item.percentage} className="h-2" />
-                </div>
-              ))) : (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  No scoring breakdown data available.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-
-          {maximizationTips.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Maximization Tips</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ul className="list-disc list-inside space-y-2">
-                  {maximizationTips.map((tip, i) => (
-                    <li key={i} className="text-sm text-muted-foreground">
-                      {tip}
-                    </li>
-                  ))}
-                </ul>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
       </Tabs>
       <SaveArtifactDialog
         open={saveDialogOpen}

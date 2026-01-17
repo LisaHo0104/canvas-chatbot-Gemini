@@ -15,7 +15,7 @@ interface Artifact {
   title: string
   description: string | null
   tags: string[]
-  artifact_type: 'quiz' | 'rubric_analysis' | 'note'
+  artifact_type: 'quiz' | 'rubric_analysis' | 'note' | 'assignment_plan' | 'assignment_summary'
   created_at: string
   updated_at: string
 }
@@ -25,7 +25,7 @@ export default function ArtifactsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
-  const [typeFilter, setTypeFilter] = useState<'all' | 'quiz' | 'rubric_analysis' | 'note'>('all')
+  const [typeFilter, setTypeFilter] = useState<'all' | 'quiz' | 'rubric_analysis' | 'note' | 'assignment_plan' | 'assignment_summary'>('all')
   const [sortBy, setSortBy] = useState<'created_at' | 'updated_at' | 'title'>('created_at')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
 
@@ -128,6 +128,8 @@ export default function ArtifactsPage() {
               <SelectItem value="quiz">Quizzes</SelectItem>
               <SelectItem value="rubric_analysis">Rubric Analyses</SelectItem>
               <SelectItem value="note">Notes</SelectItem>
+              <SelectItem value="assignment_plan">Assignment Plans</SelectItem>
+              <SelectItem value="assignment_summary">Assignment Summaries</SelectItem>
             </SelectContent>
           </Select>
           <Select value={sortBy} onValueChange={(value: any) => setSortBy(value)}>

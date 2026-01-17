@@ -88,6 +88,18 @@ async function chatHandler(request: NextRequest) {
 				if (noteGenerationTemplate?.prompt_text) {
 					activeSystemPrompt = noteGenerationTemplate.prompt_text;
 				}
+			} else if (analysisMode === 'assignment_plan') {
+				// If assignment_plan mode is active, automatically use the Assignment Planning template
+				const { data: assignmentPlanTemplate } = await supabase
+					.from('system_prompts')
+					.select('prompt_text')
+					.eq('template_type', 'assignment_plan')
+					.eq('is_template', true)
+					.single();
+
+				if (assignmentPlanTemplate?.prompt_text) {
+					activeSystemPrompt = assignmentPlanTemplate.prompt_text;
+				}
 			} else if (selected_system_prompt_ids && Array.isArray(selected_system_prompt_ids) && selected_system_prompt_ids.length > 0) {
 				// If selected_system_prompt_ids are provided in the request, use those
 				// Fetch multiple system prompts
@@ -677,11 +689,8 @@ You MUST follow this sequence:
 
 2. **Generate Notes:** After gathering information, generate comprehensive, well-structured notes:
    - Organize content into logical sections with clear headings (use H1, H2, H3 hierarchy)
-   - Include a quick summary at the top
-   - Extract key points and important concepts (as checkboxes for interactive learning)
    - Include relevant examples and explanations
-   - Add key takeaways and success criteria
-   - Include practice questions when appropriate
+   - Add key takeaways
    - Use markdown formatting (bold for key terms, italic for emphasis)
    - Identify related resources and links from Canvas data
    - Structure notes for easy reading and review
@@ -689,15 +698,11 @@ You MUST follow this sequence:
 3. **Output:** After generating the notes, you MUST call 'provide_note_output' with the complete note structure:
    - title: Descriptive title for the notes
    - description: Optional description or summary
-   - summary: Quick summary at the top (brief overview)
-   - sections: Array of sections with (id, heading, content, keyPoints, level)
+   - sections: Array of sections with (id, heading, content, level)
      * Use level 1 for main sections (H1), level 2 for subsections (H2), level 3 for sub-subsections (H3)
      * Content should use markdown formatting (bold for key terms, italic for emphasis)
    - keyTakeaways: Array of main points students should remember
-   - successCriteria: Array of "You should be able to..." statements
-   - practiceQuestions: Optional array of questions with answers
    - resources: Array of related resources with (type, name, url)
-   - metadata: Optional metadata (topics, estimatedReadingTime, sourcesUsed)
 
    CRITICAL: You MUST call provide_note_output in the SAME step or immediately after note generation completes. DO NOT generate text responses before calling this tool - call it immediately. After calling provide_note_output, FINISH your response - DO NOT generate additional text explanations. The NoteUI component will render the structured data, so no additional text is needed.
    
@@ -718,11 +723,8 @@ You MUST follow this sequence:
 
 2. **Generate Notes:** After gathering information, generate comprehensive, well-structured notes:
    - Organize content into logical sections with clear headings (use H1, H2, H3 hierarchy)
-   - Include a quick summary at the top
-   - Extract key points and important concepts (as checkboxes for interactive learning)
    - Include relevant examples and explanations
-   - Add key takeaways and success criteria
-   - Include practice questions when appropriate
+   - Add key takeaways
    - Use markdown formatting (bold for key terms, italic for emphasis)
    - Identify related resources and links from Canvas data
    - Structure notes for easy reading and review
@@ -730,15 +732,11 @@ You MUST follow this sequence:
 3. **Output:** After generating the notes, you MUST call 'provide_note_output' with the complete note structure:
    - title: Descriptive title for the notes
    - description: Optional description or summary
-   - summary: Quick summary at the top (brief overview)
-   - sections: Array of sections with (id, heading, content, keyPoints, level)
+   - sections: Array of sections with (id, heading, content, level)
      * Use level 1 for main sections (H1), level 2 for subsections (H2), level 3 for sub-subsections (H3)
      * Content should use markdown formatting (bold for key terms, italic for emphasis)
    - keyTakeaways: Array of main points students should remember
-   - successCriteria: Array of "You should be able to..." statements
-   - practiceQuestions: Optional array of questions with answers
    - resources: Array of related resources with (type, name, url)
-   - metadata: Optional metadata (topics, estimatedReadingTime, sourcesUsed)
 
    CRITICAL: You MUST call provide_note_output in the SAME step or immediately after note generation completes. DO NOT generate text responses before calling this tool - call it immediately. After calling provide_note_output, FINISH your response - DO NOT generate additional text explanations. The NoteUI component will render the structured data, so no additional text is needed.
    
@@ -748,14 +746,186 @@ This sequence is REQUIRED. Do not skip any step. The provide_note_output tool is
 			}
 		}
 
+		// Enhance system prompt when assignment_plan mode is active
+		let assignmentPlanEnforcementPrompt = '';
+		if (analysisMode === 'assignment_plan') {
+			// Check if we have context (courses, modules, or assignments)
+			const hasContext = contextAttachments.some(
+				(att: any) => att.type === 'course' || att.type === 'module' || att.type === 'assignment'
+			) || (canvasContext && formattedContext);
+
+			if (hasContext) {
+				// Helper to find course_id for a module or assignment
+				const findCourseId = (itemId: number, itemType: 'module' | 'assignment', attachment?: any): number | null => {
+					if (attachment?.course_id && typeof attachment.course_id === 'number') {
+						return attachment.course_id;
+					}
+					if (!canvasContext?.courses || !Array.isArray(canvasContext.courses)) {
+						return null;
+					}
+					for (const course of canvasContext.courses) {
+						const items = itemType === 'module' ? course.modules : course.assignments;
+						if (Array.isArray(items)) {
+							const found = items.find((item: any) => item.id === itemId);
+							if (found) {
+								return course.id;
+							}
+						}
+					}
+					return null;
+				};
+
+				// Build explicit list of context attachments for the agent
+				let contextAttachmentsList = '';
+				if (contextAttachments.length > 0) {
+					const courses = contextAttachments.filter((att: any) => att.type === 'course');
+					const modules = contextAttachments.filter((att: any) => att.type === 'module');
+					const assignments = contextAttachments.filter((att: any) => att.type === 'assignment');
+
+					const parts: string[] = ['\n\n🎯 CONTEXT ATTACHMENTS PROVIDED BY USER:'];
+					
+					if (courses.length > 0) {
+						parts.push('   📚 Courses:');
+						courses.forEach((c: any) => {
+							parts.push(`      - Course ID: ${c.id}, Name: "${c.name}"${c.code ? `, Code: ${c.code}` : ''}`);
+						});
+					}
+
+					if (modules.length > 0) {
+						parts.push('   📦 Modules:');
+						modules.forEach((m: any) => {
+							const courseId = findCourseId(m.id, 'module', m);
+							if (courseId) {
+								parts.push(`      - Module ID: ${m.id}, Name: "${m.name}", Course ID: ${courseId}`);
+							} else {
+								parts.push(`      - Module ID: ${m.id}, Name: "${m.name}" (Course ID: find from context below)`);
+							}
+						});
+					}
+
+					if (assignments.length > 0) {
+						parts.push('   📝 Assignments:');
+						assignments.forEach((a: any) => {
+							const courseId = findCourseId(a.id, 'assignment', a);
+							if (courseId) {
+								parts.push(`      - Assignment ID: ${a.id}, Name: "${a.name}", Course ID: ${courseId}`);
+							} else {
+								parts.push(`      - Assignment ID: ${a.id}, Name: "${a.name}" (Course ID: find from context below)`);
+							}
+						});
+					}
+
+					parts.push('\n   DIRECT FETCHING INSTRUCTIONS (use EXACT IDs from the list above, do NOT fetch all courses/modules):');
+					if (modules.length > 0) {
+						const moduleCourseIds = modules.map((m: any) => {
+							const courseId = findCourseId(m.id, 'module');
+							return courseId;
+						}).filter((id): id is number => id !== null);
+						
+						if (moduleCourseIds.length > 0 || courses.length > 0) {
+							const allCourseIds = [...new Set([...courses.map((c: any) => c.id), ...moduleCourseIds])].join(' or ');
+							const moduleIds = modules.map((m: any) => m.id).join(', ');
+							parts.push(`   - For modules: PREFERRED - Use get_module(courseId: ${allCourseIds}, moduleId: ${moduleIds}) to directly fetch the specific module. The Course ID(s) ${allCourseIds} and Module ID(s) ${moduleIds} are DIFFERENT numbers - use BOTH parameters. If you need all modules, use get_modules(courseId: ${allCourseIds}) instead. Then retrieve that module's items (pages, files) using get_page_contents (for multiple pages at once) or get_file.`);
+						} else {
+							parts.push('   - For modules: PREFERRED - Use get_module(courseId, moduleId) to directly fetch the specific module. The Course ID and Module ID are shown in the list above - these are DIFFERENT numbers. Call get_module with BOTH the Course ID and Module ID. If you need all modules, use get_modules(courseId) with the Course ID instead. Then retrieve that module\'s items (pages, files) using get_page_contents (for multiple pages at once) or get_file.');
+						}
+					}
+					if (assignments.length > 0) {
+						const assignmentCourseIds = assignments.map((a: any) => {
+							const courseId = findCourseId(a.id, 'assignment');
+							return courseId;
+						}).filter((id): id is number => id !== null);
+						
+						if (assignmentCourseIds.length > 0 || courses.length > 0) {
+							const allCourseIds = [...new Set([...courses.map((c: any) => c.id), ...assignmentCourseIds])].join(' or ');
+							const assignmentIds = assignments.map((a: any) => a.id).join(', ');
+							parts.push(`   - For assignments: Use get_assignment(courseId: ${allCourseIds}, assignmentId: ${assignmentIds}) with the Course ID(s) ${allCourseIds} and Assignment ID(s) ${assignmentIds} from the list above.`);
+						} else {
+							parts.push('   - For assignments: Use get_assignment(courseId, assignmentId) with the Course ID and Assignment ID from the list above. The Course ID is shown next to each assignment in the list.');
+						}
+					}
+					if (courses.length > 0) {
+						parts.push('   - For courses: Call get_modules(courseId) for the EXACT course ID listed above to get all modules for that specific course, then retrieve their content.');
+					}
+					
+					contextAttachmentsList = parts.join('\n');
+				}
+
+				assignmentPlanEnforcementPrompt = `\n\n⚠️ CRITICAL: ASSIGNMENT PLAN MODE IS ACTIVE${contextAttachmentsList}
+				
+You MUST follow this sequence:
+1. **Gather Information:** DIRECTLY fetch ONLY the specific items listed in the context attachments above:
+   ${contextAttachments.length > 0 ? `
+   ⚠️ CRITICAL INSTRUCTIONS:
+   - DO NOT call list_courses - the user has already attached specific items
+   - DO NOT fetch all courses or all modules - use ONLY the EXACT IDs from the attachments list above
+   - For attached modules: Get modules for the course (from formatted context), filter for the EXACT module ID, then get that module's items using get_page_contents (for multiple pages at once) or get_file
+   - For attached assignments: Directly call get_assignment(courseId, assignmentId) with the EXACT assignment ID
+   - For attached courses: Get modules for that EXACT course ID only using get_modules(courseId), then retrieve their content
+   - Retrieve content ONLY from the specific attached items, not from all available courses/modules
+   - If you need the courseId for a module, it should be available in the formatted context below` : `
+   - If courses are provided: Use get_modules, get_page_contents (for multiple pages at once), get_file to retrieve content
+   - If modules are provided: Use get_page_contents (for multiple pages at once), get_file to retrieve module content  
+   - If assignments are provided: Use get_assignment to understand assignment content`}
+   - Retrieve ALL relevant content from the attached items before proceeding
+
+2. **Generate Understanding Artifacts:** After gathering information, you MUST first call 'generate_assignment_summary' tool with:
+   - content: Markdown summary of assignment requirements, key points, due date, format expectations
+   - metadata: Optional metadata (assignmentId, courseId, assignmentName, dueDate, totalPoints)
+   
+   This creates the first artifact to help the user understand the assignment.
+
+3. **Generate Plan:** After creating the summary, you MUST call 'generate_assignment_plan' tool with:
+   - content: Markdown master plan following the structured 6-step methodology format (see ASSIGNMENT_PLAN_PROMPT template for exact structure)
+   - metadata: Optional metadata (assignmentId, courseId, dueDate, estimatedTotalTime, difficulty, topics)
+   
+   The plan MUST follow the exact markdown structure with:
+   - Overview section
+   - 6 steps (Understand → Plan → Research → Draft → Revise → Submit)
+   - Each step with: Objectives, Tasks (checklists), Resources, Deliverables, Success Criteria, Estimated Time
+   - Timeline section with Start Date, Due Date, Milestones
+   - Resources section
+   - Progress Tracking section
+
+4. **Wait for Approval:** After calling generate_assignment_plan, STOP and wait for user approval. Do NOT generate plan content yet.
+
+5. **Provide Output:** Once the user approves the plan (you will receive an approval response):
+   - Call 'provide_assignment_plan_output' with the complete plan data (content + metadata)
+   - CRITICAL: You MUST call provide_assignment_plan_output in the SAME step or immediately after approval. DO NOT generate text responses before calling this tool - call it immediately. After calling provide_assignment_plan_output, FINISH your response - DO NOT generate additional text explanations. The AssignmentPlanUI component will render the structured data, so no additional text is needed.
+
+This sequence is REQUIRED. Do not skip any step. The generate_assignment_summary, generate_assignment_plan, and provide_assignment_plan_output tools are essential for the assignment planning workflow.`;
+			} else {
+				// Assignment plan mode active but no context - still enforce tool usage
+				assignmentPlanEnforcementPrompt = `\n\n⚠️ CRITICAL: ASSIGNMENT PLAN MODE IS ACTIVE
+
+**LANGUAGE REQUIREMENT: ALL content you generate MUST be in English. This includes all text, titles, descriptions, summaries, plans, steps, tasks, and explanations. Even if source material is in another language, translate and present all output in English.**
+
+You MUST follow this sequence:
+1. **Gather Information:** If the user mentions specific assignments, courses, modules, or content:
+   - Use Canvas tools (list_courses, get_assignments, get_modules, get_page_contents, get_file) to retrieve relevant content
+   - If no specific context is mentioned, ask the user what assignment they want to plan for OR use the context provided below
+   - Retrieve ALL relevant content before proceeding
+
+2. **Generate Understanding Artifacts:** After gathering information, you MUST first call 'generate_assignment_summary' tool with markdown content summarizing the assignment.
+
+3. **Generate Plan:** After creating the summary, you MUST call 'generate_assignment_plan' tool with markdown master plan following the 6-step methodology structure.
+
+4. **Wait for Approval:** After calling generate_assignment_plan, STOP and wait for user approval.
+
+5. **Provide Output:** Once approved, call 'provide_assignment_plan_output' with the complete plan data.
+
+This sequence is REQUIRED. Do not skip any step.`;
+			}
+		}
+
 		// Include context in system prompt if:
 		// 1. formattedContext exists (from canvasContext with courses), OR
 		// 2. contextFromAttachments exists (when attachments exist but canvasContext is missing)
 		const contextToInclude = formattedContext || contextFromAttachments;
 		
 		const systemText = contextToInclude
-			? `${activeSystemPrompt}${toolUsageInstructions}${rubricEnforcementPrompt}${quizEnforcementPrompt}${noteEnforcementPrompt}\n\n${contextToInclude}`
-			: `${activeSystemPrompt}${toolUsageInstructions}${rubricEnforcementPrompt}${quizEnforcementPrompt}${noteEnforcementPrompt}`;
+			? `${activeSystemPrompt}${toolUsageInstructions}${rubricEnforcementPrompt}${quizEnforcementPrompt}${noteEnforcementPrompt}${assignmentPlanEnforcementPrompt}\n\n${contextToInclude}`
+			: `${activeSystemPrompt}${toolUsageInstructions}${rubricEnforcementPrompt}${quizEnforcementPrompt}${noteEnforcementPrompt}${assignmentPlanEnforcementPrompt}`;
 
 		const uiMessagesWithSystem: UIMessage[] = [
 			{ role: 'system', parts: [{ type: 'text', text: systemText }] } as any,

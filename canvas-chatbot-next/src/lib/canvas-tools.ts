@@ -497,7 +497,6 @@ export function createCanvasTools(token: string, url: string) {
 						id: z.string().describe('Unique identifier for the criterion'),
 						name: z.string().describe('Name/title of the criterion'),
 						description: z.string().describe('Description of what the criterion evaluates'),
-						plainEnglishExplanation: z.string().optional().describe('A plain-English explanation of what this criterion evaluates, written in simple, student-friendly language with analogies. This helps students understand the criterion without technical jargon.'),
 						pointsPossible: z.number().describe('Points possible for this criterion'),
 						gradeLevels: z.object({
 							hd: z.object({
@@ -522,15 +521,11 @@ export function createCanvasTools(token: string, url: string) {
 							}),
 						}),
 						commonMistakes: z.array(z.string()).describe('Common mistakes students make for this criterion'),
-						actionItems: z.array(z.string()).describe('Actionable items students should do for this criterion'),
-						scoringTips: z.array(z.string()).describe('Tips for maximizing points on this criterion'),
 					})
 				).describe('Array of analyzed criteria with grade level breakdowns'),
 				summary: z.object({
 					overview: z.string().describe('Overall summary of the rubric'),
-					keyRequirements: z.array(z.string()).describe('Key requirements across all criteria'),
-					gradeStrategy: z.string().describe('Strategic advice for achieving target grades'),
-					howToGetHD: z.string().optional().describe('A detailed, step-by-step guide on how to achieve HD (High Distinction) grade. This should be comprehensive, actionable, and written in clear, student-friendly language. Include specific requirements, strategies, and tips for each criterion.'),
+					howToGetHD: z.string().describe('A detailed, step-by-step guide on how to achieve HD (High Distinction) grade. This should be comprehensive, actionable, and written in clear, student-friendly language. Include specific requirements, strategies, and tips for each criterion.'),
 				}),
 				commonMistakes: z.array(
 					z.object({
@@ -546,17 +541,6 @@ export function createCanvasTools(token: string, url: string) {
 						priority: z.enum(['high', 'medium', 'low']),
 					})
 				).describe('Prioritized actionable checklist items'),
-				scoringBreakdown: z.object({
-					totalPoints: z.number(),
-					pointsByCriterion: z.array(
-						z.object({
-							criterion: z.string(),
-							points: z.number(),
-							percentage: z.number(),
-						})
-					),
-					maximizationTips: z.array(z.string()),
-				}),
 			}),
 			execute: async (analysisData: any) => {
 				// Simply return the provided analysis data as-is
@@ -652,24 +636,15 @@ export function createCanvasTools(token: string, url: string) {
 			inputSchema: z.object({
 				title: z.string().describe('Title of the notes'),
 				description: z.string().optional().describe('Optional description or summary of the notes'),
-				summary: z.string().optional().describe('Quick summary at the top of the notes - a brief overview of the entire note content'),
 				sections: z.array(
 					z.object({
 						id: z.string().describe('Unique identifier for the section'),
 						heading: z.string().describe('Section heading'),
 						content: z.string().describe('Main content of the section (supports markdown formatting)'),
-						keyPoints: z.array(z.string()).optional().describe('Key points or bullet points for this section (will be displayed as checkboxes)'),
 						level: z.number().int().min(1).max(3).optional().describe('Heading level: 1 for H1 (main sections), 2 for H2 (subsections), 3 for H3 (sub-subsections)'),
 					})
-				).describe('Array of note sections with headings, content, and key points'),
+				).describe('Array of note sections with headings and content'),
 				keyTakeaways: z.array(z.string()).optional().describe('Key takeaways at the end - main points the student should remember'),
-				successCriteria: z.array(z.string()).optional().describe('Success criteria - "You should be able to..." statements that define learning goals'),
-				practiceQuestions: z.array(
-					z.object({
-						question: z.string().describe('Practice question text'),
-						answer: z.string().optional().describe('Answer or explanation for the practice question'),
-					})
-				).optional().describe('Practice questions to test understanding'),
 				resources: z.array(
 					z.object({
 						type: z.enum(['module', 'assignment', 'course', 'page', 'file', 'url']).describe('Type of resource'),
@@ -677,17 +652,128 @@ export function createCanvasTools(token: string, url: string) {
 						url: z.string().optional().describe('URL to the resource if available'),
 					})
 				).optional().describe('Array of related resources and links'),
-				metadata: z.object({
-					topics: z.array(z.string()).optional().describe('Topics covered in the notes'),
-					estimatedReadingTime: z.number().optional().describe('Estimated reading time in minutes'),
-					sourcesUsed: z.array(z.string()).optional().describe('List of sources used to generate the notes'),
-				}).optional().describe('Additional metadata about the notes'),
 			}),
 			execute: async (noteData: any) => {
 				// Simply return the note data as-is
 				// This tool exists to allow the AI to provide structured output
 				// that will be rendered by the NoteUI component
 				return noteData;
+			},
+		}),
+
+		generate_assignment_summary: tool({
+			description: 'Generate a markdown summary of an assignment to help the user understand requirements, key points, and context. This is the first artifact created to help users understand the assignment before planning. Call this when assignment_plan mode is enabled and user has provided an assignment.',
+			inputSchema: z.object({
+				content: z.string().describe('Markdown content summarizing the assignment requirements, key points, and context'),
+				metadata: z.object({
+					assignmentId: z.number().optional().describe('Assignment ID from Canvas'),
+					courseId: z.number().optional().describe('Course ID from Canvas'),
+					assignmentName: z.string().optional().describe('Name of the assignment'),
+					dueDate: z.string().optional().describe('Due date of the assignment'),
+					totalPoints: z.number().optional().describe('Total points for the assignment'),
+				}).optional().describe('Optional metadata about the assignment'),
+			}),
+			execute: async (summaryData: any) => {
+				// Return the summary data as-is
+				// This will be saved as an assignment_summary artifact
+				return summaryData;
+			},
+		}),
+
+		generate_assignment_plan: tool({
+			description: 'Generate a detailed markdown master plan for completing an assignment following the proven 6-step methodology (Understand → Plan → Research → Draft → Revise → Submit). This tool creates a structured plan that the user must approve before execution. Call this tool when assignment_plan mode is enabled, understanding artifacts have been generated, and the user has provided context and requirements.',
+			needsApproval: true,
+			inputSchema: z.object({
+				content: z.string().describe('Markdown content of the master plan following the structured format with 6 steps, timeline, resources, and progress tracking'),
+				metadata: z.object({
+					assignmentId: z.number().optional().describe('Assignment ID from Canvas'),
+					courseId: z.number().optional().describe('Course ID from Canvas'),
+					assignmentName: z.string().optional().describe('Name of the assignment'),
+					dueDate: z.string().optional().describe('Due date of the assignment'),
+					totalPoints: z.number().optional().describe('Total points for the assignment'),
+					estimatedTotalTime: z.string().optional().describe('Estimated total time to complete'),
+					difficulty: z.enum(['easy', 'medium', 'hard']).optional().describe('Estimated difficulty level'),
+					topics: z.array(z.string()).optional().describe('Topics covered in the assignment'),
+				}).optional().describe('Optional metadata about the assignment and plan'),
+			}),
+			execute: async (planData: any) => {
+				// Simply return the plan data as-is
+				// This tool exists to allow the AI to provide structured plan output
+				// that will be rendered by the Plan component for user approval
+				return planData;
+			},
+		}),
+
+		provide_assignment_plan_output: tool({
+			description: 'CRITICAL: After the user approves the assignment plan from generate_assignment_plan, you MUST call this tool with the final plan data. This tool provides the structured plan data for rendering in the AssignmentPlanUI component. DO NOT generate text responses before calling this tool - call it immediately after plan approval. This tool accepts the complete plan structure with markdown content and optional metadata.',
+			inputSchema: z.object({
+				content: z.string().describe('Markdown content of the master plan'),
+				metadata: z.object({
+					assignmentId: z.number().optional().describe('Assignment ID from Canvas'),
+					courseId: z.number().optional().describe('Course ID from Canvas'),
+					assignmentName: z.string().optional().describe('Name of the assignment'),
+					dueDate: z.string().optional().describe('Due date of the assignment'),
+					totalPoints: z.number().optional().describe('Total points for the assignment'),
+					estimatedTotalTime: z.string().optional().describe('Estimated total time to complete'),
+					difficulty: z.enum(['easy', 'medium', 'hard']).optional().describe('Estimated difficulty level'),
+					topics: z.array(z.string()).optional().describe('Topics covered in the assignment'),
+					currentStepId: z.string().optional().describe('Which step user is currently working on'),
+					overallProgress: z.number().int().min(0).max(100).optional().describe('Overall progress percentage (0-100)'),
+				}).optional().describe('Optional metadata about the assignment and plan'),
+			}),
+			execute: async (planData: any) => {
+				// Simply return the plan data as-is
+				// This tool exists to allow the AI to provide structured output
+				// that will be rendered by the AssignmentPlanUI component
+				return planData;
+			},
+		}),
+
+		execute_assignment_step: tool({
+			description: 'Provide step-specific guidance and help for a particular step in an assignment plan. This tool generates markdown guidance including instructions, templates, examples, resources, and next actions for the specified step.',
+			inputSchema: z.object({
+				stepId: z.string().describe('ID of the step (e.g., "step-1", "step-2")'),
+				planId: z.string().optional().describe('ID of the assignment plan artifact (if saved)'),
+				userProgress: z.record(z.any()).optional().describe('Current state of all steps (progress, drafts, etc.)'),
+				userRequest: z.string().optional().describe('Specific question or request from the user about this step'),
+				guidance: z.string().describe('Markdown content providing step-specific guidance, instructions, templates, examples, resources, and next actions'),
+			}),
+			execute: async (stepData: any) => {
+				// Return the guidance data as-is
+				// This will be displayed to help the user with the specific step
+				return stepData;
+			},
+		}),
+
+		review_assignment_draft: tool({
+			description: 'Review a user\'s draft work for a specific step and provide constructive feedback in markdown format. This tool analyzes the draft content against the plan context and rubric criteria (if available) to provide actionable feedback and suggestions.',
+			inputSchema: z.object({
+				stepId: z.string().describe('ID of the step being reviewed'),
+				draftContent: z.string().describe('Markdown content of the user\'s draft'),
+				planContext: z.string().optional().describe('Context from the full assignment plan'),
+				rubricCriteria: z.string().optional().describe('Assignment rubric criteria (if available)'),
+				feedback: z.string().describe('Markdown content providing overall assessment, specific feedback points with examples, actionable improvement suggestions, rubric alignment, and next steps'),
+			}),
+			execute: async (reviewData: any) => {
+				// Return the review data as-is
+				// This will be displayed as feedback to the user
+				return reviewData;
+			},
+		}),
+
+		generate_step_draft: tool({
+			description: 'Generate starting markdown draft content for a specific step in an assignment plan. This tool helps users get started on a step by providing initial content, outlines, or templates that they can refine.',
+			inputSchema: z.object({
+				stepId: z.string().describe('ID of the step to generate draft for'),
+				planContext: z.string().optional().describe('Context from the full assignment plan'),
+				userInput: z.string().optional().describe('User\'s specific requirements or starting point for the draft'),
+				previousSteps: z.string().optional().describe('Content from completed previous steps (for continuity)'),
+				draftContent: z.string().describe('Markdown draft content for the step (e.g., essay outline, introduction paragraph, research notes)'),
+			}),
+			execute: async (draftData: any) => {
+				// Return the draft data as-is
+				// This will be provided to the user as starting content
+				return draftData;
 			},
 		}),
 	};

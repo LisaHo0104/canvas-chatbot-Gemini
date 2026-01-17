@@ -121,6 +121,7 @@ export default function ChatPage() {
     rubricSuggestions,
     quizSuggestions,
     studyPlanSuggestions,
+    assignmentPlanSuggestions,
     regenerateAllSuggestions: regenerateSuggestions,
   } = suggestions
 
@@ -521,7 +522,7 @@ export default function ChatPage() {
   }
 
   // Handler to open artifact panel
-  const handleOpenArtifact = useCallback((type: 'quiz' | 'rubric' | 'note', data: any, messageId?: string) => {
+  const handleOpenArtifact = useCallback((type: 'quiz' | 'rubric' | 'note' | 'assignment_plan' | 'assignment_summary', data: any, messageId?: string) => {
     setArtifactPanelData({ type, data, messageId })
     setArtifactPanelOpen(true)
   }, [])
@@ -531,6 +532,33 @@ export default function ChatPage() {
     setArtifactPanelOpen(false)
     setArtifactPanelData(null)
   }, [])
+
+  // Handler to discuss artifact with AI
+  const handleDiscussArtifactWithAI = useCallback((instruction: string) => {
+    // Close the artifact panel
+    setArtifactPanelOpen(false)
+    
+    // Send the instruction as a chat message
+    try {
+      sendChatMessage({
+        role: 'user',
+        parts: [{ type: 'text', text: instruction }]
+      } as any, {
+        body: {
+          model: selectedModel,
+          webSearch,
+          mode,
+          canvas_token: canvasStatus === 'connected' ? canvasToken : undefined,
+          canvas_url: canvasStatus === 'connected' ? canvasUrl : undefined,
+          selected_context: selectedContext.courses.length > 0 || selectedContext.assignments.length > 0 || selectedContext.modules.length > 0 ? selectedContext : undefined,
+          selected_system_prompt_ids: selectedSystemPromptIds.length > 0 ? selectedSystemPromptIds : undefined,
+        },
+        headers: currentSession?.id ? { 'X-Session-ID': currentSession.id } : undefined,
+      })
+    } catch (error) {
+      console.error('Error sending discuss message:', error)
+    }
+  }, [sendChatMessage, selectedModel, webSearch, mode, canvasStatus, canvasToken, canvasUrl, selectedContext, selectedSystemPromptIds, currentSession])
 
   // Clear UI messages when session is cleared
   useEffect(() => {
@@ -705,25 +733,29 @@ export default function ChatPage() {
                               'generate_quiz_plan',
                               'provide_quiz_output',
                               'provide_note_output',
+                              'generate_assignment_summary',
+                              'generate_assignment_plan',
+                              'provide_assignment_plan_output',
                               'webSearch'
                             ].includes(toolName)
 
                             // Handle UITools - show custom UI for these tools
                             if (isUITool) {
-                              // For generate_quiz_plan, show in all states where we have input or output
+                              // For generate_quiz_plan and generate_assignment_plan, show in all states where we have input or output
                               // For other tools, only show when output is available
-                              const hasData = toolName === 'generate_quiz_plan' 
+                              const planTools = ['generate_quiz_plan', 'generate_assignment_plan']
+                              const hasData = planTools.includes(toolName)
                                 ? (tp.input || tp.output)
                                 : tp.output
                               
                               const shouldShow = 
-                                (toolName === 'generate_quiz_plan' && hasData) ||
-                                (toolName !== 'generate_quiz_plan' && tp.state === 'output-available')
+                                (planTools.includes(toolName) && hasData) ||
+                                (!planTools.includes(toolName) && tp.state === 'output-available')
                               
                               if (shouldShow) {
-                                // For generate_quiz_plan, prefer output but fall back to input
+                                // For plan tools, prefer output but fall back to input
                                 // For other tools, use output
-                                const result = toolName === 'generate_quiz_plan' 
+                                const result = planTools.includes(toolName) 
                                   ? (tp.output || tp.input)
                                   : tp.output
                                 
@@ -733,7 +765,7 @@ export default function ChatPage() {
                                       toolName={toolName} 
                                       result={result}
                                       toolPart={tp}
-                                      onViewFull={(type: 'quiz' | 'rubric' | 'note', data: any, messageId?: string) => {
+                                      onViewFull={(type: 'quiz' | 'rubric' | 'note' | 'assignment_plan' | 'assignment_summary', data: any, messageId?: string) => {
                                         handleOpenArtifact(type, data, messageId)
                                       }}
                                       onApprove={() => {
@@ -782,7 +814,7 @@ export default function ChatPage() {
                                               : ('output' in tp ? tp.output : (tp.state === 'approval-requested' || tp.state === 'input-available' ? tp.input : undefined))
                                           }
                                           toolPart={tp}
-                                          onViewFull={(type: 'quiz' | 'rubric' | 'note', data: any, messageId?: string) => {
+                                          onViewFull={(type, data, messageId) => {
                                             handleOpenArtifact(type, data, messageId)
                                           }}
                                           onApprove={() => {
@@ -893,7 +925,9 @@ export default function ChatPage() {
                         ? quizSuggestions
                         : mode === 'study-plan'
                           ? studyPlanSuggestions
-                          : staticSuggestions
+                          : mode === 'assignment_plan'
+                            ? assignmentPlanSuggestions
+                            : staticSuggestions
                   ).map((s, i) => (
                     <Suggestion key={`${s}-${i}`} suggestion={s} disabled={status !== 'ready'} onClick={() => { onSubmitAI({ text: s }) }} />
                   ))
@@ -1255,6 +1289,8 @@ export default function ChatPage() {
                 artifactType={artifactPanelData.type}
                 artifactData={artifactPanelData.data}
                 messageId={artifactPanelData.messageId}
+                artifactId={artifactPanelData.artifactId}
+                onDiscussWithAI={handleDiscussArtifactWithAI}
               />
             }
           />
@@ -1433,25 +1469,29 @@ export default function ChatPage() {
                               'generate_quiz_plan',
                               'provide_quiz_output',
                               'provide_note_output',
+                              'generate_assignment_summary',
+                              'generate_assignment_plan',
+                              'provide_assignment_plan_output',
                               'webSearch'
                             ].includes(toolName)
 
                             // Handle UITools - show custom UI for these tools
                             if (isUITool) {
-                              // For generate_quiz_plan, show in all states where we have input or output
+                              // For generate_quiz_plan and generate_assignment_plan, show in all states where we have input or output
                               // For other tools, only show when output is available
-                              const hasData = toolName === 'generate_quiz_plan' 
+                              const planTools = ['generate_quiz_plan', 'generate_assignment_plan']
+                              const hasData = planTools.includes(toolName)
                                 ? (tp.input || tp.output)
                                 : tp.output
                               
                               const shouldShow = 
-                                (toolName === 'generate_quiz_plan' && hasData) ||
-                                (toolName !== 'generate_quiz_plan' && tp.state === 'output-available')
+                                (planTools.includes(toolName) && hasData) ||
+                                (!planTools.includes(toolName) && tp.state === 'output-available')
                               
                               if (shouldShow) {
-                                // For generate_quiz_plan, prefer output but fall back to input
+                                // For plan tools, prefer output but fall back to input
                                 // For other tools, use output
-                                const result = toolName === 'generate_quiz_plan' 
+                                const result = planTools.includes(toolName) 
                                   ? (tp.output || tp.input)
                                   : tp.output
                                 
@@ -1461,7 +1501,7 @@ export default function ChatPage() {
                                       toolName={toolName} 
                                       result={result}
                                       toolPart={tp}
-                                        onViewFull={(type: 'quiz' | 'rubric' | 'note', data: any, messageId?: string) => {
+                                        onViewFull={(type, data, messageId) => {
                                           handleOpenArtifact(type, data, messageId)
                                         }}
                                       onApprove={() => {
@@ -1510,7 +1550,7 @@ export default function ChatPage() {
                                               : ('output' in tp ? tp.output : (tp.state === 'approval-requested' || tp.state === 'input-available' ? tp.input : undefined))
                                           }
                                           toolPart={tp}
-                                            onViewFull={(type: 'quiz' | 'rubric' | 'note', data: any, messageId?: string) => {
+                                            onViewFull={(type, data, messageId) => {
                                               handleOpenArtifact(type, data, messageId)
                                             }}
                                           onApprove={() => {
@@ -1621,7 +1661,9 @@ export default function ChatPage() {
                         ? quizSuggestions
                         : mode === 'study-plan'
                           ? studyPlanSuggestions
-                          : staticSuggestions
+                          : mode === 'assignment_plan'
+                            ? assignmentPlanSuggestions
+                            : staticSuggestions
                   ).map((s, i) => (
                     <Suggestion key={`${s}-${i}`} suggestion={s} disabled={status !== 'ready'} onClick={() => { onSubmitAI({ text: s }) }} />
                   ))

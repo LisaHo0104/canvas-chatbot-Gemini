@@ -78,6 +78,23 @@ export function useSuggestions(hasContext: boolean, selectedContext: SelectedCon
     ]
   }, [hasContext])
 
+  const assignmentPlanSuggestions = useMemo(() => {
+    if (selectedContext.assignments.length > 0) {
+      return [
+        'Help me plan this assignment',
+        'Create a plan for completing this assignment',
+        'Break down this assignment into steps',
+        'What should I do first for this assignment?',
+      ]
+    }
+    return [
+      'Help me plan an assignment',
+      'Create an assignment plan',
+      'Break down my assignment into manageable steps',
+      'Guide me through completing my assignment',
+    ]
+  }, [selectedContext.assignments.length])
+
   const regenerateAllSuggestions = async (
     uiMessages: any[],
     activeProvider: any,
@@ -129,6 +146,7 @@ export function useSuggestions(hasContext: boolean, selectedContext: SelectedCon
     rubricSuggestions,
     quizSuggestions,
     studyPlanSuggestions,
+    assignmentPlanSuggestions,
     regenerateAllSuggestions,
   }
 }

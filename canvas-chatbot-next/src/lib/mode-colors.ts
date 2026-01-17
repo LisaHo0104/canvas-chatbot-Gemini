@@ -2,7 +2,7 @@
  * Mode-specific color utilities for Quiz, Rubric Analysis, and Study Plan
  */
 
-export type ModeType = 'quiz' | 'rubric' | 'study-plan' | 'note' | null
+export type ModeType = 'quiz' | 'rubric' | 'study-plan' | 'note' | 'assignment_plan' | null
 
 /**
  * Get background and text color classes for a mode
@@ -47,6 +47,14 @@ export function getModeColors(mode: ModeType): {
         mutedText: 'text-amber-700 dark:text-amber-300',
         border: 'border-amber-200 dark:border-amber-800',
       }
+    case 'assignment_plan':
+      return {
+        bg: 'bg-indigo-100 dark:bg-indigo-900',
+        text: 'text-indigo-800 dark:text-indigo-200',
+        muted: 'bg-indigo-50 dark:bg-indigo-950',
+        mutedText: 'text-indigo-700 dark:text-indigo-300',
+        border: 'border-indigo-200 dark:border-indigo-800',
+      }
     default:
       return {
         bg: 'bg-muted',
@@ -77,19 +85,21 @@ export function getModeButtonColors(mode: ModeType): string {
 /**
  * Get artifact type from mode string
  */
-export function getArtifactTypeFromMode(mode: string | null): 'quiz' | 'rubric_analysis' | 'note' | null {
+export function getArtifactTypeFromMode(mode: string | null): 'quiz' | 'rubric_analysis' | 'note' | 'assignment_plan' | 'assignment_summary' | null {
   if (mode === 'quiz') return 'quiz'
   if (mode === 'rubric') return 'rubric_analysis'
   if (mode === 'note') return 'note'
+  if (mode === 'assignment_plan') return 'assignment_plan'
   return null
 }
 
 /**
  * Get mode from artifact type
  */
-export function getModeFromArtifactType(artifactType: 'quiz' | 'rubric_analysis' | 'note'): ModeType {
+export function getModeFromArtifactType(artifactType: 'quiz' | 'rubric_analysis' | 'note' | 'assignment_plan' | 'assignment_summary'): ModeType {
   if (artifactType === 'quiz') return 'quiz'
   if (artifactType === 'rubric_analysis') return 'rubric'
   if (artifactType === 'note') return 'note'
+  if (artifactType === 'assignment_plan') return 'assignment_plan'
   return null
 }

@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
     }
 
     const url = new URL(request.url)
-    const artifactType = url.searchParams.get('type') // 'quiz' | 'rubric_analysis' | 'note' | null
+    const artifactType = url.searchParams.get('type') // 'quiz' | 'rubric_analysis' | 'note' | 'assignment_plan' | 'assignment_summary' | null
     const search = url.searchParams.get('search') // search in title/description
     const sortBy = url.searchParams.get('sortBy') || 'created_at' // 'created_at' | 'updated_at' | 'title'
     const sortOrder = url.searchParams.get('sortOrder') || 'desc' // 'asc' | 'desc'
@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
       .eq('user_id', user.id)
 
     // Filter by type if provided
-    if (artifactType && (artifactType === 'quiz' || artifactType === 'rubric_analysis' || artifactType === 'note')) {
+    if (artifactType && (artifactType === 'quiz' || artifactType === 'rubric_analysis' || artifactType === 'note' || artifactType === 'assignment_plan' || artifactType === 'assignment_summary')) {
       query = query.eq('artifact_type', artifactType)
     }
 
@@ -83,9 +83,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Title is required' }, { status: 400 })
     }
 
-    if (!artifact_type || (artifact_type !== 'quiz' && artifact_type !== 'rubric_analysis' && artifact_type !== 'note')) {
+    if (!artifact_type || (artifact_type !== 'quiz' && artifact_type !== 'rubric_analysis' && artifact_type !== 'note' && artifact_type !== 'assignment_plan' && artifact_type !== 'assignment_summary')) {
       return NextResponse.json(
-        { error: 'Invalid artifact_type. Must be "quiz", "rubric_analysis", or "note"' },
+        { error: 'Invalid artifact_type. Must be "quiz", "rubric_analysis", "note", "assignment_plan", or "assignment_summary"' },
         { status: 400 },
       )
     }

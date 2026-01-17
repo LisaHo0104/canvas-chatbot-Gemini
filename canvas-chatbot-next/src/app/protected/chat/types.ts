@@ -29,9 +29,10 @@ export interface SelectedContext {
 }
 
 export interface ArtifactPanelData {
-  type: 'quiz' | 'rubric' | 'note'
+  type: 'quiz' | 'rubric' | 'note' | 'assignment_plan' | 'assignment_summary'
   data: any
   messageId?: string
+  artifactId?: string
 }
 
 export interface EditingState {
