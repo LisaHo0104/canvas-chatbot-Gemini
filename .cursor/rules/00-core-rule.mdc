@@ -3,6 +3,14 @@ alwaysApply: true
 ---
 # Overview
 
+## Documentation
+- When we introduce new term or feature, please update into @01-business-context.mdc for future reference
+- Regularly review and update @01-business-context.mdc after feature updates
+
+## Code Convention
+- No file should have more than 500 lines of code
+  - Refactor if the code is more than 500 lines
+
 ## NextJS
 - Run `bun run build` to ensure code is compiling
 
