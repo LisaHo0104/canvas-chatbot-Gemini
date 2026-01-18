@@ -4,10 +4,11 @@ import { useState } from 'react'
 import { X } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
-import { Spinner } from '@/components/ui/spinner'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { QuizUI } from '@/components/quiz/quiz-ui'
 import { RubricAnalysisUI } from '@/components/rubric-interpreter/rubric-analysis-ui'
 import { NoteUI } from '@/components/note/note-ui'
+import { Editor } from '@/components/blocks/editor-00/editor'
 import { SaveArtifactDialog } from './SaveArtifactDialog'
 
 interface ArtifactPanelProps {
@@ -26,6 +27,7 @@ export function ArtifactPanel({
   messageId,
 }: ArtifactPanelProps) {
   const [saveDialogOpen, setSaveDialogOpen] = useState(false)
+  const [activeTab, setActiveTab] = useState<'note' | 'editor'>('note')
 
   if (!open || !artifactData) return null
 
@@ -81,34 +83,56 @@ export function ArtifactPanel({
           </Button>
         </div>
 
-        {/* Content */}
-        <ScrollArea className="flex-1 min-h-0">
-          <div className="px-6 py-4 lg:py-6">
-            {artifactType === 'quiz' && (
-              <QuizUI
-                data={artifactData}
-                messageId={messageId}
-                compact={false}
-                onSaveClick={() => setSaveDialogOpen(true)}
-              />
-            )}
-            {artifactType === 'rubric' && (
-              <RubricAnalysisUI
-                data={artifactData}
-                messageId={messageId}
-                compact={false}
-              />
-            )}
-            {artifactType === 'note' && (
-              <NoteUI
-                data={artifactData}
-                messageId={messageId}
-                compact={false}
-                onSaveClick={() => setSaveDialogOpen(true)}
-              />
-            )}
-          </div>
-        </ScrollArea>
+        {/* Content with Tabs for Note type */}
+        {artifactType === 'note' ? (
+          <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'note' | 'editor')} className="flex-1 flex flex-col min-h-0">
+            <div className="px-6 pt-4 pb-2 border-b shrink-0">
+              <TabsList>
+                <TabsTrigger value="note">Full Note</TabsTrigger>
+                <TabsTrigger value="editor">Text Editor</TabsTrigger>
+              </TabsList>
+            </div>
+            <div className="flex-1 min-h-0 overflow-hidden">
+              <TabsContent value="note" className="h-full m-0 p-0 data-[state=active]:flex data-[state=active]:flex-col">
+                <ScrollArea className="flex-1 min-h-0">
+                  <div className="px-6 py-4 lg:py-6">
+                    <NoteUI
+                      data={artifactData}
+                      messageId={messageId}
+                      compact={false}
+                      onSaveClick={() => setSaveDialogOpen(true)}
+                    />
+                  </div>
+                </ScrollArea>
+              </TabsContent>
+              <TabsContent value="editor" className="h-full m-0 p-0 data-[state=active]:flex data-[state=active]:flex-col">
+                <div className="flex-1 min-h-0 p-6 overflow-auto">
+                  <Editor />
+                </div>
+              </TabsContent>
+            </div>
+          </Tabs>
+        ) : (
+          <ScrollArea className="flex-1 min-h-0">
+            <div className="px-6 py-4 lg:py-6">
+              {artifactType === 'quiz' && (
+                <QuizUI
+                  data={artifactData}
+                  messageId={messageId}
+                  compact={false}
+                  onSaveClick={() => setSaveDialogOpen(true)}
+                />
+              )}
+              {artifactType === 'rubric' && (
+                <RubricAnalysisUI
+                  data={artifactData}
+                  messageId={messageId}
+                  compact={false}
+                />
+              )}
+            </div>
+          </ScrollArea>
+        )}
       </div>
 
       {/* Save Dialog */}
