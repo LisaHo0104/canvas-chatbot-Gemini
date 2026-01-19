@@ -686,24 +686,26 @@ You MUST follow this sequence:
    - Identify related resources and links from Canvas data
    - Structure notes for easy reading and review
 
-3. **Output:** After generating the notes, you MUST call 'provide_note_output' with the complete note structure:
+3. **Output:** After generating the notes, you MUST call 'provide_note_markdown' with the markdown content:
    - title: Descriptive title for the notes
-   - description: Optional description or summary
-   - summary: Quick summary at the top (brief overview)
-   - sections: Array of sections with (id, heading, content, keyPoints, level)
-     * Use level 1 for main sections (H1), level 2 for subsections (H2), level 3 for sub-subsections (H3)
-     * Content should use markdown formatting (bold for key terms, italic for emphasis)
-   - keyTakeaways: Array of main points students should remember
-   - successCriteria: Array of "You should be able to..." statements
-   - practiceQuestions: Optional array of questions with answers
-   - resources: Array of related resources with (type, name, url)
-   - metadata: Optional metadata (topics, estimatedReadingTime, sourcesUsed)
+   - markdown: Complete markdown content with well-structured formatting:
+     * Use clear heading hierarchy (# for H1, ## for H2, ### for H3)
+     * Start with a title as the first H1 heading (or include in title field)
+     * Organize content into logical sections with clear headings
+     * Include a summary section at the top (## Summary or first paragraph)
+     * Use markdown formatting: **bold** for key terms, *italic* for emphasis, bullet points for lists
+     * Include a "## Key Takeaways" section with bullet points of main points
+     * Include a "## Success Criteria" section with "You should be able to..." statements
+     * Include a "## Practice Questions" section with questions and answers (format: Q: question, A: answer)
+     * Include a "## Resources" section with links in markdown format [text](url)
+     * Structure notes for easy reading and review
+   - description: Optional description or summary of the notes
 
-   CRITICAL: You MUST call provide_note_output in the SAME step or immediately after note generation completes. DO NOT generate text responses before calling this tool - call it immediately. After calling provide_note_output, FINISH your response - DO NOT generate additional text explanations. The NoteUI component will render the structured data, so no additional text is needed.
+   CRITICAL: You MUST call provide_note_markdown in the SAME step or immediately after note generation completes. DO NOT generate text responses before calling this tool - call it immediately. After calling provide_note_markdown, FINISH your response - DO NOT generate additional text explanations. The markdown will be displayed in the Text Editor for the user to edit before conversion to structured format.
    
-   ⚠️ REMINDER: If you have generated notes but not yet called provide_note_output, you MUST call it NOW. Do not continue with text output - call the tool immediately.
+   ⚠️ REMINDER: If you have generated notes but not yet called provide_note_markdown, you MUST call it NOW. Do not continue with text output - call the tool immediately.
 
-This sequence is REQUIRED. Do not skip any step. The provide_note_output tool is essential for the note generation workflow. If you generate notes without calling provide_note_output, the user will only see plain text instead of the structured UI.`;
+This sequence is REQUIRED. Do not skip any step. The provide_note_markdown tool is essential for the note generation workflow. If you generate notes without calling provide_note_markdown, the user will only see plain text instead of the editable markdown.`;
 			} else {
 				// Note mode active but no context - still enforce tool usage
 				noteEnforcementPrompt = `\n\n⚠️ CRITICAL: NOTE MODE IS ACTIVE
@@ -727,24 +729,26 @@ You MUST follow this sequence:
    - Identify related resources and links from Canvas data
    - Structure notes for easy reading and review
 
-3. **Output:** After generating the notes, you MUST call 'provide_note_output' with the complete note structure:
+3. **Output:** After generating the notes, you MUST call 'provide_note_markdown' with the markdown content:
    - title: Descriptive title for the notes
-   - description: Optional description or summary
-   - summary: Quick summary at the top (brief overview)
-   - sections: Array of sections with (id, heading, content, keyPoints, level)
-     * Use level 1 for main sections (H1), level 2 for subsections (H2), level 3 for sub-subsections (H3)
-     * Content should use markdown formatting (bold for key terms, italic for emphasis)
-   - keyTakeaways: Array of main points students should remember
-   - successCriteria: Array of "You should be able to..." statements
-   - practiceQuestions: Optional array of questions with answers
-   - resources: Array of related resources with (type, name, url)
-   - metadata: Optional metadata (topics, estimatedReadingTime, sourcesUsed)
+   - markdown: Complete markdown content with well-structured formatting:
+     * Use clear heading hierarchy (# for H1, ## for H2, ### for H3)
+     * Start with a title as the first H1 heading (or include in title field)
+     * Organize content into logical sections with clear headings
+     * Include a summary section at the top (## Summary or first paragraph)
+     * Use markdown formatting: **bold** for key terms, *italic* for emphasis, bullet points for lists
+     * Include a "## Key Takeaways" section with bullet points of main points
+     * Include a "## Success Criteria" section with "You should be able to..." statements
+     * Include a "## Practice Questions" section with questions and answers (format: Q: question, A: answer)
+     * Include a "## Resources" section with links in markdown format [text](url)
+     * Structure notes for easy reading and review
+   - description: Optional description or summary of the notes
 
-   CRITICAL: You MUST call provide_note_output in the SAME step or immediately after note generation completes. DO NOT generate text responses before calling this tool - call it immediately. After calling provide_note_output, FINISH your response - DO NOT generate additional text explanations. The NoteUI component will render the structured data, so no additional text is needed.
+   CRITICAL: You MUST call provide_note_markdown in the SAME step or immediately after note generation completes. DO NOT generate text responses before calling this tool - call it immediately. After calling provide_note_markdown, FINISH your response - DO NOT generate additional text explanations. The markdown will be displayed in the Text Editor for the user to edit before conversion to structured format.
    
-   ⚠️ REMINDER: If you have generated notes but not yet called provide_note_output, you MUST call it NOW. Do not continue with text output - call the tool immediately.
+   ⚠️ REMINDER: If you have generated notes but not yet called provide_note_markdown, you MUST call it NOW. Do not continue with text output - call the tool immediately.
 
-This sequence is REQUIRED. Do not skip any step. The provide_note_output tool is essential for the note generation workflow. If you generate notes without calling provide_note_output, the user will only see plain text instead of the structured UI.`;
+This sequence is REQUIRED. Do not skip any step. The provide_note_markdown tool is essential for the note generation workflow. If you generate notes without calling provide_note_markdown, the user will only see plain text instead of the editable markdown.`;
 			}
 		}
 
