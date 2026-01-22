@@ -13,7 +13,6 @@ import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { createClient as createSupabaseClient } from '@/lib/supabase/client'
 import { UserCountBadge } from '@/components/UserCountBadge'
-import { getModeBadgeColors } from '@/lib/mode-colors'
 
 
 
@@ -107,21 +106,15 @@ export default function MainNavBar() {
                       </NavigationMenuLink>
                     </NavigationMenuItem>
                     <NavigationMenuItem>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <NavigationMenuLink
-                            className={cn(
-                              'inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-sm text-muted-foreground opacity-50 cursor-not-allowed',
-                              pathname === '/protected/quiz' ? 'bg-accent text-accent-foreground' : ''
-                            )}
-                            aria-disabled="true"
-                          >
-                            Quiz
-                            <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 h-4 border ${getModeBadgeColors('quiz')}`}>Beta</Badge>
-                          </NavigationMenuLink>
-                        </TooltipTrigger>
-                        <TooltipContent>This feature will be ready soon</TooltipContent>
-                      </Tooltip>
+                      <NavigationMenuLink
+                        asChild
+                        className={cn(
+                          pathname === '/protected/study-roadmap' ? 'bg-accent text-accent-foreground' : ''
+                        )}
+                        aria-current={pathname === '/protected/study-roadmap' ? 'page' : undefined}
+                      >
+                        <Link href="/protected/study-roadmap">Study</Link>
+                      </NavigationMenuLink>
                     </NavigationMenuItem>
                     <NavigationMenuItem>
                       <Tooltip>
@@ -153,10 +146,6 @@ export default function MainNavBar() {
                     <DropdownMenuItem asChild>
                       <Link href="/protected/chat">Chat</Link>
                     </DropdownMenuItem>
-                    <DropdownMenuItem disabled title="This feature will be ready soon" className="flex items-center gap-1.5">
-                      Quiz
-                      <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 h-4 border ${getModeBadgeColors('quiz')}`}>Beta</Badge>
-                    </DropdownMenuItem>
                     <DropdownMenuItem asChild>
                       <Link href="/protected/context">Context</Link>
                     </DropdownMenuItem>
@@ -165,6 +154,9 @@ export default function MainNavBar() {
                         Artifacts
                         <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-green-100 text-green-800 border-green-300 dark:bg-green-900 dark:text-green-200 dark:border-green-700">Beta</Badge>
                       </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/protected/study-roadmap">Study</Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem disabled title="Not ready for public use">
                       Billing

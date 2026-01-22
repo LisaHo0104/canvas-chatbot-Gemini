@@ -74,98 +74,105 @@ export function Plugins() {
 
   return (
     <TableContext>
-      <div className="relative">
-      <ToolbarPlugin>
-        {() => (
-          <div className="border-b bg-background p-2 flex items-center gap-2 flex-wrap">
-            <HistoryToolbarPlugin />
-            <Separator orientation="vertical" className="!h-7" />
-            <BlockFormatDropDown>
-              <FormatParagraph />
-              <FormatHeading levels={["h1", "h2", "h3"]} />
-              <FormatBulletedList />
-              <FormatNumberedList />
-              <FormatCheckList />
-              <FormatQuote />
-              <FormatCodeBlock />
-            </BlockFormatDropDown>
-            <Separator orientation="vertical" className="!h-7" />
-            <BlockInsertPlugin>
-              <InsertTable />
-            </BlockInsertPlugin>
-            <Separator orientation="vertical" className="!h-7" />
-            <FontFormatToolbarPlugin />
-            <Separator orientation="vertical" className="!h-7" />
-            <FontFamilyToolbarPlugin />
-            <FontSizeToolbarPlugin />
-            <Separator orientation="vertical" className="!h-7" />
-            <SubSuperToolbarPlugin />
-            <Separator orientation="vertical" className="!h-7" />
-            <FontColorToolbarPlugin />
-            <FontBackgroundToolbarPlugin />
-            <Separator orientation="vertical" className="!h-7" />
-            <LinkToolbarPlugin setIsLinkEditMode={setIsLinkEditMode} />
-            <Separator orientation="vertical" className="!h-7" />
-            <CodeLanguageToolbarPlugin />
-            <Separator orientation="vertical" className="!h-7" />
-            <ElementFormatToolbarPlugin />
-            <Separator orientation="vertical" className="!h-7" />
-            <ClearFormattingToolbarPlugin />
-          </div>
-        )}
-      </ToolbarPlugin>
-      <div className="relative">
-        <RichTextPlugin
-          contentEditable={
-            <div className="min-h-[200px]">
-              <div className="prose prose-sm max-w-none p-4" ref={onRef}>
-                <ContentEditable placeholder={"Start typing ..."} />
+      <div className="h-full flex flex-col min-h-0">
+        {/* Toolbar - Fixed at top */}
+        <div className="flex-shrink-0">
+          <ToolbarPlugin>
+            {() => (
+              <div className="border-b bg-background p-2 flex items-center gap-2 flex-wrap">
+                <HistoryToolbarPlugin />
+                <Separator orientation="vertical" className="!h-7" />
+                <BlockFormatDropDown>
+                  <FormatParagraph />
+                  <FormatHeading levels={["h1", "h2", "h3"]} />
+                  <FormatBulletedList />
+                  <FormatNumberedList />
+                  <FormatCheckList />
+                  <FormatQuote />
+                  <FormatCodeBlock />
+                </BlockFormatDropDown>
+                <Separator orientation="vertical" className="!h-7" />
+                <BlockInsertPlugin>
+                  <InsertTable />
+                </BlockInsertPlugin>
+                <Separator orientation="vertical" className="!h-7" />
+                <FontFormatToolbarPlugin />
+                <Separator orientation="vertical" className="!h-7" />
+                <FontFamilyToolbarPlugin />
+                <FontSizeToolbarPlugin />
+                <Separator orientation="vertical" className="!h-7" />
+                <SubSuperToolbarPlugin />
+                <Separator orientation="vertical" className="!h-7" />
+                <FontColorToolbarPlugin />
+                <FontBackgroundToolbarPlugin />
+                <Separator orientation="vertical" className="!h-7" />
+                <LinkToolbarPlugin setIsLinkEditMode={setIsLinkEditMode} />
+                <Separator orientation="vertical" className="!h-7" />
+                <CodeLanguageToolbarPlugin />
+                <Separator orientation="vertical" className="!h-7" />
+                <ElementFormatToolbarPlugin />
+                <Separator orientation="vertical" className="!h-7" />
+                <ClearFormattingToolbarPlugin />
               </div>
-            </div>
-          }
-          ErrorBoundary={LexicalErrorBoundary}
-        />
-        <ListPlugin />
-        <LinkPlugin />
-        <AutoLinkPlugin />
-        <CodeHighlightPlugin />
-        <CodeActionMenuPlugin anchorElem={floatingAnchorElem} />
-        <TablePlugin cellEditorConfig={cellEditorConfig}>
-          {[]}
-        </TablePlugin>
-        {floatingAnchorElem !== null && (
-          <>
-            <FloatingLinkEditorPlugin
-              anchorElem={floatingAnchorElem}
-              isLinkEditMode={isLinkEditMode}
-              setIsLinkEditMode={setIsLinkEditMode}
-            />
-            <DraggableBlockPlugin anchorElem={floatingAnchorElem} />
-          </>
-        )}
-        <ListMaxIndentLevelPlugin maxDepth={7} />
-      </div>
-      
-      {/* Actions */}
-      <ActionsPlugin>
-        <div className="border-t bg-background px-4 py-2 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <ClearEditorActionPlugin />
-            <ImportExportPlugin />
-            <MarkdownTogglePlugin
-              shouldPreserveNewLinesInMarkdown={false}
-              transformers={[
-                ...TEXT_FORMAT_TRANSFORMERS,
-                ...ELEMENT_TRANSFORMERS,
-                CHECK_LIST,
-                TABLE,
-              ]}
-            />
-            <TreeViewPlugin />
-          </div>
-          <CounterCharacterPlugin charset="UTF-16" />
+            )}
+          </ToolbarPlugin>
         </div>
-      </ActionsPlugin>
+        
+        {/* Content Area - Scrollable */}
+        <div className="flex-1 min-h-0 overflow-auto relative">
+          <RichTextPlugin
+            contentEditable={
+              <div className="min-h-[200px]">
+                <div className="prose prose-sm max-w-none p-4" ref={onRef}>
+                  <ContentEditable placeholder={"Start typing ..."} />
+                </div>
+              </div>
+            }
+            ErrorBoundary={LexicalErrorBoundary}
+          />
+          <ListPlugin />
+          <LinkPlugin />
+          <AutoLinkPlugin />
+          <CodeHighlightPlugin />
+          <CodeActionMenuPlugin anchorElem={floatingAnchorElem} />
+          <TablePlugin cellEditorConfig={cellEditorConfig}>
+            {[]}
+          </TablePlugin>
+          {floatingAnchorElem !== null && (
+            <>
+              <FloatingLinkEditorPlugin
+                anchorElem={floatingAnchorElem}
+                isLinkEditMode={isLinkEditMode}
+                setIsLinkEditMode={setIsLinkEditMode}
+              />
+              <DraggableBlockPlugin anchorElem={floatingAnchorElem} />
+            </>
+          )}
+          <ListMaxIndentLevelPlugin maxDepth={7} />
+        </div>
+        
+        {/* Actions - Fixed at bottom */}
+        <div className="flex-shrink-0">
+          <ActionsPlugin>
+            <div className="border-t bg-background px-4 py-2 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-2">
+                <ClearEditorActionPlugin />
+                <ImportExportPlugin />
+                <MarkdownTogglePlugin
+                  shouldPreserveNewLinesInMarkdown={false}
+                  transformers={[
+                    ...TEXT_FORMAT_TRANSFORMERS,
+                    ...ELEMENT_TRANSFORMERS,
+                    CHECK_LIST,
+                    TABLE,
+                  ]}
+                />
+                <TreeViewPlugin />
+              </div>
+              <CounterCharacterPlugin charset="UTF-16" />
+            </div>
+          </ActionsPlugin>
+        </div>
       </div>
     </TableContext>
   )
