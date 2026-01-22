@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { ArrowLeft, X } from 'lucide-react'
@@ -9,19 +9,51 @@ import { ResizableSplitPane } from '@/components/ui/resizable-split-pane'
 import { Editor } from '@/components/blocks/editor-00/editor'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useChat } from '@ai-sdk/react'
-import { Conversation, ConversationContent } from '@/components/ai-elements/conversation'
+import { Conversation, ConversationContent, ConversationScrollButton } from '@/components/ai-elements/conversation'
 import { Message as AIMessage, MessageContent as AIMessageContent, MessageResponse } from '@/components/ai-elements/message'
-import { PromptInput, PromptInputProvider, PromptInputBody, PromptInputTextarea, PromptInputFooter, PromptInputSubmit } from '@/components/ai-elements/prompt-input'
+import { PromptInput, PromptInputProvider, PromptInputHeader, PromptInputBody, PromptInputTextarea, PromptInputFooter, PromptInputTools, PromptInputActionMenu, PromptInputActionMenuTrigger, PromptInputActionMenuContent, PromptInputActionAddAttachments, PromptInputSubmit } from '@/components/ai-elements/prompt-input'
+import { Suggestions, Suggestion } from '@/components/ai-elements/suggestion'
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
+import { Skeleton } from '@/components/ui/skeleton'
+import { SparklesIcon } from 'lucide-react'
 import type { TimelineEvent } from '@/types/events'
 
 export default function StudyPlanTimelinePage() {
   const router = useRouter()
   const [selectedEvent, setSelectedEvent] = useState<TimelineEvent | null>(null)
+  const [suggestionsVisible, setSuggestionsVisible] = useState(true)
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   // Chat functionality
-  const { messages, input = '', handleInputChange, handleSubmit, isLoading } = useChat({
+  const { messages, input = '', handleInputChange, handleSubmit, isLoading, append } = useChat({
     api: '/api/chat',
   })
+
+  // Adapter function to convert PromptInput format to useChat format
+  const onSubmitAI = async (message: { text: string; files?: any[] }) => {
+    if (!message.text?.trim()) return
+    await append({
+      role: 'user',
+      content: message.text,
+    })
+  }
+
+  // Simple suggestions for timeline page
+  const staticSuggestions = [
+    'Show my current courses',
+    'List upcoming deadlines',
+    'Summarize latest Canvas announcements',
+    'What modules need attention this week?'
+  ]
+
+  const regenerateSuggestions = async () => {
+    // Simple implementation - can be enhanced later
+    setLoadingSuggestions(true)
+    setTimeout(() => {
+      setLoadingSuggestions(false)
+    }, 500)
+  }
 
   const handleBack = () => {
     router.back()
@@ -143,67 +175,116 @@ export default function StudyPlanTimelinePage() {
                 }
                 right={
                   <div className="h-full flex flex-col bg-background rounded-lg overflow-hidden border-l">
-                    <div className="p-4 border-b flex-shrink-0">
-                      <h2 className="text-lg font-semibold">AI Chat</h2>
-                      <p className="text-sm text-muted-foreground">Ask questions about your study plan</p>
-                    </div>
-                    <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-                      <Conversation className="flex-1 min-h-0">
-                        <ConversationContent className="h-full">
-                          {messages.length === 0 ? (
-                            <div className="flex items-center justify-center h-full text-center p-8">
-                              <div>
-                                <p className="text-muted-foreground mb-2">Start a conversation</p>
-                                <p className="text-sm text-muted-foreground">Ask about your timeline, milestones, or study plan</p>
+                    <div className="flex-1 flex flex-col min-h-0 overflow-x-hidden">
+                      <Conversation className="h-full relative">
+                        <ConversationContent className="chat-content relative">
+                          {/* Sticky Header */}
+                          <div className="sticky top-0 z-10 -mx-4 -mt-4 mb-4 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
+                            <div className="px-4 py-3 flex items-center justify-between gap-4">
+                              <div className="flex items-center gap-3 flex-1 min-w-0">
+                                <h2 className="text-lg font-semibold">AI Chat</h2>
+                              </div>
+                              <div className="text-sm text-muted-foreground">
+                                Ask questions about your study plan
                               </div>
                             </div>
-                          ) : (
-                            <ScrollArea className="h-full">
-                              <div className="p-4 space-y-4">
-                                {messages.map((message) => (
-                                  <AIMessage key={message.id} from={message.role}>
-                                    <AIMessageContent>
-                                      <MessageResponse>{message.content}</MessageResponse>
-                                    </AIMessageContent>
-                                  </AIMessage>
-                                ))}
-                                {isLoading && (
-                                  <AIMessage from="assistant">
-                                    <AIMessageContent>
-                                      <MessageResponse>Thinking...</MessageResponse>
-                                    </AIMessageContent>
-                                  </AIMessage>
-                                )}
+                          </div>
+                          {messages.length === 0 ? (
+                            <div className="max-w-3xl mx-auto text-center py-16">
+                              <div className="mx-auto w-full max-w-md">
+                                <img src="/dog_chat.png" alt="Lulu chat assistant illustration" className="w-full h-auto" />
                               </div>
-                            </ScrollArea>
+                              <h2 className="text-2xl font-semibold text-slate-900 mb-2">Start a conversation</h2>
+                              <p className="text-slate-600 mb-8">Ask about your timeline, milestones, or study plan</p>
+                            </div>
+                          ) : (
+                            <>
+                              {messages.map((message) => (
+                                <AIMessage key={message.id} from={message.role}>
+                                  <AIMessageContent>
+                                    <MessageResponse>{message.content}</MessageResponse>
+                                  </AIMessageContent>
+                                </AIMessage>
+                              ))}
+                              {isLoading && (
+                                <AIMessage from="assistant">
+                                  <AIMessageContent>
+                                    <MessageResponse>Thinking...</MessageResponse>
+                                  </AIMessageContent>
+                                </AIMessage>
+                              )}
+                            </>
                           )}
                         </ConversationContent>
+                        <ConversationScrollButton />
                       </Conversation>
-                      <div className="border-t p-4 flex-shrink-0">
+                      <div className="grid shrink-0 gap-2 border-t border-slate-200">
                         <PromptInputProvider>
-                          <form 
-                            onSubmit={(e) => {
-                              e.preventDefault()
-                              if (input.trim()) {
-                                handleSubmit(e)
-                              }
-                            }} 
-                            className="w-full"
+                          <Suggestions className="px-4 pt-2">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button 
+                                  aria-label="Generate suggestions" 
+                                  variant="outline" 
+                                  size="icon" 
+                                  type="button" 
+                                  onClick={regenerateSuggestions} 
+                                  disabled={isLoading || loadingSuggestions}
+                                >
+                                  <SparklesIcon className="size-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Generate suggestions</TooltipContent>
+                            </Tooltip>
+                            {suggestionsVisible && (
+                              loadingSuggestions ? (
+                                <div className="flex gap-2">
+                                  <Skeleton className="h-8 w-40 rounded-full" />
+                                  <Skeleton className="h-8 w-32 rounded-full" />
+                                  <Skeleton className="h-8 w-48 rounded-full" />
+                                  <Skeleton className="h-8 w-36 rounded-full" />
+                                </div>
+                              ) : (
+                                staticSuggestions.map((s, i) => (
+                                  <Suggestion 
+                                    key={`${s}-${i}`} 
+                                    suggestion={s} 
+                                    disabled={isLoading} 
+                                    onClick={() => { onSubmitAI({ text: s }) }} 
+                                  />
+                                ))
+                              )
+                            )}
+                          </Suggestions>
+                          <PromptInput
+                            className="px-4 pb-4 w-full"
+                            globalDrop
+                            multiple
+                            accept="application/pdf,image/*"
+                            maxFiles={4}
+                            maxFileSize={10 * 1024 * 1024}
+                            onSubmit={onSubmitAI}
                           >
+                            <PromptInputHeader />
                             <PromptInputBody>
-                              <PromptInputTextarea
-                                value={input || ''}
-                                onChange={(e) => handleInputChange(e)}
-                                placeholder="Ask about your study plan..."
-                                disabled={isLoading}
+                              <PromptInputTextarea 
+                                ref={textareaRef} 
+                                placeholder="Ask about your study plan..." 
+                                className="w-full" 
                               />
                             </PromptInputBody>
                             <PromptInputFooter>
-                              <PromptInputSubmit disabled={isLoading || !(input || '').trim()}>
-                                Send
-                              </PromptInputSubmit>
+                              <PromptInputTools className="flex flex-wrap md:flex-nowrap gap-1">
+                                <PromptInputActionMenu>
+                                  <PromptInputActionMenuTrigger />
+                                  <PromptInputActionMenuContent>
+                                    <PromptInputActionAddAttachments />
+                                  </PromptInputActionMenuContent>
+                                </PromptInputActionMenu>
+                              </PromptInputTools>
+                              <PromptInputSubmit status={isLoading ? 'streaming' : 'ready'} />
                             </PromptInputFooter>
-                          </form>
+                          </PromptInput>
                         </PromptInputProvider>
                       </div>
                     </div>
