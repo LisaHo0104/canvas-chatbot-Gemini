@@ -690,5 +690,20 @@ export function createCanvasTools(token: string, url: string) {
 				return noteData;
 			},
 		}),
+
+		provide_note_markdown: tool({
+			description: 'CRITICAL: After generating notes from course materials, you MUST call this tool with the markdown content. This tool provides the markdown content for the user to edit in the Text Editor before converting to structured format. DO NOT generate text responses before calling this tool - call it immediately after note generation completes. Generate well-structured markdown with clear headings (H1, H2, H3), sections, key takeaways, practice questions, and resources.',
+			inputSchema: z.object({
+				title: z.string().describe('Title of the notes'),
+				markdown: z.string().describe('Complete markdown content of the notes with proper heading hierarchy, sections, key takeaways, practice questions, and resources'),
+				description: z.string().optional().describe('Optional description or summary of the notes'),
+			}),
+			execute: async (noteData: any) => {
+				// Return the markdown data
+				// This tool exists to allow the AI to provide markdown output
+				// that will be displayed in the Text Editor for user editing
+				return noteData;
+			},
+		}),
 	};
 }

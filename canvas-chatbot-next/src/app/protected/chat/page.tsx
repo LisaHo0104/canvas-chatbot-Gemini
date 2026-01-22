@@ -705,6 +705,7 @@ export default function ChatPage() {
                               'generate_quiz_plan',
                               'provide_quiz_output',
                               'provide_note_output',
+                              'provide_note_markdown',
                               'webSearch'
                             ].includes(toolName)
 
@@ -718,7 +719,8 @@ export default function ChatPage() {
                               
                               const shouldShow = 
                                 (toolName === 'generate_quiz_plan' && hasData) ||
-                                (toolName !== 'generate_quiz_plan' && tp.state === 'output-available')
+                                (toolName === 'provide_note_markdown' && tp.state === 'output-available') ||
+                                (toolName !== 'generate_quiz_plan' && toolName !== 'provide_note_markdown' && tp.state === 'output-available')
                               
                               if (shouldShow) {
                                 // For generate_quiz_plan, prefer output but fall back to input
@@ -1433,6 +1435,7 @@ export default function ChatPage() {
                               'generate_quiz_plan',
                               'provide_quiz_output',
                               'provide_note_output',
+                              'provide_note_markdown',
                               'webSearch'
                             ].includes(toolName)
 
@@ -1446,7 +1449,8 @@ export default function ChatPage() {
                               
                               const shouldShow = 
                                 (toolName === 'generate_quiz_plan' && hasData) ||
-                                (toolName !== 'generate_quiz_plan' && tp.state === 'output-available')
+                                (toolName === 'provide_note_markdown' && tp.state === 'output-available') ||
+                                (toolName !== 'generate_quiz_plan' && toolName !== 'provide_note_markdown' && tp.state === 'output-available')
                               
                               if (shouldShow) {
                                 // For generate_quiz_plan, prefer output but fall back to input
