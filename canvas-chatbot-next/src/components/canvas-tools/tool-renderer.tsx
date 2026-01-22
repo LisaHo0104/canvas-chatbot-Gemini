@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button'
 import { Sources, SourcesContent, SourcesTrigger, Source } from '@/components/ai-elements/sources'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { SaveArtifactDialog } from '@/components/artifacts/SaveArtifactDialog'
+import { NoteMarkdownWrapper } from './note-markdown-wrapper'
 import type { ToolUIPart } from 'ai'
 
 interface ToolRendererProps {
@@ -386,6 +387,42 @@ export function ToolRenderer({ toolName, result, toolPart, onApprove, onReject, 
           </p>
           <p className="text-xs text-yellow-600 dark:text-yellow-300 mt-1">
             The note data structure is incomplete. Expected full NoteOutput format with sections array.
+          </p>
+        </div>
+      )
+
+    case 'provide_note_markdown':
+      // This tool provides markdown content for user editing before conversion
+      // Check if result has error
+      if (result?.error) {
+        return (
+          <div className="p-4 border rounded-lg bg-red-50 dark:bg-red-950">
+            <p className="text-sm text-red-800 dark:text-red-200">
+              <strong>Error:</strong> {result.error}
+            </p>
+          </div>
+        )
+      }
+      // Check if result has markdown content
+      if (result && typeof result === 'object' && 'markdown' in result && typeof result.markdown === 'string') {
+        return (
+          <NoteMarkdownWrapper
+            markdown={result.markdown}
+            title={result.title}
+            description={result.description}
+            messageId={(toolPart as any)?.toolCallId}
+            onViewFull={onViewFull}
+          />
+        )
+      }
+      // If structure is incomplete, show a message
+      return (
+        <div className="p-4 border rounded-lg bg-yellow-50 dark:bg-yellow-950">
+          <p className="text-sm text-yellow-800 dark:text-yellow-200">
+            <strong>⚠️ Incomplete Markdown Data</strong>
+          </p>
+          <p className="text-xs text-yellow-600 dark:text-yellow-300 mt-1">
+            The markdown data structure is incomplete. Expected markdown string.
           </p>
         </div>
       )
