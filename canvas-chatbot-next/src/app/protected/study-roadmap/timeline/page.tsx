@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useRef } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useRef, useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
-import { ArrowLeft, X } from 'lucide-react'
+import { ArrowLeft, X, Loader2 } from 'lucide-react'
 import VerticalEventTimeline from '@/components/vertical-event-timeline'
 import { ResizableSplitPane } from '@/components/ui/resizable-split-pane'
 import { Editor } from '@/components/blocks/editor-00/editor'
@@ -17,9 +17,50 @@ import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip
 import { Skeleton } from '@/components/ui/skeleton'
 import { SparklesIcon } from 'lucide-react'
 import type { TimelineEvent } from '@/types/events'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AlertCircle } from 'lucide-react'
+import Breadcrumbs from '@/components/Breadcrumbs'
+import { StudyRoadmapProgress } from '@/components/StudyRoadmapProgress'
+
+interface StudyPlanData {
+  id: string
+  course_id: number
+  course_name: string
+  generated_plan: {
+    timeline: Array<{
+      period: string
+      startDate: string
+      endDate: string
+      events: Array<{
+        title: string
+        type: string
+        date: string
+        duration?: string
+        dueDate?: string
+        points?: number
+        description: string
+        isChecked: boolean
+      }>
+    }>
+    summary: {
+      totalWeeks: number
+      totalStudyHours: number
+      totalAssignments: number
+      keyMilestones: string[]
+    }
+  }
+  progress: {
+    completedEvents?: string[]
+  }
+}
 
 export default function StudyPlanTimelinePage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const planId = searchParams.get('planId')
+  const [studyPlan, setStudyPlan] = useState<StudyPlanData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [selectedEvent, setSelectedEvent] = useState<TimelineEvent | null>(null)
   const [suggestionsVisible, setSuggestionsVisible] = useState(true)
   const [loadingSuggestions, setLoadingSuggestions] = useState(false)
@@ -67,6 +108,52 @@ export default function StudyPlanTimelinePage() {
     setSelectedEvent(null)
   }
 
+  // Fetch study plan data
+  useEffect(() => {
+    if (!planId) {
+      setError('No study plan ID provided')
+      setLoading(false)
+      return
+    }
+
+    const fetchStudyPlan = async () => {
+      try {
+        // Check if this is a mock plan
+        const isMock = searchParams.get('mock') === 'true'
+        
+        if (isMock && typeof window !== 'undefined') {
+          // Use mock data from sessionStorage
+          const mockData = sessionStorage.getItem('mockStudyPlan')
+          if (mockData) {
+            const parsed = JSON.parse(mockData)
+            setStudyPlan(parsed)
+            setLoading(false)
+            return
+          }
+        }
+
+        // Fetch real study plan from API
+        const response = await fetch(`/api/study-plan/${planId}`, {
+          credentials: 'include',
+        })
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch study plan')
+        }
+
+        const data = await response.json()
+        setStudyPlan(data.studyPlan)
+      } catch (err) {
+        console.error('Error fetching study plan:', err)
+        setError(err instanceof Error ? err.message : 'Failed to load study plan')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchStudyPlan()
+  }, [planId, searchParams])
+
   const formatPeriod = (item: TimelineEvent) => {
     if (item.periodType === "Q") {
       return `Q${item.periodNumber} ${item.year}`;
@@ -76,8 +163,97 @@ export default function StudyPlanTimelinePage() {
     return `${item.year}`;
   }
 
-  // If no event is selected, show timeline only
-  if (!selectedEvent) {
+  // Convert study plan data to timeline events format
+  const convertToTimelineEvents = (plan: StudyPlanData): TimelineEvent[] => {
+    if (!plan?.generated_plan?.timeline) return []
+    
+    return plan.generated_plan.timeline.map((period, index) => {
+      const startDate = new Date(period.startDate)
+      const year = startDate.getFullYear()
+      const month = startDate.getMonth()
+      
+      // Determine period type (simplified - using month-based quarters)
+      const quarter = Math.floor(month / 3) + 1
+      const periodType = "Q"
+      const periodNumber = quarter
+      
+      // Check completion status
+      const completedEvents = plan.progress?.completedEvents || []
+      const allEventsCompleted = period.events.every(event => 
+        completedEvents.includes(`${period.period}-${event.title}`)
+      )
+      
+      return {
+        year,
+        periodType,
+        periodNumber,
+        isChecked: allEventsCompleted,
+        events: period.events.map(event => ({
+          title: event.title,
+          isChecked: completedEvents.includes(`${period.period}-${event.title}`),
+          type: event.type,
+          date: event.date,
+          dueDate: event.dueDate,
+          points: event.points,
+          description: event.description,
+          duration: event.duration,
+        })),
+      }
+    })
+  }
+
+  // Handle event toggle (mark as complete/incomplete)
+  const handleEventToggle = async (periodIndex: number, eventIndex: number, isChecked: boolean) => {
+    if (!studyPlan) return
+
+    const period = studyPlan.generated_plan.timeline[periodIndex]
+    const event = period.events[eventIndex]
+    const eventKey = `${period.period}-${event.title}`
+    
+    const completedEvents = studyPlan.progress?.completedEvents || []
+    let updatedCompletedEvents: string[]
+    
+    if (isChecked) {
+      updatedCompletedEvents = [...completedEvents, eventKey]
+    } else {
+      updatedCompletedEvents = completedEvents.filter(key => key !== eventKey)
+    }
+
+    const updatedProgress = {
+      ...studyPlan.progress,
+      completedEvents: updatedCompletedEvents,
+    }
+
+    // Optimistically update UI
+    setStudyPlan({
+      ...studyPlan,
+      progress: updatedProgress,
+    })
+
+    // Update in database
+    try {
+      const response = await fetch(`/api/study-plan/${studyPlan.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ progress: updatedProgress }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to update progress')
+      }
+    } catch (error) {
+      console.error('Error updating progress:', error)
+      // Revert on error
+      setStudyPlan(studyPlan)
+      alert('Failed to update progress. Please try again.')
+    }
+  }
+
+  // Loading state
+  if (loading) {
     return (
       <div className="min-h-[calc(100vh-3rem)] w-full">
         <div className="max-w-7xl mx-auto px-4 py-6">
@@ -92,7 +268,74 @@ export default function StudyPlanTimelinePage() {
               Back
             </Button>
           </div>
-          <VerticalEventTimeline onCardClick={handleCardClick} />
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+            <span className="ml-3 text-muted-foreground">Loading study plan...</span>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Error state
+  if (error || !studyPlan) {
+    return (
+      <div className="min-h-[calc(100vh-3rem)] w-full">
+        <div className="max-w-7xl mx-auto px-4 py-6">
+          <div className="mb-6">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleBack}
+              className="mb-4"
+            >
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back
+            </Button>
+          </div>
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>
+              {error || 'Study plan not found'}
+            </AlertDescription>
+          </Alert>
+        </div>
+      </div>
+    )
+  }
+
+  const timelineEvents = convertToTimelineEvents(studyPlan)
+
+  // If no event is selected, show timeline only
+  if (!selectedEvent) {
+    return (
+      <div className="min-h-[calc(100vh-3rem)] w-full">
+        <div className="max-w-7xl mx-auto px-4 py-6">
+          <Breadcrumbs />
+          <StudyRoadmapProgress currentStep="timeline" />
+          <div className="mb-6">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleBack}
+              className="mb-4"
+            >
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back
+            </Button>
+            <div className="mb-2">
+              <h1 className="text-2xl font-bold">{studyPlan.course_name}</h1>
+              <p className="text-sm text-muted-foreground">
+                {studyPlan.generated_plan.summary.totalWeeks} weeks • {studyPlan.generated_plan.summary.totalStudyHours} hours
+              </p>
+            </div>
+          </div>
+          <VerticalEventTimeline 
+            events={timelineEvents}
+            onCardClick={handleCardClick}
+            onEventToggle={handleEventToggle}
+          />
         </div>
       </div>
     )

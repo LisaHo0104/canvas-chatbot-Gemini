@@ -3,14 +3,15 @@
 import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import type { CanvasCourse, CanvasModule } from '@/lib/canvas-api'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { BookOpen, Calendar, Search, Loader2, FileText, Link as LinkIcon, CheckSquare, MessageSquare, File, ArrowLeft } from 'lucide-react'
+import { BookOpen, Calendar, Search, Loader2, FileText, Link as LinkIcon, CheckSquare, MessageSquare, File, ArrowLeft, Plus, Clock, Target } from 'lucide-react'
 import { ResizableSplitPane } from '@/components/ui/resizable-split-pane'
 import { cn } from '@/lib/utils'
+import Breadcrumbs from '@/components/Breadcrumbs'
 
 // Component for module checkbox with indeterminate state support
 function ModuleCheckbox({ checked, indeterminate, onChange }: { checked: boolean; indeterminate: boolean; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void }) {
@@ -459,9 +460,58 @@ export default function StudyRoadmapPage() {
           />
         ) : (
           <>
+            <Breadcrumbs />
             <div className="mb-6">
               <h1 className="text-3xl font-bold mb-2">Study Roadmap</h1>
-              <p className="text-muted-foreground">View and manage all your Canvas courses</p>
+              <p className="text-muted-foreground">
+                Create personalized study plans from your Canvas courses. Select modules, set your goals, and get a customized timeline.
+              </p>
+            </div>
+
+            {/* Quick Action Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+              <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => {
+                // Scroll to courses section or highlight it
+                const coursesSection = document.getElementById('courses-section')
+                coursesSection?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+              }}>
+                <CardHeader className="pb-3">
+                  <div className="flex items-center gap-2">
+                    <Plus className="w-5 h-5 text-primary" />
+                    <CardTitle className="text-lg">Start New Plan</CardTitle>
+                  </div>
+                  <CardDescription>Create a new study plan from your courses</CardDescription>
+                </CardHeader>
+              </Card>
+              <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => {
+                // Will navigate to existing plans when implemented
+                const coursesSection = document.getElementById('courses-section')
+                coursesSection?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+              }}>
+                <CardHeader className="pb-3">
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-5 h-5 text-primary" />
+                    <CardTitle className="text-lg">View Plans</CardTitle>
+                  </div>
+                  <CardDescription>View and manage your existing study plans</CardDescription>
+                </CardHeader>
+              </Card>
+              <Card className="cursor-pointer hover:shadow-md transition-shadow">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center gap-2">
+                    <Target className="w-5 h-5 text-primary" />
+                    <CardTitle className="text-lg">Track Progress</CardTitle>
+                  </div>
+                  <CardDescription>Monitor your study progress and milestones</CardDescription>
+                </CardHeader>
+              </Card>
+            </div>
+
+            {/* Courses Section */}
+            <div id="courses-section">
+            <div className="mb-4">
+              <h2 className="text-xl font-semibold mb-1">Select a Course</h2>
+              <p className="text-sm text-muted-foreground">Choose a course to create your study plan</p>
             </div>
 
             {/* Filters and Search */}
@@ -607,6 +657,7 @@ export default function StudyRoadmapPage() {
                 )}
               </>
             )}
+            </div>
           </>
         )}
       </div>

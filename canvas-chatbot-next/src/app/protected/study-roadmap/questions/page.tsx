@@ -7,6 +7,10 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ArrowLeft, ArrowRight, Loader2 } from 'lucide-react'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AlertCircle } from 'lucide-react'
+import Breadcrumbs from '@/components/Breadcrumbs'
+import { StudyRoadmapProgress } from '@/components/StudyRoadmapProgress'
 
 interface FormData {
   studyGoals: string
@@ -22,6 +26,7 @@ export default function StudyRoadmapQuestionsPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [formData, setFormData] = useState<FormData>({
     studyGoals: '',
     hoursPerWeek: '',
@@ -44,20 +49,150 @@ export default function StudyRoadmapQuestionsPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSubmitting(true)
+    setError(null) // Clear previous errors
 
     try {
-      // TODO: Implement roadmap generation with form data and selected items
+      // Use mock data for testing - navigate directly to timeline
+      // This bypasses all validation and API calls
+      const mockPlanId = 'mock-plan-' + Date.now()
       const selectedItems = selectedItemsParam ? JSON.parse(selectedItemsParam) : []
-      console.log('Form data:', formData)
-      console.log('Selected items:', selectedItems)
-      console.log('Course ID:', courseId)
-      console.log('Course Name:', courseName)
+      
+      // Store mock data in sessionStorage for the timeline page to use
+      const mockStudyPlan = {
+        id: mockPlanId,
+        course_id: courseId ? Number(courseId) : 12345,
+        course_name: courseName || 'Sample Course',
+        generated_plan: {
+          timeline: [
+            {
+              period: 'Week 1',
+              startDate: new Date().toISOString().split('T')[0],
+              endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+              events: [
+                {
+                  title: 'Study Module 1: Introduction',
+                  type: 'study_session',
+                  date: new Date().toISOString().split('T')[0],
+                  duration: '2 hours',
+                  description: 'Review introduction materials and complete readings',
+                  isChecked: false,
+                },
+                {
+                  title: 'Complete Assignment 1',
+                  type: 'assignment',
+                  date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                  dueDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                  points: 100,
+                  description: 'Complete and submit Assignment 1',
+                  isChecked: false,
+                },
+              ],
+            },
+            {
+              period: 'Week 2',
+              startDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+              endDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+              events: [
+                {
+                  title: 'Study Module 2: Core Concepts',
+                  type: 'study_session',
+                  date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                  duration: '3 hours',
+                  description: 'Deep dive into core concepts and practice problems',
+                  isChecked: false,
+                },
+                {
+                  title: 'Quiz 1: Fundamentals',
+                  type: 'quiz',
+                  date: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                  description: 'Take Quiz 1 covering fundamentals',
+                  isChecked: false,
+                },
+              ],
+            },
+            {
+              period: 'Week 3',
+              startDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+              endDate: new Date(Date.now() + 21 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+              events: [
+                {
+                  title: 'Study Module 3: Advanced Topics',
+                  type: 'study_session',
+                  date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                  duration: '4 hours',
+                  description: 'Explore advanced topics and complete practice exercises',
+                  isChecked: false,
+                },
+                {
+                  title: 'Midterm Exam',
+                  type: 'exam',
+                  date: new Date(Date.now() + 18 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                  description: 'Prepare for and take midterm exam',
+                  isChecked: false,
+                },
+              ],
+            },
+          ],
+          summary: {
+            totalWeeks: 3,
+            totalStudyHours: 9,
+            totalAssignments: 2,
+            keyMilestones: ['Midterm Exam', 'Final Project'],
+          },
+        },
+        progress: {
+          completedEvents: [],
+        },
+      }
+      
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('mockStudyPlan', JSON.stringify(mockStudyPlan))
+      }
+      
+      // Navigate to timeline with mock plan ID
+      router.push(`/protected/study-roadmap/timeline?planId=${mockPlanId}&mock=true`)
+      
+      // Uncomment below to use real API instead of mock data:
+      /*
+      if (selectedItems.length === 0) {
+        setError('Please select at least one module item to include in your study plan.')
+        setIsSubmitting(false)
+        return
+      }
 
-      // Navigate to the timeline page to show the study plan timeline
-      router.push('/protected/study-roadmap/timeline')
+      // Call the study plan generation API
+      const response = await fetch('/api/study-plan/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          courseId: Number(courseId),
+          courseName,
+          selectedItems,
+          studyPreferences: formData,
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
+        const errorMessage = errorData.error || errorData.details || `Failed to generate study plan (${response.status})`
+        throw new Error(errorMessage)
+      }
+
+      const data = await response.json()
+      
+      if (!data.success || !data.studyPlanId) {
+        throw new Error('Invalid response from server')
+      }
+      
+      // Navigate to the timeline page with the generated plan ID
+      router.push(`/protected/study-roadmap/timeline?planId=${data.studyPlanId}`)
+      */
     } catch (error) {
       console.error('Error submitting form:', error)
-    } finally {
+      setError(error instanceof Error ? error.message : 'Failed to generate study plan. Please try again.')
       setIsSubmitting(false)
     }
   }
@@ -69,6 +204,8 @@ export default function StudyRoadmapQuestionsPage() {
   return (
     <div className="min-h-[calc(100vh-3rem)] w-full px-4 py-6">
       <div className="max-w-3xl mx-auto">
+        <Breadcrumbs />
+        <StudyRoadmapProgress currentStep="questions" />
         <div className="mb-6">
           <Button
             variant="ghost"
@@ -89,6 +226,14 @@ export default function StudyRoadmapQuestionsPage() {
             </p>
           )}
         </div>
+
+        {error && (
+          <Alert variant="destructive" className="mb-6">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
 
         <form onSubmit={handleSubmit}>
           <div className="space-y-6">

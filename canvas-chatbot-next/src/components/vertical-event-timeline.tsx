@@ -2,18 +2,21 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronDown, Briefcase, Calendar, CheckCircle } from "lucide-react";
+import { ChevronDown, Briefcase, Calendar, CheckCircle, BookOpen, FileText, Target } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Events, TimelineEvent } from "@/types/events";
-import { events } from "@/data/events";
+import { TimelineEvent } from "@/types/events";
+import { events as defaultEvents } from "@/data/events";
 
 interface VerticalEventTimelineProps {
+  events?: TimelineEvent[];
   onCardClick?: (event: TimelineEvent, index: number) => void;
+  onEventToggle?: (periodIndex: number, eventIndex: number, isChecked: boolean) => void;
 }
 
-export default function VerticalEventTimeline({ onCardClick }: VerticalEventTimelineProps) {
+export default function VerticalEventTimeline({ events: providedEvents, onCardClick, onEventToggle }: VerticalEventTimelineProps) {
   const [expandedIndex, setExpandedIndex] = useState<number | null>(0);
+  const events = providedEvents || defaultEvents;
 
   const toggleExpand = (index: number) => {
     if (expandedIndex === index) {
@@ -162,29 +165,63 @@ export default function VerticalEventTimeline({ onCardClick }: VerticalEventTime
                                 Events
                               </h4>
                               <ul className="grid grid-cols-1 gap-2">
-                                {item.events.map((event, i) => (
-                                  <motion.li
-                                    key={i}
-                                    className="flex items-start"
-                                    initial={{ opacity: 0, x: -10 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    transition={{
-                                      duration: 0.3,
-                                      delay: i * 0.1,
-                                    }}
-                                  >
-                                    <CheckCircle
-                                      className={`w-4 h-4 mr-2 ${
-                                        event.isChecked
-                                          ? "text-green-500"
-                                          : "text-gray-400"
-                                      } mt-0.5 shrink-0`}
-                                    />
-                                    <span className="text-sm">
-                                      {event.title}
-                                    </span>
-                                  </motion.li>
-                                ))}
+                                {item.events.map((event, i) => {
+                                  const eventType = (event as any).type || 'study_session';
+                                  const getEventIcon = () => {
+                                    switch (eventType) {
+                                      case 'assignment':
+                                        return <FileText className="w-4 h-4 mr-2 text-blue-500 mt-0.5 shrink-0" />;
+                                      case 'exam':
+                                        return <Target className="w-4 h-4 mr-2 text-red-500 mt-0.5 shrink-0" />;
+                                      case 'quiz':
+                                        return <BookOpen className="w-4 h-4 mr-2 text-purple-500 mt-0.5 shrink-0" />;
+                                      default:
+                                        return <CheckCircle
+                                          className={`w-4 h-4 mr-2 ${
+                                            event.isChecked
+                                              ? "text-green-500"
+                                              : "text-gray-400"
+                                          } mt-0.5 shrink-0`}
+                                        />;
+                                    }
+                                  };
+                                  
+                                  return (
+                                    <motion.li
+                                      key={i}
+                                      className="flex items-start cursor-pointer hover:bg-accent/50 rounded-md p-2 -ml-2 transition-colors"
+                                      initial={{ opacity: 0, x: -10 }}
+                                      animate={{ opacity: 1, x: 0 }}
+                                      transition={{
+                                        duration: 0.3,
+                                        delay: i * 0.1,
+                                      }}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (onEventToggle) {
+                                          onEventToggle(index, i, !event.isChecked);
+                                        }
+                                      }}
+                                    >
+                                      {getEventIcon()}
+                                      <div className="flex-1">
+                                        <span className={`text-sm ${event.isChecked ? 'line-through text-muted-foreground' : ''}`}>
+                                          {event.title}
+                                        </span>
+                                        {(event as any).description && (
+                                          <p className="text-xs text-muted-foreground mt-1">
+                                            {(event as any).description}
+                                          </p>
+                                        )}
+                                        {(event as any).dueDate && (
+                                          <Badge variant="outline" className="text-[10px] mt-1">
+                                            Due: {new Date((event as any).dueDate).toLocaleDateString()}
+                                          </Badge>
+                                        )}
+                                      </div>
+                                    </motion.li>
+                                  );
+                                })}
                               </ul>
                             </div>
                           </div>

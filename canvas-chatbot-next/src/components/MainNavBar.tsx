@@ -106,15 +106,24 @@ export default function MainNavBar() {
                       </NavigationMenuLink>
                     </NavigationMenuItem>
                     <NavigationMenuItem>
-                      <NavigationMenuLink
-                        asChild
-                        className={cn(
-                          pathname === '/protected/study-roadmap' ? 'bg-accent text-accent-foreground' : ''
-                        )}
-                        aria-current={pathname === '/protected/study-roadmap' ? 'page' : undefined}
-                      >
-                        <Link href="/protected/study-roadmap">Study</Link>
-                      </NavigationMenuLink>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <NavigationMenuLink
+                            asChild
+                            className={cn(
+                              'inline-flex items-center gap-1.5',
+                              pathname.startsWith('/protected/study-roadmap') ? 'bg-accent text-accent-foreground' : ''
+                            )}
+                            aria-current={pathname.startsWith('/protected/study-roadmap') ? 'page' : undefined}
+                          >
+                            <Link href="/protected/study-roadmap" className="inline-flex items-center gap-1.5">
+                              Study
+                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-green-100 text-green-800 border-green-300 dark:bg-green-900 dark:text-green-200 dark:border-green-700">Beta</Badge>
+                            </Link>
+                          </NavigationMenuLink>
+                        </TooltipTrigger>
+                        <TooltipContent>Create personalized study plans from your Canvas courses</TooltipContent>
+                      </Tooltip>
                     </NavigationMenuItem>
                     <NavigationMenuItem>
                       <Tooltip>
@@ -156,7 +165,10 @@ export default function MainNavBar() {
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
-                      <Link href="/protected/study-roadmap">Study</Link>
+                      <Link href="/protected/study-roadmap" className="flex items-center gap-1.5">
+                        Study
+                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-green-100 text-green-800 border-green-300 dark:bg-green-900 dark:text-green-200 dark:border-green-700">Beta</Badge>
+                      </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem disabled title="Not ready for public use">
                       Billing
