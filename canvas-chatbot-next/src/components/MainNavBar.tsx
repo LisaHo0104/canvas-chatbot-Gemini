@@ -13,7 +13,6 @@ import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { createClient as createSupabaseClient } from '@/lib/supabase/client'
 import { UserCountBadge } from '@/components/UserCountBadge'
-import { getModeBadgeColors } from '@/lib/mode-colors'
 
 
 
@@ -110,17 +109,20 @@ export default function MainNavBar() {
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <NavigationMenuLink
+                            asChild
                             className={cn(
-                              'inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-sm text-muted-foreground opacity-50 cursor-not-allowed',
-                              pathname === '/protected/quiz' ? 'bg-accent text-accent-foreground' : ''
+                              'inline-flex items-center gap-1.5',
+                              pathname.startsWith('/protected/study-roadmap') ? 'bg-accent text-accent-foreground' : ''
                             )}
-                            aria-disabled="true"
+                            aria-current={pathname.startsWith('/protected/study-roadmap') ? 'page' : undefined}
                           >
-                            Quiz
-                            <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 h-4 border ${getModeBadgeColors('quiz')}`}>Beta</Badge>
+                            <Link href="/protected/study-roadmap" className="inline-flex items-center gap-1.5">
+                              Study
+                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-green-100 text-green-800 border-green-300 dark:bg-green-900 dark:text-green-200 dark:border-green-700">Beta</Badge>
+                            </Link>
                           </NavigationMenuLink>
                         </TooltipTrigger>
-                        <TooltipContent>This feature will be ready soon</TooltipContent>
+                        <TooltipContent>Create personalized study plans from your Canvas courses</TooltipContent>
                       </Tooltip>
                     </NavigationMenuItem>
                     <NavigationMenuItem>
@@ -153,16 +155,18 @@ export default function MainNavBar() {
                     <DropdownMenuItem asChild>
                       <Link href="/protected/chat">Chat</Link>
                     </DropdownMenuItem>
-                    <DropdownMenuItem disabled title="This feature will be ready soon" className="flex items-center gap-1.5">
-                      Quiz
-                      <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 h-4 border ${getModeBadgeColors('quiz')}`}>Beta</Badge>
-                    </DropdownMenuItem>
                     <DropdownMenuItem asChild>
                       <Link href="/protected/context">Context</Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
                       <Link href="/protected/artifacts" className="flex items-center gap-1.5">
                         Artifacts
+                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-green-100 text-green-800 border-green-300 dark:bg-green-900 dark:text-green-200 dark:border-green-700">Beta</Badge>
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/protected/study-roadmap" className="flex items-center gap-1.5">
+                        Study
                         <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-green-100 text-green-800 border-green-300 dark:bg-green-900 dark:text-green-200 dark:border-green-700">Beta</Badge>
                       </Link>
                     </DropdownMenuItem>

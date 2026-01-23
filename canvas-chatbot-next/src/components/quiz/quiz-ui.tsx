@@ -267,7 +267,8 @@ export function QuizUI({ data, messageId, compact = false, onViewFull, onSaveCli
     return questions.length > 0 ? ((currentQuestionIndex + 1) / questions.length) * 100 : 0
   }
 
-  const getDifficultyColor = (difficulty: string) => {
+  const getDifficultyColor = (difficulty?: string) => {
+    if (!difficulty) return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
     switch (difficulty) {
       case 'easy':
         return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
@@ -282,7 +283,8 @@ export function QuizUI({ data, messageId, compact = false, onViewFull, onSaveCli
     }
   }
 
-  const getQuestionTypeColor = (type: string) => {
+  const getQuestionTypeColor = (type?: string) => {
+    if (!type) return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
     switch (type) {
       case 'multiple_choice':
         return 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
@@ -378,9 +380,11 @@ export function QuizUI({ data, messageId, compact = false, onViewFull, onSaveCli
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="flex flex-wrap items-center justify-center gap-4">
-            <Badge className={`${getDifficultyColor(data.difficulty)} text-sm lg:text-base px-4 py-2`} variant="outline">
-              {data.difficulty.charAt(0).toUpperCase() + data.difficulty.slice(1)}
-            </Badge>
+            {data.difficulty && (
+              <Badge className={`${getDifficultyColor(data.difficulty)} text-sm lg:text-base px-4 py-2`} variant="outline">
+                {data.difficulty.charAt(0).toUpperCase() + data.difficulty.slice(1)}
+              </Badge>
+            )}
             <div className="flex items-center gap-2 text-muted-foreground">
               <FileQuestion className="size-4" />
               <span className="text-sm lg:text-base">{data.totalQuestions} Questions</span>
@@ -497,9 +501,11 @@ export function QuizUI({ data, messageId, compact = false, onViewFull, onSaveCli
         <Card className="mb-6 lg:mb-8">
           <CardHeader>
             <div className="flex items-center gap-2 mb-4">
-              <Badge className={getQuestionTypeColor(question.type)} variant="outline">
-                {question.type.replace('_', ' ')}
-              </Badge>
+              {question.type && (
+                <Badge className={getQuestionTypeColor(question.type)} variant="outline">
+                  {question.type.replace('_', ' ')}
+                </Badge>
+              )}
               {question.topic && (
                 <Badge variant="outline">{question.topic}</Badge>
               )}
@@ -864,9 +870,11 @@ export function QuizUI({ data, messageId, compact = false, onViewFull, onSaveCli
               </CardTitle>
               <CardDescription className="flex items-center gap-4 flex-wrap">
                 <span>{data.totalQuestions} Questions</span>
-                <Badge className={getDifficultyColor(data.difficulty)}>
-                  {data.difficulty.charAt(0).toUpperCase() + data.difficulty.slice(1)}
-                </Badge>
+                {data.difficulty && (
+                  <Badge className={getDifficultyColor(data.difficulty)}>
+                    {data.difficulty.charAt(0).toUpperCase() + data.difficulty.slice(1)}
+                  </Badge>
+                )}
                 {data.metadata?.estimatedTime && (
                   <span className="flex items-center gap-1">
                     <Clock className="size-4" />
@@ -1004,9 +1012,11 @@ export function QuizUI({ data, messageId, compact = false, onViewFull, onSaveCli
                       <div className="flex-1 text-left">
                         <div className="flex items-center gap-2 mb-2 lg:mb-3 flex-wrap">
                           <span className="text-base lg:text-lg font-semibold">Question {index + 1}</span>
-                          <Badge className={`${getQuestionTypeColor(question.type)} text-xs lg:text-sm`} variant="outline">
-                            {question.type.replace('_', ' ')}
-                          </Badge>
+                          {question.type && (
+                            <Badge className={`${getQuestionTypeColor(question.type)} text-xs lg:text-sm`} variant="outline">
+                              {question.type.replace('_', ' ')}
+                            </Badge>
+                          )}
                           {question.topic && (
                             <Badge variant="outline" className="text-xs lg:text-sm">{question.topic}</Badge>
                           )}
@@ -1235,9 +1245,11 @@ export function QuizUI({ data, messageId, compact = false, onViewFull, onSaveCli
                     {questions.map((question) => (
                       <div key={question.id} className="p-3 lg:p-4 border rounded-md">
                         <p className="text-sm lg:text-base font-medium mb-2 lg:mb-3">{question.question}</p>
-                        <Badge className={`${getQuestionTypeColor(question.type)} text-xs lg:text-sm`} variant="outline">
-                          {question.type.replace('_', ' ')}
-                        </Badge>
+                        {question.type && (
+                          <Badge className={`${getQuestionTypeColor(question.type)} text-xs lg:text-sm`} variant="outline">
+                            {question.type.replace('_', ' ')}
+                          </Badge>
+                        )}
                       </div>
                     ))}
                   </div>
