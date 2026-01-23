@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button'
 import { ArrowLeft, X, Loader2 } from 'lucide-react'
 import VerticalEventTimeline from '@/components/vertical-event-timeline'
 import { ResizableSplitPane } from '@/components/ui/resizable-split-pane'
-import { Editor } from '@/components/blocks/editor-00/editor'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useChat } from '@ai-sdk/react'
 import { Conversation, ConversationContent, ConversationScrollButton } from '@/components/ai-elements/conversation'
@@ -21,6 +20,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { AlertCircle } from 'lucide-react'
 import Breadcrumbs from '@/components/Breadcrumbs'
 import { StudyRoadmapProgress } from '@/components/StudyRoadmapProgress'
+import { EventDetailView } from '@/components/study-roadmap/EventDetailView'
 
 interface StudyPlanData {
   id: string
@@ -62,22 +62,93 @@ export default function StudyPlanTimelinePage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedEvent, setSelectedEvent] = useState<TimelineEvent | null>(null)
+  const [selectedEventItem, setSelectedEventItem] = useState<{
+    title: string
+    description?: string
+    type?: string
+    date?: string
+    dueDate?: string
+    duration?: string
+  } | null>(null)
   const [suggestionsVisible, setSuggestionsVisible] = useState(true)
   const [loadingSuggestions, setLoadingSuggestions] = useState(false)
+  const [selectedModel, setSelectedModel] = useState<string>('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  // Chat functionality
-  const { messages, input = '', handleInputChange, handleSubmit, isLoading, append } = useChat({
+  // Load selected model from localStorage (like chat page does)
+  useEffect(() => {
+    const loadModel = async () => {
+      try {
+        // Try to get from localStorage first
+        const saved = typeof window !== 'undefined' ? localStorage.getItem('preferredModel') : null
+        if (saved && saved.trim()) {
+          setSelectedModel(saved)
+          return
+        }
+        
+        // Otherwise fetch available models and use the first one
+        const response = await fetch('/api/openrouter/models', { credentials: 'include' })
+        if (response.ok) {
+          const data = await response.json()
+          const models = Array.isArray(data.models) ? data.models : []
+          if (models.length > 0) {
+            const firstId = models[0]?.id
+            if (typeof firstId === 'string' && firstId.trim()) {
+              setSelectedModel(firstId)
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error loading model:', error)
+        // Fallback to default
+        setSelectedModel('google/gemini-2.0-flash-exp')
+      }
+    }
+    loadModel()
+  }, [])
+
+  // Chat functionality with event context
+  const { messages, sendMessage, isLoading, error: chatError } = useChat({
     api: '/api/chat',
+    experimental_throttle: 50,
+    onError: (error: Error) => {
+      console.error('Chat error:', error)
+    },
   })
 
   // Adapter function to convert PromptInput format to useChat format
   const onSubmitAI = async (message: { text: string; files?: any[] }) => {
     if (!message.text?.trim()) return
-    await append({
-      role: 'user',
-      content: message.text,
-    })
+    
+    const messageText = selectedEventItem
+      ? `[Event Context: ${selectedEventItem.title}${selectedEventItem.description ? ` - ${selectedEventItem.description}` : ''}]\n\n${message.text}`
+      : message.text
+
+    try {
+      await sendMessage(
+        {
+          role: 'user',
+          parts: [
+            { type: 'text', text: messageText },
+            ...(Array.isArray(message.files) ? message.files : []),
+          ],
+        } as any,
+        {
+          body: {
+            model: selectedModel || undefined,
+            eventContext: selectedEventItem ? {
+              title: selectedEventItem.title,
+              description: selectedEventItem.description,
+              type: selectedEventItem.type,
+              courseId: studyPlan?.course_id,
+              courseName: studyPlan?.course_name,
+            } : undefined,
+          },
+        }
+      )
+    } catch (error) {
+      console.error('Error sending message:', error)
+    }
   }
 
   // Simple suggestions for timeline page
@@ -100,12 +171,40 @@ export default function StudyPlanTimelinePage() {
     router.back()
   }
 
-  const handleCardClick = (event: TimelineEvent, index: number) => {
-    setSelectedEvent(event)
+  const handleCardClick = (event: TimelineEvent & { eventItem?: any }, index: number) => {
+    // With flattened structure, each card is already an event
+    if ((event as any).eventItem) {
+      const eventItem = (event as any).eventItem
+      setSelectedEvent(event)
+      setSelectedEventItem({
+        title: eventItem.title,
+        description: eventItem.description,
+        type: eventItem.type,
+        date: eventItem.date,
+        dueDate: eventItem.dueDate,
+        duration: eventItem.duration,
+        moduleId: eventItem.moduleId,
+        itemId: eventItem.itemId,
+      })
+    }
+  }
+
+  const handleEventItemClick = (eventItem: any) => {
+    setSelectedEventItem({
+      title: eventItem.title,
+      description: eventItem.description,
+      type: eventItem.type,
+      date: eventItem.date,
+      dueDate: eventItem.dueDate,
+      duration: eventItem.duration,
+      moduleId: eventItem.moduleId,
+      itemId: eventItem.itemId,
+    })
   }
 
   const handleCloseEditor = () => {
     setSelectedEvent(null)
+    setSelectedEventItem(null)
   }
 
   // Fetch study plan data
@@ -163,11 +262,15 @@ export default function StudyPlanTimelinePage() {
     return `${item.year}`;
   }
 
-  // Convert study plan data to timeline events format
-  const convertToTimelineEvents = (plan: StudyPlanData): TimelineEvent[] => {
+  // Convert study plan data to flattened topic cards format
+  // Each event (one per selected item) becomes its own card with period info attached
+  const convertToTimelineEvents = (plan: StudyPlanData): Array<TimelineEvent & { eventItem: any; periodInfo: { period: string; startDate: string; endDate: string } }> => {
     if (!plan?.generated_plan?.timeline) return []
     
-    return plan.generated_plan.timeline.map((period, index) => {
+    const completedEvents = plan.progress?.completedEvents || []
+    const flattenedEvents: Array<TimelineEvent & { eventItem: any; periodInfo: { period: string; startDate: string; endDate: string } }> = []
+    
+    plan.generated_plan.timeline.forEach((period) => {
       const startDate = new Date(period.startDate)
       const year = startDate.getFullYear()
       const month = startDate.getMonth()
@@ -177,29 +280,53 @@ export default function StudyPlanTimelinePage() {
       const periodType = "Q"
       const periodNumber = quarter
       
-      // Check completion status
-      const completedEvents = plan.progress?.completedEvents || []
-      const allEventsCompleted = period.events.every(event => 
-        completedEvents.includes(`${period.period}-${event.title}`)
-      )
-      
-      return {
-        year,
-        periodType,
-        periodNumber,
-        isChecked: allEventsCompleted,
-        events: period.events.map(event => ({
-          title: event.title,
-          isChecked: completedEvents.includes(`${period.period}-${event.title}`),
-          type: event.type,
-          date: event.date,
-          dueDate: event.dueDate,
-          points: event.points,
-          description: event.description,
-          duration: event.duration,
-        })),
-      }
+      // Create one card for each event (each event = one core concept)
+      // Filter out introductions, exams, quizzes, assignments, midterms
+      period.events.forEach(event => {
+        const titleLower = event.title.toLowerCase()
+        
+        // Skip if it's an introduction, exam, quiz, assignment, or midterm
+        if (titleLower.includes('introduction') ||
+            titleLower.includes('intro') ||
+            titleLower.includes('overview') ||
+            titleLower.includes('midterm') ||
+            titleLower.includes('exam') ||
+            titleLower.includes('quiz') ||
+            titleLower.includes('assignment')) {
+          return
+        }
+        
+        const eventKey = `${period.period}-${event.title}`
+        const isChecked = completedEvents.includes(eventKey)
+        
+        flattenedEvents.push({
+          year,
+          periodType,
+          periodNumber,
+          isChecked,
+          events: [], // Empty since we're flattening
+          eventItem: {
+            title: event.title,
+            isChecked,
+            type: event.type,
+            date: event.date,
+            dueDate: event.dueDate,
+            points: event.points,
+            description: event.description,
+            duration: event.duration,
+            moduleId: (event as any).moduleId,
+            itemId: (event as any).itemId || (event as any).itemIds?.[0], // Support both itemId and itemIds[0]
+          },
+          periodInfo: {
+            period: period.period,
+            startDate: period.startDate,
+            endDate: period.endDate,
+          },
+        })
+      })
     })
+    
+    return flattenedEvents
   }
 
   // Handle event toggle (mark as complete/incomplete)
@@ -371,7 +498,12 @@ export default function StudyPlanTimelinePage() {
                 <div className="flex-1 min-h-0 overflow-hidden">
                   <ScrollArea className="h-full">
                     <div className="p-4">
-                      <VerticalEventTimeline onCardClick={handleCardClick} />
+                      <VerticalEventTimeline 
+                        events={timelineEvents}
+                        onCardClick={handleCardClick}
+                        onEventToggle={handleEventToggle}
+                        onEventClick={handleEventItemClick}
+                      />
                     </div>
                   </ScrollArea>
                 </div>
@@ -387,14 +519,14 @@ export default function StudyPlanTimelinePage() {
                 left={
                   <div className="h-full flex flex-col bg-background rounded-lg overflow-hidden">
                     <div className="p-4 border-b flex items-center justify-between">
-                      <div>
+                      <div className="flex-1">
                         <h2 className="text-lg font-semibold">
-                          {selectedEvent.year} Milestones - {formatPeriod(selectedEvent)}
+                          {selectedEventItem?.title || `${selectedEvent.year} Milestones - ${formatPeriod(selectedEvent)}`}
                         </h2>
                         <p className="text-sm text-muted-foreground">
-                          {selectedEvent.periodType === "Q"
+                          {selectedEventItem?.description || (selectedEvent.periodType === "Q"
                             ? `Quarter ${selectedEvent.periodNumber}`
-                            : `Half ${selectedEvent.periodNumber}`}
+                            : `Half ${selectedEvent.periodNumber}`)}
                         </p>
                       </div>
                       <Button
@@ -406,13 +538,18 @@ export default function StudyPlanTimelinePage() {
                       </Button>
                     </div>
                     <div className="flex-1 min-h-0 overflow-hidden">
-                      <div className="h-full flex flex-col bg-background relative">
-                        <div className="h-full flex flex-col">
-                          <div id="radix-content-editor" className="h-full flex flex-col p-6">
-                            <Editor />
-                          </div>
+                      {selectedEventItem ? (
+                        <EventDetailView
+                          event={selectedEventItem}
+                          courseId={studyPlan?.course_id}
+                          courseName={studyPlan?.course_name}
+                          onClose={handleCloseEditor}
+                        />
+                      ) : (
+                        <div className="h-full flex items-center justify-center p-6">
+                          <p className="text-muted-foreground">Select an event to view details</p>
                         </div>
-                      </div>
+                      )}
                     </div>
                   </div>
                 }
@@ -432,6 +569,15 @@ export default function StudyPlanTimelinePage() {
                               </div>
                             </div>
                           </div>
+                          {chatError && (
+                            <Alert variant="destructive" className="mx-4 mb-4">
+                              <AlertCircle className="h-4 w-4" />
+                              <AlertTitle>Error</AlertTitle>
+                              <AlertDescription>
+                                {chatError.message || 'Failed to send message. Please try again.'}
+                              </AlertDescription>
+                            </Alert>
+                          )}
                           {messages.length === 0 ? (
                             <div className="max-w-3xl mx-auto text-center py-16">
                               <div className="mx-auto w-full max-w-md">
@@ -442,13 +588,22 @@ export default function StudyPlanTimelinePage() {
                             </div>
                           ) : (
                             <>
-                              {messages.map((message) => (
-                                <AIMessage key={message.id} from={message.role}>
-                                  <AIMessageContent>
-                                    <MessageResponse>{message.content}</MessageResponse>
-                                  </AIMessageContent>
-                                </AIMessage>
-                              ))}
+                              {messages.map((message) => {
+                                // Extract text from parts array
+                                const textParts = (message.parts || []).filter((p: any) => p.type === 'text')
+                                const textContent = textParts.map((p: any) => p.text || '').join('')
+                                
+                                // Skip messages with no text content
+                                if (!textContent.trim()) return null
+                                
+                                return (
+                                  <AIMessage key={message.id} from={message.role}>
+                                    <AIMessageContent>
+                                      <MessageResponse>{textContent}</MessageResponse>
+                                    </AIMessageContent>
+                                  </AIMessage>
+                                )
+                              })}
                               {isLoading && (
                                 <AIMessage from="assistant">
                                   <AIMessageContent>

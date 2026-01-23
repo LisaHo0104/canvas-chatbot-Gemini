@@ -109,7 +109,7 @@ export async function POST(request: NextRequest) {
       selectedItemsArray.some(item => item.moduleId === module.id)
     )
 
-    // Build context for AI
+    // Build context for assignments
     const assignmentsContext = assignments
       .filter(a => a.due_at)
       .map(a => ({
@@ -121,16 +121,265 @@ export async function POST(request: NextRequest) {
       }))
       .sort((a, b) => new Date(a.dueAt!).getTime() - new Date(b.dueAt!).getTime())
 
-    const modulesContext = selectedModules.map(module => ({
-      name: module.name,
-      items: module.items
-        .filter(item => selectedItemsArray.some(si => si.itemId === item.id && si.moduleId === module.id))
-        .map(item => ({
-          title: item.title,
-          type: item.type,
-          url: item.html_url,
-        })),
-    }))
+    // Build a map of moduleId -> module for quick lookup
+    const moduleMap = new Map(selectedModules.map(m => [m.id, m]))
+    
+    // Get API key and model setup for topic extraction (do this once, not in the loop)
+    const apiKeyOpenRouter = process.env.OPENROUTER_API_KEY_OWNER || process.env.OPENROUTER_API_KEY
+    if (!apiKeyOpenRouter) {
+      return NextResponse.json(
+        { error: 'OpenRouter API key not configured' },
+        { status: 500 }
+      )
+    }
+    const selectedModel = await getDefaultModelId()
+    const openrouter = createOpenRouterProvider(apiKeyOpenRouter)
+    
+    // Extract smaller core concepts from each selected item
+    const allEvents: Array<{
+      title: string
+      type: string
+      moduleId: number
+      itemId: number
+      description?: string
+      itemType?: string
+    }> = []
+
+    for (const selectedItem of selectedItemsArray) {
+      const module = moduleMap.get(selectedItem.moduleId)
+      if (!module) continue
+
+      const item = module.items?.find((i: any) => i.id === selectedItem.itemId)
+      if (!item) continue
+
+      // Skip if item is an exam, quiz, assignment, or introduction
+      const itemTitleLower = item.title.toLowerCase()
+      if (itemTitleLower.includes('midterm') || 
+          itemTitleLower.includes('exam') ||
+          itemTitleLower.includes('quiz') ||
+          itemTitleLower.includes('assignment') ||
+          itemTitleLower.includes('introduction') ||
+          itemTitleLower.includes('intro') ||
+          itemTitleLower.includes('overview')) {
+        continue
+      }
+
+      // Fetch content from the item - this is critical for topic extraction
+      let itemContent = ''
+      try {
+        if (item.type === 'Page') {
+          const pageUrl = (item as any).html_url || item.url || ''
+          if (pageUrl) {
+            const page = await canvasService.getPageContent(courseId, pageUrl)
+            // Extract more content and clean it better
+            const rawContent = page.body || ''
+            itemContent = rawContent
+              .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, ' ') // Remove scripts
+              .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, ' ') // Remove styles
+              .replace(/<[^>]*>/g, ' ') // Remove HTML tags
+              .replace(/\s+/g, ' ') // Normalize whitespace
+              .trim()
+              .substring(0, 20000) || '' // Increased to 20000 chars for better extraction
+            
+            console.log(`[DEBUG] Fetched ${itemContent.length} chars of content from page "${item.title}"`)
+          }
+        } else if (item.type === 'File') {
+          const fileId = (item as any).content_id
+          if (fileId) {
+            try {
+              const fileText = await canvasService.getFileText(fileId)
+              itemContent = fileText?.substring(0, 20000) || '' // Increased to 20000 chars
+              console.log(`[DEBUG] Fetched ${itemContent.length} chars of content from file "${item.title}"`)
+            } catch (e) {
+              console.log(`Could not extract text from file ${fileId}:`, e)
+            }
+          }
+        }
+      } catch (error) {
+        console.error(`Error fetching content for item ${item.id}:`, error)
+      }
+      
+      // If no content was fetched, log it
+      if (!itemContent || itemContent.length < 100) {
+        console.warn(`[DEBUG] Item "${item.title}" has insufficient content (${itemContent.length} chars) - topic extraction may fail`)
+      }
+
+      // Extract smaller core concepts from content
+      // CRITICAL: Always try to extract topics if we have content (even if minimal)
+      // This breaks down items into multiple core concepts
+      if (itemContent && itemContent.length >= 50) { // Require at least 50 chars of content
+        try {
+          const topicExtractionPrompt = `Analyze the following course content and break it down into 3-8 smaller, focused CORE CONCEPTS. Each concept should be a specific, learnable topic that students need to master.
+
+Module: ${module.name}
+Item: ${item.title}${(itemTitleLower.includes('core concepts') || itemTitleLower.includes('advanced topics') || itemTitleLower.includes('fundamentals')) ? ' (NOTE: This is a generic title - extract the actual specific concepts from the content below)' : ''}
+
+Content:
+${itemContent}
+
+Return ONLY a JSON array of core concept names (strings), like:
+["Gates & Boolean Algebra", "Programmable Gates & Control Bits", "Multiplexing & Demultiplexing", "Combinational Circuits – Half Adder & Full Adder", "Clock & ALU"]
+
+CRITICAL RULES:
+- Extract 3-8 core concepts from the content
+- Each concept should be specific and focused (not too broad)
+- Each concept should be a complete, learnable topic
+- Use descriptive, specific names that clearly indicate what will be learned
+- Avoid generic names like "Introduction", "Overview", "Basics", "Core Concepts", "Advanced Topics", "Fundamentals"
+- Skip introductory content - focus on actual learning concepts
+- Each concept should represent a distinct learning objective
+- Concepts should cover the main topics in the content
+- If the item title is generic (like "Core Concepts" or "Advanced Topics"), you MUST extract the actual specific concepts from the content - do not use the generic title
+- Each concept name should be a standalone learning topic (e.g., "Gates & Boolean Algebra" not "Core Concepts: Gates")
+
+Return ONLY the JSON array, no other text.`
+
+          const topicResult = await generateText({
+            model: openrouter.chat(selectedModel),
+            prompt: topicExtractionPrompt,
+            temperature: 0.7,
+            maxTokens: 1000, // Increased to allow more topics
+          })
+          
+          console.log('[DEBUG] Topic extraction result:', topicResult.text)
+
+          // Parse topics from response
+          try {
+            const jsonMatch = topicResult.text.match(/\[[\s\S]*\]/)
+            if (jsonMatch) {
+              const topics: string[] = JSON.parse(jsonMatch[0])
+              
+              console.log(`[DEBUG] Extracted ${topics.length} topics from item "${item.title}":`, topics)
+              
+              if (topics.length === 0) {
+                throw new Error('No topics extracted')
+              }
+              
+              // Filter out introduction/generic topics and create events
+              let validTopicsCount = 0
+              topics.forEach((topicName) => {
+                const topicLower = topicName.toLowerCase().trim()
+                // Skip if it's an introduction or generic topic
+                if (topicLower.includes('introduction') || 
+                    topicLower.includes('intro') ||
+                    topicLower.includes('overview') ||
+                    (topicLower.includes('basics') && topicLower.length < 20) ||
+                    topicLower === 'core concepts' ||
+                    topicLower === 'advanced topics' ||
+                    topicLower === 'fundamentals' ||
+                    topicLower.length < 3) {
+                  console.log(`[DEBUG] Skipping generic topic: ${topicName}`)
+                  return
+                }
+                
+                validTopicsCount++
+                // Create one event per extracted core concept
+                // Use just the concept name as the title (e.g., "Gates & Boolean Algebra")
+                allEvents.push({
+                  title: topicName.trim(), // Just the concept name, not "Study Module: Concept"
+                  type: 'study_session',
+                  moduleId: selectedItem.moduleId,
+                  itemId: selectedItem.itemId,
+                  description: topicName.trim(),
+                  itemType: item.type,
+                })
+              })
+              
+              console.log(`[DEBUG] Created ${validTopicsCount} events from item "${item.title}"`)
+              
+              if (validTopicsCount === 0) {
+                throw new Error('All extracted topics were filtered out as generic')
+              }
+            } else {
+              console.error('[DEBUG] No JSON array found in response:', topicResult.text)
+              throw new Error('No JSON array found')
+            }
+          } catch (parseError) {
+            console.error('Failed to parse topics, falling back to item title:', parseError)
+            // Fallback: if item title is generic, try to extract from content again with a different prompt
+            // Otherwise skip if it's generic
+            if (itemTitleLower.includes('core concepts') || 
+                itemTitleLower.includes('advanced topics') ||
+                itemTitleLower.includes('fundamentals') ||
+                itemTitleLower.includes('basics')) {
+              // Don't create event for generic titles - we need actual concepts
+              console.log(`Skipping generic item title: ${item.title}`)
+            } else if (!itemTitleLower.includes('introduction') && !itemTitleLower.includes('intro')) {
+              allEvents.push({
+                title: item.title, // Use item title directly
+                type: 'study_session',
+                moduleId: selectedItem.moduleId,
+                itemId: selectedItem.itemId,
+                description: item.title,
+                itemType: item.type,
+              })
+            }
+          }
+        } catch (aiError) {
+          console.error('Error extracting topics with AI, falling back to item title:', aiError)
+          // Fallback: skip generic titles
+          if (itemTitleLower.includes('core concepts') || 
+              itemTitleLower.includes('advanced topics') ||
+              itemTitleLower.includes('fundamentals') ||
+              itemTitleLower.includes('basics')) {
+            console.log(`Skipping generic item title: ${item.title}`)
+          } else if (!itemTitleLower.includes('introduction') && !itemTitleLower.includes('intro')) {
+            allEvents.push({
+              title: item.title,
+              type: 'study_session',
+              moduleId: selectedItem.moduleId,
+              itemId: selectedItem.itemId,
+              description: item.title,
+              itemType: item.type,
+            })
+          }
+        }
+      } else {
+        // No content available - skip generic titles, only create events for specific item titles
+        if (itemTitleLower.includes('core concepts') || 
+            itemTitleLower.includes('advanced topics') ||
+            itemTitleLower.includes('fundamentals') ||
+            itemTitleLower.includes('basics')) {
+          // Skip generic titles when there's no content to extract from
+          console.log(`Skipping generic item title (no content): ${item.title}`)
+        } else if (!itemTitleLower.includes('introduction') && 
+            !itemTitleLower.includes('intro') &&
+            !itemTitleLower.includes('midterm') &&
+            !itemTitleLower.includes('exam')) {
+          allEvents.push({
+            title: item.title,
+            type: 'study_session',
+            moduleId: selectedItem.moduleId,
+            itemId: selectedItem.itemId,
+            description: item.title,
+            itemType: item.type,
+          })
+        }
+      }
+    }
+
+    // Filter out any events that are not core concepts
+    const filteredEvents = allEvents.filter(event => {
+      const titleLower = event.title.toLowerCase()
+      // Filter out introductions, exams, quizzes, assignments, midterms
+      if (titleLower.includes('introduction') ||
+          titleLower.includes('intro') ||
+          titleLower.includes('overview') ||
+          titleLower.includes('midterm') ||
+          titleLower.includes('exam') ||
+          titleLower.includes('quiz') ||
+          titleLower.includes('assignment')) {
+        return false
+      }
+      return true
+    })
+
+    if (filteredEvents.length === 0) {
+      return NextResponse.json(
+        { error: 'No valid study topics found. Please select items that contain actual learning content (not introductions, exams, or quizzes).' },
+        { status: 400 }
+      )
+    }
 
     // Generate study plan using AI
     const apiKeyOpenRouter = process.env.OPENROUTER_API_KEY_OWNER || process.env.OPENROUTER_API_KEY
@@ -144,14 +393,9 @@ export async function POST(request: NextRequest) {
     const selectedModel = await getDefaultModelId()
     const openrouter = createOpenRouterProvider(apiKeyOpenRouter)
 
-    const systemPrompt = `You are a helpful study planning assistant. Generate a structured, personalized study plan based on the user's course data, selected modules, and study preferences.
+    const systemPrompt = `You are a helpful study planning assistant. Your task is to distribute study events across weeks based on the user's study preferences.
 
-Your task is to create a comprehensive study plan that:
-1. Breaks down the selected modules into manageable study sessions
-2. Schedules study time based on the user's available hours per week and preferred schedule
-3. Prioritizes assignments based on due dates
-4. Adapts to the user's learning style
-5. Includes specific tasks and milestones
+IMPORTANT: Only distribute the provided study events. Do NOT add any assignments, exams, quizzes, midterms, or introduction topics. Only include the core concept study sessions provided.
 
 Return ONLY valid JSON in this exact structure:
 {
@@ -162,21 +406,14 @@ Return ONLY valid JSON in this exact structure:
       "endDate": "2024-01-21",
       "events": [
         {
-          "title": "Study Module 1: Introduction",
+          "title": "Study Module 1: Topic 1",
           "type": "study_session",
           "date": "2024-01-15",
           "duration": "2 hours",
-          "description": "Review introduction materials and complete readings",
-          "isChecked": false
-        },
-        {
-          "title": "Assignment 1: Essay",
-          "type": "assignment",
-          "date": "2024-01-18",
-          "dueDate": "2024-01-20",
-          "points": 100,
-          "description": "Complete and submit Assignment 1",
-          "isChecked": false
+          "description": "Study this topic",
+          "isChecked": false,
+          "moduleId": 123,
+          "itemId": 456
         }
       ]
     }
@@ -184,21 +421,28 @@ Return ONLY valid JSON in this exact structure:
   "summary": {
     "totalWeeks": 4,
     "totalStudyHours": 20,
-    "totalAssignments": 5,
-    "keyMilestones": ["Midterm Exam", "Final Project"]
+    "totalTopics": 10,
+    "keyMilestones": []
   }
 }
 
-Event types can be: "study_session", "assignment", "exam", "review", "quiz"
+CRITICAL RULES:
+- Distribute ONLY the provided core concept study events across weeks
+- Do NOT add assignments, exams, quizzes, midterms, or introductions
+- Each event already has a title, moduleId, and itemId - preserve these exactly
+- Assign events to weeks starting from the current date
+- Consider study preferences (hours per week, preferred schedule, learning style)
+- Each week should have a reasonable number of study sessions based on available hours
+
+Event types: ONLY "study_session" for core concepts
 Use the current date as the starting point for Week 1.`
 
     const userPrompt = `Course: ${courseName} (ID: ${courseId})
 
-Selected Modules:
-${modulesContext.map(m => `- ${m.name} (${m.items.length} items)`).join('\n')}
-
-Upcoming Assignments:
-${assignmentsContext.slice(0, 10).map(a => `- ${a.name}: Due ${a.dueAt ? new Date(a.dueAt).toLocaleDateString() : 'TBD'} (${a.points} points)`).join('\n')}
+Study Events to Distribute (ONLY these - do not add any others):
+${filteredEvents.map((e, idx) => 
+  `${idx + 1}. "${e.title}" (Module ID: ${e.moduleId}, Item ID: ${e.itemId}, Type: ${e.itemType || 'unknown'})`
+).join('\n')}
 
 Study Preferences:
 - Goals: ${studyPreferences.studyGoals || 'Not specified'}
@@ -209,57 +453,74 @@ Study Preferences:
 - Deadlines: ${studyPreferences.deadlineInfo || 'None specified'}
 - Additional notes: ${studyPreferences.additionalNotes || 'None'}
 
-Generate a study plan that:
-1. Distributes study sessions across the available weeks
-2. Schedules assignments before their due dates
-3. Adapts to the learning style preference
-4. Includes review sessions before exams
-5. Breaks down large modules into smaller sessions
-6. Accounts for the user's available hours per week
+YOUR TASK:
+1. Distribute the ${filteredEvents.length} core concept study events across weeks
+2. Preserve the exact title, moduleId, and itemId for each event
+3. Assign events to weeks based on available study hours per week
+4. Consider the user's learning style and preferred schedule
+5. Do NOT add any assignments, exams, quizzes, or midterms
+6. Create a realistic study schedule that accounts for the user's preferences
 
 Current date: ${new Date().toISOString().split('T')[0]}`
 
-    const result = await generateText({
-      model: openrouter.chat(selectedModel),
-      system: systemPrompt,
-      prompt: userPrompt,
-      temperature: 0.7,
-    })
-
-    // Parse AI response
-    let generatedPlan
-    try {
-      // Try to extract JSON from the response
-      const jsonMatch = result.text.match(/\{[\s\S]*\}/)
-      if (jsonMatch) {
-        generatedPlan = JSON.parse(jsonMatch[0])
-      } else {
-        throw new Error('No JSON found in response')
-      }
-    } catch (parseError) {
-      console.error('Failed to parse AI response:', parseError)
-      // Create a fallback structure
-      generatedPlan = {
-        timeline: [{
-          period: 'Week 1',
-          startDate: new Date().toISOString().split('T')[0],
-          endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          events: [{
-            title: 'Start studying selected modules',
-            type: 'study_session',
-            date: new Date().toISOString().split('T')[0],
-            duration: '2 hours',
-            description: 'Begin working through selected course materials',
-            isChecked: false,
-          }],
-        }],
-        summary: {
-          totalWeeks: 1,
-          totalStudyHours: 2,
-          totalAssignments: assignmentsContext.length,
-          keyMilestones: [],
-        },
-      }
+    // Calculate hours per week from preferences
+    const hoursPerWeek = parseInt(studyPreferences.hoursPerWeek?.match(/\d+/)?.[0] || '10') || 10
+    const eventsPerWeek = Math.max(1, Math.floor(hoursPerWeek / 2)) // Assume 2 hours per event
+    
+    // Distribute events across weeks
+    const weeks: Array<{
+      period: string
+      startDate: string
+      endDate: string
+      events: any[]
+    }> = []
+    
+    const startDate = new Date()
+    startDate.setHours(0, 0, 0, 0)
+    
+    for (let weekIndex = 0; weekIndex < Math.ceil(filteredEvents.length / eventsPerWeek); weekIndex++) {
+      const weekStart = new Date(startDate)
+      weekStart.setDate(startDate.getDate() + weekIndex * 7)
+      const weekEnd = new Date(weekStart)
+      weekEnd.setDate(weekStart.getDate() + 6)
+      
+      const weekEvents = filteredEvents.slice(weekIndex * eventsPerWeek, (weekIndex + 1) * eventsPerWeek)
+      
+      // DO NOT add assignments, exams, quizzes, or midterms - only core concept study sessions
+      
+      const eventsForWeek = weekEvents.map((event, eventIndex) => {
+        const eventDate = new Date(weekStart)
+        eventDate.setDate(weekStart.getDate() + (eventIndex % 7)) // Spread across the week
+        
+        return {
+          title: event.title,
+          type: event.type,
+          date: eventDate.toISOString().split('T')[0],
+          duration: '2 hours',
+          description: event.description || event.title,
+          isChecked: false,
+          moduleId: event.moduleId,
+          itemId: event.itemId,
+        }
+      })
+      
+      weeks.push({
+        period: `Week ${weekIndex + 1}`,
+        startDate: weekStart.toISOString().split('T')[0],
+        endDate: weekEnd.toISOString().split('T')[0],
+        events: eventsForWeek, // Only core concept study sessions, no assignments/exams/quizzes
+      })
+    }
+    
+    const generatedPlan = {
+      timeline: weeks,
+      summary: {
+        totalWeeks: weeks.length,
+        totalStudyHours: filteredEvents.length * 2, // 2 hours per event
+        totalTopics: filteredEvents.length,
+        totalAssignments: 0, // Not including assignments in the roadmap
+        keyMilestones: [],
+      },
     }
 
     // Store in database

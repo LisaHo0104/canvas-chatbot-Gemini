@@ -78,7 +78,7 @@ export function createChatHandlers(
   }
 
   const onSubmitAI = async (message: any) => {
-    if (!message.text) return
+    if (!message.text || !message.text.trim()) return
     if (!user) return
     let sessionForSend = currentSession
     if (!sessionForSend) {

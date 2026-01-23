@@ -841,6 +841,11 @@ export const PromptInput = ({
           return (formData.get("message") as string) || "";
         })();
 
+    // Don't submit if text is empty or only whitespace
+    if (!text || !text.trim()) {
+      return;
+    }
+
     // Reset form immediately after capturing text to avoid race condition
     // where user input during async blob conversion would be lost
     if (!usingProvider) {
@@ -852,6 +857,24 @@ export const PromptInput = ({
     }
 
     // Convert blob URLs to data URLs asynchronously
+    // If there are no files, call onSubmit immediately
+    if (files.length === 0) {
+      try {
+        const result = onSubmit({ text, files: [] }, event);
+        // Handle both sync and async onSubmit
+        if (result instanceof Promise) {
+          result.catch((error) => {
+            console.error('Error submitting message:', error);
+            // Don't clear on error - user may want to retry
+          });
+        }
+      } catch (error) {
+        console.error('Error submitting message:', error);
+        // Don't clear on error - user may want to retry
+      }
+      return;
+    }
+
     Promise.all(
       files.map(async ({ id, ...item }) => {
         if (item.url && item.url.startsWith("blob:")) {
@@ -878,7 +901,8 @@ export const PromptInput = ({
                   controller.textInput.clear();
                 }
               })
-              .catch(() => {
+              .catch((error) => {
+                console.error('Error submitting message:', error);
                 // Don't clear on error - user may want to retry
               });
           } else {
@@ -888,12 +912,24 @@ export const PromptInput = ({
               controller.textInput.clear();
             }
           }
-        } catch {
+        } catch (error) {
+          console.error('Error submitting message:', error);
           // Don't clear on error - user may want to retry
         }
       })
-      .catch(() => {
-        // Don't clear on error - user may want to retry
+      .catch((error) => {
+        console.error('Error converting files:', error);
+        // Still try to submit with original files if conversion fails
+        try {
+          const result = onSubmit({ text, files: files.map(({ id, ...item }) => item) }, event);
+          if (result instanceof Promise) {
+            result.catch((err) => {
+              console.error('Error submitting message with original files:', err);
+            });
+          }
+        } catch (err) {
+          console.error('Error submitting message with original files:', err);
+        }
       });
   };
 
