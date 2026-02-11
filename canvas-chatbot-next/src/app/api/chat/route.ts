@@ -88,6 +88,17 @@ async function chatHandler(request: NextRequest) {
 				if (noteGenerationTemplate?.prompt_text) {
 					activeSystemPrompt = noteGenerationTemplate.prompt_text;
 				}
+			} else if (analysisMode === 'flashcard') {
+				const { data: flashcardTemplate } = await supabase
+					.from('system_prompts')
+					.select('prompt_text')
+					.eq('template_type', 'flashcard_generation')
+					.eq('is_template', true)
+					.single();
+
+				if (flashcardTemplate?.prompt_text) {
+					activeSystemPrompt = flashcardTemplate.prompt_text;
+				}
 			} else if (selected_system_prompt_ids && Array.isArray(selected_system_prompt_ids) && selected_system_prompt_ids.length > 0) {
 				// If selected_system_prompt_ids are provided in the request, use those
 				// Fetch multiple system prompts
@@ -748,14 +759,26 @@ This sequence is REQUIRED. Do not skip any step. The provide_note_output tool is
 			}
 		}
 
+		// Enhance system prompt when flashcard mode is active: no text listing of cards
+		let flashcardEnforcementPrompt = '';
+		if (analysisMode === 'flashcard') {
+			flashcardEnforcementPrompt = `
+
+⚠️ FLASHCARD MODE - CANVAS ONLY & OUTPUT RULES:
+- Use ONLY information from the Canvas content you retrieved. Do NOT invent or make up terms or definitions. If the content has only a few key terms, create only that many cards—do NOT pad with made-up cards to reach a target number (e.g. 20 or 30).
+- You MUST call provide_flashcard_output with the flashcard set (title, cards with term + description). Do NOT generate any text before the tool call.
+- After calling provide_flashcard_output, STOP. Do NOT output any text after the tool call.
+- Do NOT list or repeat the cards in your message. The user sees ONLY the interactive flashcard UI.`;
+		}
+
 		// Include context in system prompt if:
 		// 1. formattedContext exists (from canvasContext with courses), OR
 		// 2. contextFromAttachments exists (when attachments exist but canvasContext is missing)
 		const contextToInclude = formattedContext || contextFromAttachments;
 		
 		const systemText = contextToInclude
-			? `${activeSystemPrompt}${toolUsageInstructions}${rubricEnforcementPrompt}${quizEnforcementPrompt}${noteEnforcementPrompt}\n\n${contextToInclude}`
-			: `${activeSystemPrompt}${toolUsageInstructions}${rubricEnforcementPrompt}${quizEnforcementPrompt}${noteEnforcementPrompt}`;
+			? `${activeSystemPrompt}${toolUsageInstructions}${rubricEnforcementPrompt}${quizEnforcementPrompt}${noteEnforcementPrompt}${flashcardEnforcementPrompt}\n\n${contextToInclude}`
+			: `${activeSystemPrompt}${toolUsageInstructions}${rubricEnforcementPrompt}${quizEnforcementPrompt}${noteEnforcementPrompt}${flashcardEnforcementPrompt}`;
 
 		const uiMessagesWithSystem: UIMessage[] = [
 			{ role: 'system', parts: [{ type: 'text', text: systemText }] } as any,

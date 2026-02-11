@@ -2,7 +2,7 @@
  * Mode-specific color utilities for Quiz, Rubric Analysis, and Study Plan
  */
 
-export type ModeType = 'quiz' | 'rubric' | 'study-plan' | 'note' | null
+export type ModeType = 'quiz' | 'rubric' | 'study-plan' | 'note' | 'flashcard' | null
 
 /**
  * Get background and text color classes for a mode
@@ -46,6 +46,14 @@ export function getModeColors(mode: ModeType): {
         muted: 'bg-amber-50 dark:bg-amber-950',
         mutedText: 'text-amber-700 dark:text-amber-300',
         border: 'border-amber-200 dark:border-amber-800',
+      }
+    case 'flashcard':
+      return {
+        bg: 'bg-teal-100 dark:bg-teal-900',
+        text: 'text-teal-800 dark:text-teal-200',
+        muted: 'bg-teal-50 dark:bg-teal-950',
+        mutedText: 'text-teal-700 dark:text-teal-300',
+        border: 'border-teal-200 dark:border-teal-800',
       }
     default:
       return {

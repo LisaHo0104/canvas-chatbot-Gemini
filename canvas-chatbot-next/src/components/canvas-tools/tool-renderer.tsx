@@ -10,6 +10,7 @@ import { FeedbackRubric } from './feedback-rubric'
 import { RubricAnalysisUI } from '@/components/rubric-interpreter/rubric-analysis-ui'
 import { QuizUI } from '@/components/quiz/quiz-ui'
 import { NoteUI } from '@/components/note/note-ui'
+import { FlashcardUI } from '@/components/flashcard/flashcard-ui'
 import { Plan, PlanHeader, PlanTitle, PlanDescription, PlanContent, PlanTrigger, PlanFooter, PlanAction } from '@/components/ai-elements/plan'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -24,7 +25,7 @@ interface ToolRendererProps {
   toolPart?: ToolUIPart
   onApprove?: (approvalId: string) => void
   onReject?: (approvalId: string) => void
-  onViewFull?: (type: 'quiz' | 'rubric' | 'note', data: any, messageId?: string) => void
+  onViewFull?: (type: 'quiz' | 'rubric' | 'note' | 'flashcard', data: any, messageId?: string) => void
 }
 
 export function ToolRenderer({ toolName, result, toolPart, onApprove, onReject, onViewFull }: ToolRendererProps) {
@@ -390,6 +391,39 @@ export function ToolRenderer({ toolName, result, toolPart, onApprove, onReject, 
         </div>
       )
 
+    case 'provide_flashcard_output':
+      if (result?.error) {
+        return (
+          <div className="p-4 border rounded-lg bg-red-50 dark:bg-red-950">
+            <p className="text-sm text-red-800 dark:text-red-200">
+              <strong>Error:</strong> {result.error}
+            </p>
+          </div>
+        )
+      }
+      if (result && typeof result === 'object' && 'cards' in result && Array.isArray(result.cards)) {
+        const first = result.cards[0]
+        if (first && 'term' in first && 'description' in first) {
+          return (
+            <FlashcardOutputRenderer
+              flashcardData={result as any}
+              messageId={(toolPart as any)?.toolCallId}
+              onViewFull={onViewFull}
+            />
+          )
+        }
+      }
+      return (
+        <div className="p-4 border rounded-lg bg-yellow-50 dark:bg-yellow-950">
+          <p className="text-sm text-yellow-800 dark:text-yellow-200">
+            <strong>⚠️ Incomplete Flashcard Data</strong>
+          </p>
+          <p className="text-xs text-yellow-600 dark:text-yellow-300 mt-1">
+            Expected cards array with term and description for each card.
+          </p>
+        </div>
+      )
+
     case 'webSearch':
       const results = result?.results || (Array.isArray(result) ? result : [])
       if (!results.length) return <div className="text-sm text-muted-foreground">No results found</div>
@@ -418,7 +452,7 @@ export function ToolRenderer({ toolName, result, toolPart, onApprove, onReject, 
 }
 
 // Separate component for quiz output
-function QuizOutputRenderer({ quizData, onViewFull, messageId }: { quizData: any; onViewFull?: (type: 'quiz' | 'rubric' | 'note', data: any, messageId?: string) => void; messageId?: string }) {
+function QuizOutputRenderer({ quizData, onViewFull, messageId }: { quizData: any; onViewFull?: (type: 'quiz' | 'rubric' | 'note' | 'flashcard', data: any, messageId?: string) => void; messageId?: string }) {
   const [saveDialogOpen, setSaveDialogOpen] = useState(false)
 
   return (
@@ -457,7 +491,7 @@ function RubricOutputRenderer({ rubricData, messageId, onViewFull }: { rubricDat
 }
 
 // Separate component for note output
-function NoteOutputRenderer({ noteData, messageId, onViewFull }: { noteData: any; messageId?: string; onViewFull?: (type: 'quiz' | 'rubric' | 'note', data: any, messageId?: string) => void }) {
+function NoteOutputRenderer({ noteData, messageId, onViewFull }: { noteData: any; messageId?: string; onViewFull?: (type: 'quiz' | 'rubric' | 'note' | 'flashcard', data: any, messageId?: string) => void }) {
   const [saveDialogOpen, setSaveDialogOpen] = useState(false)
 
   return (
@@ -481,5 +515,26 @@ function NoteOutputRenderer({ noteData, messageId, onViewFull }: { noteData: any
         }}
       />
     </>
+  )
+}
+
+// Separate component for flashcard output
+function FlashcardOutputRenderer({
+  flashcardData,
+  messageId,
+  onViewFull,
+}: {
+  flashcardData: any
+  messageId?: string
+  onViewFull?: (type: 'quiz' | 'rubric' | 'note' | 'flashcard', data: any, messageId?: string) => void
+}) {
+  return (
+    <div className="space-y-2">
+      <FlashcardUI
+        data={flashcardData}
+        compact={true}
+        onViewFull={() => onViewFull?.('flashcard', flashcardData, messageId)}
+      />
+    </div>
   )
 }

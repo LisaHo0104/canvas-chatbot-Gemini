@@ -78,6 +78,23 @@ export function useSuggestions(hasContext: boolean, selectedContext: SelectedCon
     ]
   }, [hasContext])
 
+  const flashcardSuggestions = useMemo(() => {
+    if (hasContext) {
+      return [
+        'Generate flashcards from my selected context',
+        'Create study cards for these topics',
+        'Make term/definition cards from these materials',
+        'Give me flashcards to review for my quiz',
+      ]
+    }
+    return [
+      'Generate flashcards from modules I mention',
+      'Create study cards for my assignment',
+      'Make term/definition cards from my course',
+      'Give me flashcards to review key concepts',
+    ]
+  }, [hasContext])
+
   const regenerateAllSuggestions = async (
     uiMessages: any[],
     activeProvider: any,
@@ -129,6 +146,7 @@ export function useSuggestions(hasContext: boolean, selectedContext: SelectedCon
     rubricSuggestions,
     quizSuggestions,
     studyPlanSuggestions,
+    flashcardSuggestions,
     regenerateAllSuggestions,
   }
 }

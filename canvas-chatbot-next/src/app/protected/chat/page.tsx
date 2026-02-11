@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient as createSupabaseClient } from '@/lib/supabase/client'
-import { X, CopyIcon, RefreshCcwIcon, GlobeIcon, CheckIcon, SparklesIcon, FolderIcon, LayersIcon, FileText, BookOpen, GraduationCap, FileQuestion, Info, History, StickyNote } from 'lucide-react'
+import { X, CopyIcon, RefreshCcwIcon, GlobeIcon, CheckIcon, SparklesIcon, FolderIcon, LayersIcon, FileText, BookOpen, GraduationCap, FileQuestion, Info, History, StickyNote, Library } from 'lucide-react'
 import { useChat } from '@ai-sdk/react'
 import { lastAssistantMessageIsCompleteWithApprovalResponses } from 'ai'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -121,6 +121,7 @@ export default function ChatPage() {
     rubricSuggestions,
     quizSuggestions,
     studyPlanSuggestions,
+    flashcardSuggestions,
     regenerateAllSuggestions: regenerateSuggestions,
   } = suggestions
 
@@ -521,7 +522,7 @@ export default function ChatPage() {
   }
 
   // Handler to open artifact panel
-  const handleOpenArtifact = useCallback((type: 'quiz' | 'rubric' | 'note', data: any, messageId?: string) => {
+  const handleOpenArtifact = useCallback((type: 'quiz' | 'rubric' | 'note' | 'flashcard', data: any, messageId?: string) => {
     setArtifactPanelData({ type, data, messageId })
     setArtifactPanelOpen(true)
   }, [])
@@ -665,6 +666,10 @@ export default function ChatPage() {
                           const type = part.type
 
                           if (type === 'text') {
+                            const hasFlashcardOutput = message.parts.some(
+                              (p: any) => p.type === 'tool-invocation-provide_flashcard_output' && p.state === 'output-available' && p.output?.cards
+                            )
+                            if (hasFlashcardOutput) return null
                             return (
                               <MessageResponse key={`${message.id}-text-${idx}`}>
                                 {part.text}
@@ -705,6 +710,7 @@ export default function ChatPage() {
                               'generate_quiz_plan',
                               'provide_quiz_output',
                               'provide_note_output',
+                              'provide_flashcard_output',
                               'webSearch'
                             ].includes(toolName)
 
@@ -721,6 +727,18 @@ export default function ChatPage() {
                                 (toolName !== 'generate_quiz_plan' && tp.state === 'output-available')
                               
                               if (shouldShow) {
+                                if (toolName === 'provide_flashcard_output') {
+                                  const flashcardParts = message.parts
+                                    .map((p: any, i: number) => ({ part: p, index: i }))
+                                    .filter(({ part }: { part: any }) => part.type === 'tool-invocation-provide_flashcard_output' && part.state === 'output-available' && part.output?.cards)
+                                  const best = flashcardParts.length > 1 ? flashcardParts.reduce((best: { part: any; index: number } | null, curr: { part: any; index: number }) => {
+                                    const currCards = curr.part.output?.cards?.length ?? 0
+                                    const bestCards = best ? (best.part.output?.cards?.length ?? 0) : 0
+                                    if (currCards > bestCards || (currCards === bestCards && curr.index > (best?.index ?? -1))) return curr
+                                    return best
+                                  }, null) : flashcardParts[0] ?? null
+                                  if (best && idx !== best.index) return null
+                                }
                                 // For generate_quiz_plan, prefer output but fall back to input
                                 // For other tools, use output
                                 const result = toolName === 'generate_quiz_plan' 
@@ -733,7 +751,7 @@ export default function ChatPage() {
                                       toolName={toolName} 
                                       result={result}
                                       toolPart={tp}
-                                      onViewFull={(type: 'quiz' | 'rubric' | 'note', data: any, messageId?: string) => {
+                                      onViewFull={(type: 'quiz' | 'rubric' | 'note' | 'flashcard', data: any, messageId?: string) => {
                                         handleOpenArtifact(type, data, messageId)
                                       }}
                                       onApprove={() => {
@@ -782,7 +800,7 @@ export default function ChatPage() {
                                               : ('output' in tp ? tp.output : (tp.state === 'approval-requested' || tp.state === 'input-available' ? tp.input : undefined))
                                           }
                                           toolPart={tp}
-                                          onViewFull={(type: 'quiz' | 'rubric' | 'note', data: any, messageId?: string) => {
+                                          onViewFull={(type: 'quiz' | 'rubric' | 'note' | 'flashcard', data: any, messageId?: string) => {
                                             handleOpenArtifact(type, data, messageId)
                                           }}
                                           onApprove={() => {
@@ -893,7 +911,9 @@ export default function ChatPage() {
                         ? quizSuggestions
                         : mode === 'study-plan'
                           ? studyPlanSuggestions
-                          : staticSuggestions
+                          : mode === 'flashcard'
+                            ? flashcardSuggestions
+                            : staticSuggestions
                   ).map((s, i) => (
                     <Suggestion key={`${s}-${i}`} suggestion={s} disabled={status !== 'ready'} onClick={() => { onSubmitAI({ text: s }) }} />
                   ))
@@ -1115,12 +1135,14 @@ export default function ChatPage() {
                           <BookOpen className="size-4" />
                         ) : mode === 'note' ? (
                           <StickyNote className="size-4" />
+                        ) : mode === 'flashcard' ? (
+                          <Library className="size-4" />
                         ) : (
                           <GraduationCap className="size-4" />
                         )}
                         <span className="ml-1 flex items-center gap-1.5">
-                          {mode === 'rubric' ? 'Rubric' : mode === 'quiz' ? 'Quiz Generation' : mode === 'study-plan' ? 'Study Plan' : mode === 'note' ? 'Note Mode' : 'Generic'}
-                          {(mode === 'rubric' || mode === 'quiz' || mode === 'study-plan' || mode === 'note') && (
+                          {mode === 'rubric' ? 'Rubric' : mode === 'quiz' ? 'Quiz Generation' : mode === 'study-plan' ? 'Study Plan' : mode === 'note' ? 'Note Mode' : mode === 'flashcard' ? 'Flashcard' : 'Generic'}
+                          {(mode === 'rubric' || mode === 'quiz' || mode === 'study-plan' || mode === 'note' || mode === 'flashcard') && (
                             <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 h-4 border ${getModeBadgeColors(mode as ModeType)}`}>Beta</Badge>
                           )}
                         </span>
@@ -1198,6 +1220,20 @@ export default function ChatPage() {
                                 <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 h-4 border ${getModeBadgeColors('note')}`}>Beta</Badge>
                               </span>
                               {mode === 'note' && <CheckIcon className="ml-auto size-4" />}
+                            </PromptInputCommandItem>
+                            <PromptInputCommandItem
+                              value="flashcard"
+                              onSelect={() => {
+                                handleModeChange('flashcard')
+                                setModeOpen(false)
+                              }}
+                            >
+                              <Library className={`size-4 ${getModeColors('flashcard').text}`} />
+                              <span className="flex items-center gap-1.5">
+                                Flashcard Mode
+                                <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 h-4 border ${getModeBadgeColors('flashcard')}`}>Beta</Badge>
+                              </span>
+                              {mode === 'flashcard' && <CheckIcon className="ml-auto size-4" />}
                             </PromptInputCommandItem>
                           </PromptInputCommandGroup>
                         </PromptInputCommandList>
@@ -1393,6 +1429,10 @@ export default function ChatPage() {
                           const type = part.type
 
                           if (type === 'text') {
+                            const hasFlashcardOutput = message.parts.some(
+                              (p: any) => p.type === 'tool-invocation-provide_flashcard_output' && p.state === 'output-available' && p.output?.cards
+                            )
+                            if (hasFlashcardOutput) return null
                             return (
                               <MessageResponse key={`${message.id}-text-${idx}`}>
                                 {part.text}
@@ -1433,6 +1473,7 @@ export default function ChatPage() {
                               'generate_quiz_plan',
                               'provide_quiz_output',
                               'provide_note_output',
+                              'provide_flashcard_output',
                               'webSearch'
                             ].includes(toolName)
 
@@ -1461,7 +1502,7 @@ export default function ChatPage() {
                                       toolName={toolName} 
                                       result={result}
                                       toolPart={tp}
-                                        onViewFull={(type: 'quiz' | 'rubric' | 'note', data: any, messageId?: string) => {
+                                        onViewFull={(type: 'quiz' | 'rubric' | 'note' | 'flashcard', data: any, messageId?: string) => {
                                           handleOpenArtifact(type, data, messageId)
                                         }}
                                       onApprove={() => {
@@ -1510,7 +1551,7 @@ export default function ChatPage() {
                                               : ('output' in tp ? tp.output : (tp.state === 'approval-requested' || tp.state === 'input-available' ? tp.input : undefined))
                                           }
                                           toolPart={tp}
-                                            onViewFull={(type: 'quiz' | 'rubric' | 'note', data: any, messageId?: string) => {
+                                            onViewFull={(type: 'quiz' | 'rubric' | 'note' | 'flashcard', data: any, messageId?: string) => {
                                               handleOpenArtifact(type, data, messageId)
                                             }}
                                           onApprove={() => {
@@ -1621,7 +1662,9 @@ export default function ChatPage() {
                         ? quizSuggestions
                         : mode === 'study-plan'
                           ? studyPlanSuggestions
-                          : staticSuggestions
+                          : mode === 'flashcard'
+                            ? flashcardSuggestions
+                            : staticSuggestions
                   ).map((s, i) => (
                     <Suggestion key={`${s}-${i}`} suggestion={s} disabled={status !== 'ready'} onClick={() => { onSubmitAI({ text: s }) }} />
                   ))
@@ -1843,12 +1886,14 @@ export default function ChatPage() {
                           <BookOpen className="size-4" />
                         ) : mode === 'note' ? (
                           <StickyNote className="size-4" />
+                        ) : mode === 'flashcard' ? (
+                          <Library className="size-4" />
                         ) : (
                           <GraduationCap className="size-4" />
                         )}
                         <span className="ml-1 flex items-center gap-1.5">
-                          {mode === 'rubric' ? 'Rubric' : mode === 'quiz' ? 'Quiz Generation' : mode === 'study-plan' ? 'Study Plan' : mode === 'note' ? 'Note Mode' : 'Generic'}
-                          {(mode === 'rubric' || mode === 'quiz' || mode === 'study-plan' || mode === 'note') && (
+                          {mode === 'rubric' ? 'Rubric' : mode === 'quiz' ? 'Quiz Generation' : mode === 'study-plan' ? 'Study Plan' : mode === 'note' ? 'Note Mode' : mode === 'flashcard' ? 'Flashcard' : 'Generic'}
+                          {(mode === 'rubric' || mode === 'quiz' || mode === 'study-plan' || mode === 'note' || mode === 'flashcard') && (
                             <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 h-4 border ${getModeBadgeColors(mode as ModeType)}`}>Beta</Badge>
                           )}
                         </span>
@@ -1926,6 +1971,20 @@ export default function ChatPage() {
                                 <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 h-4 border ${getModeBadgeColors('note')}`}>Beta</Badge>
                               </span>
                               {mode === 'note' && <CheckIcon className="ml-auto size-4" />}
+                            </PromptInputCommandItem>
+                            <PromptInputCommandItem
+                              value="flashcard"
+                              onSelect={() => {
+                                handleModeChange('flashcard')
+                                setModeOpen(false)
+                              }}
+                            >
+                              <Library className={`size-4 ${getModeColors('flashcard').text}`} />
+                              <span className="flex items-center gap-1.5">
+                                Flashcard Mode
+                                <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 h-4 border ${getModeBadgeColors('flashcard')}`}>Beta</Badge>
+                              </span>
+                              {mode === 'flashcard' && <CheckIcon className="ml-auto size-4" />}
                             </PromptInputCommandItem>
                           </PromptInputCommandGroup>
                         </PromptInputCommandList>
