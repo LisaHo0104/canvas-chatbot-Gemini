@@ -46,6 +46,7 @@ export const MODE_TO_TEMPLATE_TYPE: Record<string, string> = {
   'quiz': 'quiz_generation',
   'study-plan': 'study_plan',
   'note': 'note_generation',
+  'flashcard': 'flashcard_generation',
 }
 
 export const TEMPLATE_TYPE_TO_MODE: Record<string, string | null> = {
@@ -53,5 +54,6 @@ export const TEMPLATE_TYPE_TO_MODE: Record<string, string | null> = {
   'quiz_generation': 'quiz',
   'study_plan': 'study-plan',
   'note_generation': 'note',
+  'flashcard_generation': 'flashcard',
   'default': null,
 }

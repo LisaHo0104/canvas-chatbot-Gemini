@@ -5,4 +5,4 @@ alwaysApply: true
 # Business Context
 
 Write in bullet points:
-[Insert here]
+- **Flashcard Mode**: A chat mode that generates flashcards from selected course materials. The AI calls `provide_flashcard_output` with structured data (title, cards: [{ id, term, description }]). **Generative UI (FlashcardUI):** Each card shows only the key **term** on the front; user taps to flip and sees the **description** on the back. Swipe **right** = remember, swipe **left** = don’t remember; progress and counts are shown. Available in the mode selector with other Beta modes (Rubric, Quiz, Study Plan, Note). Full-screen view via artifact panel.

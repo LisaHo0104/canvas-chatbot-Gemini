@@ -8,12 +8,13 @@ import { Spinner } from '@/components/ui/spinner'
 import { QuizUI } from '@/components/quiz/quiz-ui'
 import { RubricAnalysisUI } from '@/components/rubric-interpreter/rubric-analysis-ui'
 import { NoteUI } from '@/components/note/note-ui'
+import { FlashcardUI } from '@/components/flashcard/flashcard-ui'
 import { SaveArtifactDialog } from './SaveArtifactDialog'
 
 interface ArtifactPanelProps {
   open: boolean
   onClose: () => void
-  artifactType: 'quiz' | 'rubric' | 'note'
+  artifactType: 'quiz' | 'rubric' | 'note' | 'flashcard'
   artifactData: any
   messageId?: string
 }
@@ -37,6 +38,8 @@ export function ArtifactPanel({
         return artifactData?.assignmentName || 'Rubric Analysis'
       case 'note':
         return artifactData?.title || 'Note'
+      case 'flashcard':
+        return artifactData?.title || 'Flashcards'
       default:
         return 'Artifact'
     }
@@ -49,6 +52,8 @@ export function ArtifactPanel({
       case 'rubric':
         return ''
       case 'note':
+        return artifactData?.description || ''
+      case 'flashcard':
         return artifactData?.description || ''
       default:
         return ''
@@ -105,6 +110,13 @@ export function ArtifactPanel({
                 messageId={messageId}
                 compact={false}
                 onSaveClick={() => setSaveDialogOpen(true)}
+              />
+            )}
+            {artifactType === 'flashcard' && (
+              <FlashcardUI
+                data={artifactData}
+                messageId={messageId}
+                compact={false}
               />
             )}
           </div>

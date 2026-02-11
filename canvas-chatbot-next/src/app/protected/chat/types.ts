@@ -29,7 +29,7 @@ export interface SelectedContext {
 }
 
 export interface ArtifactPanelData {
-  type: 'quiz' | 'rubric' | 'note'
+  type: 'quiz' | 'rubric' | 'note' | 'flashcard'
   data: any
   messageId?: string
 }

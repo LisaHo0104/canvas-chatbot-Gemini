@@ -690,5 +690,27 @@ export function createCanvasTools(token: string, url: string) {
 				return noteData;
 			},
 		}),
+
+		provide_flashcard_output: tool({
+			description: 'CRITICAL: After generating flashcards, call this tool with the flashcard set only. Do NOT output any text listing the cards (no "Card 1:", "Back:", etc.). The user sees ONLY the interactive FlashcardUI. Call this tool immediately after generating the cards, then stop - no other text before or after.',
+			inputSchema: z.object({
+				title: z.string().describe('Title of the flashcard set'),
+				description: z.string().optional().describe('Optional description of the flashcard set'),
+				cards: z.array(
+					z.object({
+						id: z.string().describe('Unique identifier for the card (e.g. card-1, card-2)'),
+						term: z.string().describe('Key term, concept, or command from content (front of card only)'),
+						description: z.string().describe('AI-generated clear explanation for the back: explain what it means, how it works, or why it matters. Do not just restate the term—add real value for the student.'),
+					})
+				).describe('Array of flashcards. Use ONLY terms and definitions from the retrieved Canvas content. Create only as many cards as the content actually has—do not invent cards to reach a target number. term = front, description = back.'),
+				metadata: z.object({
+					topics: z.array(z.string()).optional().describe('Topics covered'),
+					sourcesUsed: z.array(z.string()).optional().describe('Sources used to generate the cards'),
+				}).optional().describe('Optional metadata'),
+			}),
+			execute: async (flashcardData: any) => {
+				return flashcardData;
+			},
+		}),
 	};
 }
