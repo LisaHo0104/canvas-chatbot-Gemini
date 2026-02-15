@@ -35,14 +35,7 @@ export function DocsNavbarExtras() {
   return (
     <div className="flex items-center gap-2">
       {authUser ? (
-        <>
-          <Link href="/protected/chat">
-            <Button variant="ghost" size="sm">
-              Back to app
-            </Button>
-          </Link>
-          <LogoutButton />
-        </>
+        <LogoutButton />
       ) : (
         <div className="flex items-center gap-2">
           <Link href="/auth/login">
