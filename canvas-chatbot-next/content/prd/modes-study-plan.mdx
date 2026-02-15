@@ -1,0 +1,26 @@
+# PRD: Study Plan Mode
+
+## What is it?
+
+Study Plan Mode helps students create study plans from their Canvas course content. The assistant uses modules, assignments, and due dates to suggest a structured plan.
+
+## Key Requirements
+
+- Mode-specific system prompt for study planning
+- Canvas context: courses, modules, assignments (including due dates)
+- Pareto-style focus: prioritize high-impact content
+- Actionable output with timelines and links
+
+## How it is implemented
+
+- **Mode selection:** Chat page mode selector; `mode: 'study-plan'` sent in request body
+- **System prompt:** Study plan template with Pareto emphasis
+- **Tools:** Canvas tools to fetch courses, modules, assignments
+- **Context:** User can attach courses/modules; context passed as `selected_context` in request
+- **Output:** Structured study plan with sections, timelines, resource links
+
+## Related
+
+- [Modes (System Design)](/docs/system-design/modes)
+- [Context Management PRD](/docs/prd/context-management)
+- [Design Principles](/docs/design-principles)

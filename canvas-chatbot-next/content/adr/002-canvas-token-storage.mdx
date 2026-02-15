@@ -1,0 +1,26 @@
+# ADR-002: Canvas Token Storage
+
+**Status:** Accepted  
+**Date:** 2025-02-15
+
+## Context
+
+Lulu needs to call the Canvas LMS API on behalf of users to fetch courses, modules, assignments, and content. Canvas supports both OAuth 2.0 and API tokens (personally generated). We had to choose how to store and manage credentials.
+
+## Decision
+
+Store **encrypted Canvas API tokens** in the `profiles` table. Users enter their token and Canvas institution URL via the Context page. The token is encrypted with a server-side key before storage. No Canvas OAuth flow is implemented.
+
+## Consequences
+
+**Positive:**
+- Simpler integration; no OAuth callback handling or token refresh logic
+- Users can use existing Canvas API tokens they already have
+- Works with any Canvas instance (self-hosted, cloud, different institutions)
+- Full control over token lifecycle
+
+**Negative:**
+- Users must manually create tokens in Canvas
+- Tokens can expire; users must re-enter when that happens
+- Some institutions may prefer OAuth for audit trails
+- We are responsible for secure encryption and key management

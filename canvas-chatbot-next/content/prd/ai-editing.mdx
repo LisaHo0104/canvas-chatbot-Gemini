@@ -1,0 +1,36 @@
+# PRD: AI Editing
+
+## What is it?
+
+AI Editing provides inline AI-assisted text editing. Users select text, invoke the AI editor, and get suggestions or replacements. A comparison view shows before/after.
+
+## AI Edit Flow
+
+```mermaid
+flowchart LR
+    SelectText[Select Text] --> InvokeToolbar[Invoke Toolbar]
+    InvokeToolbar --> ApiCall[POST /api/ai-edit]
+    ApiCall --> ShowComparison[Show Comparison]
+    ShowComparison --> AcceptDiscard[Accept or Discard]
+```
+
+## Key Requirements
+
+- Text selection to trigger edit
+- Floating toolbar or edit action
+- Send selected text to AI for improvement/rewrite
+- Display result with comparison (original vs edited)
+- Accept or discard changes
+
+## How it is implemented
+
+- **Selection:** text-selector component tracks selected text
+- **Toolbar:** floating-toolbar or editing-toolbar with edit action
+- **API:** `POST /api/ai-edit` — receives selected text, returns AI-edited version
+- **UI:** comparison-view shows side-by-side or diff; accept/discard actions
+- **Integration:** Used in artifact editor or content-editable areas
+
+## Related
+
+- [Chat PRD](/docs/prd/chat)
+- [Artifacts PRD](/docs/prd/artifacts)

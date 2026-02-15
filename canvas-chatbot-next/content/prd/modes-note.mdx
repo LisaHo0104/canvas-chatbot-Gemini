@@ -1,0 +1,27 @@
+# PRD: Note Mode
+
+## What is it?
+
+Note Mode generates study notes from Canvas content. The assistant fetches module pages, PDFs, and materials, then produces student-friendly notes with key points and resource links.
+
+## Key Requirements
+
+- Mode-specific system prompt (Note Generation template)
+- Auto-select Note template when mode is 'note'
+- Fetch Canvas content (pages, files, modules)
+- Structured note output with sections, key points, links
+- Save as artifact (note type)
+
+## How it is implemented
+
+- **Mode selection:** Chat page mode selector; `mode: 'note'` sent in request body
+- **System prompt:** Chat route automatically fetches `note_generation` template from `system_prompts` when mode is 'note'
+- **Tools:** Canvas tools (get_module, get_page_content, etc.) to extract content
+- **Output:** Structured note with sections; can be saved as artifact
+- **Storage:** `dev.artifacts` with artifact_type: 'note'
+
+## Related
+
+- [Modes (System Design)](/docs/system-design/modes)
+- [Artifacts PRD](/docs/prd/artifacts)
+- [Canvas Integration PRD](/docs/prd/canvas-integration)

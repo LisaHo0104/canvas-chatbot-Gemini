@@ -1,0 +1,18 @@
+# Architecture Decision Records (ADR)
+
+This section documents significant architectural decisions for Lulu. Each ADR follows a standard format: **Context**, **Decision**, and **Consequences**.
+
+## ADR Index
+
+| # | Title | Status | One-liner |
+|---|-------|--------|-----------|
+| [001](/docs/adr/001-openrouter-vs-direct) | OpenRouter vs Direct Provider | Accepted | Use OpenRouter as LLM gateway for model flexibility and fallback |
+| [002](/docs/adr/002-canvas-token-storage) | Canvas Token Storage | Accepted | Store encrypted Canvas API tokens in profiles; no OAuth |
+| [003](/docs/adr/003-polar-billing) | Polar Billing | Accepted | Use Polar.sh for subscriptions, webhooks, and customer linking |
+| [004](/docs/adr/004-ai-sdk-agent) | AI SDK Agent Pattern | Accepted | Vercel AI SDK agent loop with tools for multi-step reasoning |
+
+## Status Legend
+
+- **Accepted** — Decision is in effect
+- **Superseded** — Replaced by a later ADR
+- **Deprecated** — No longer applicable

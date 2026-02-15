@@ -1,0 +1,70 @@
+# API Overview
+
+Lulu exposes API endpoints for chat, Canvas integration, context management, artifacts, billing, and webhooks.
+
+## Design Rationale
+
+- **Streaming for chat:** Responses stream token-by-token for responsive UX; avoids long waits for full responses
+- **Body params for context:** Chat accepts `selected_context`, `mode`, `selected_system_prompt_ids` in the body so the client can pass rich context without multiple round-trips
+- **Session header:** `X-Session-ID` identifies the chat session; enables session creation on first message and persistence
+
+## Chat
+
+| Route | Method | Auth | Purpose |
+|-------|--------|------|---------|
+| `/api/chat` | POST | Session | Main chat; streams AI responses; supports tools, context, mode |
+| `/api/session-title` | POST | Session | Generate or update chat session title |
+| `/api/suggestions` | POST | Session | Get context-aware chat suggestions |
+
+## Canvas & Context
+
+| Route | Method | Auth | Purpose |
+|-------|--------|------|---------|
+| `/api/auth/canvas-login` | POST | Session | Save Canvas token and URL (encrypted) |
+| `/api/canvas/courses` | GET | Session | List user's Canvas courses |
+| `/api/canvas/modules` | GET | Session | List modules for a course |
+| `/api/context/sync` | POST | Session | Sync Canvas data for context selection |
+| `/api/context/selection` | GET/PUT | Session | Get/update user's context selection |
+| `/api/context/profiles` | GET/POST | Session | List/create context profiles |
+| `/api/context/profiles/[id]` | GET/PUT/DELETE | Session | Get/update/delete profile |
+| `/api/context/profiles/[id]/apply` | POST | Session | Apply profile to selection |
+| `/api/context/import` | POST | Session | Import context preset |
+| `/api/context/export` | POST | Session | Export context preset |
+| `/api/context/presets` | GET | Session | List presets |
+
+## System Prompts
+
+| Route | Method | Auth | Purpose |
+|-------|--------|------|---------|
+| `/api/system-prompts` | GET/POST | Session | List/create system prompts |
+| `/api/system-prompts/[id]` | GET/PUT/DELETE | Session | Get/update/delete prompt |
+| `/api/system-prompts/[id]/apply` | POST | Session | Apply prompt to user selection |
+
+## Artifacts & Quiz
+
+| Route | Method | Auth | Purpose |
+|-------|--------|------|---------|
+| `/api/artifacts` | GET/POST | Session | List/create artifacts |
+| `/api/artifacts/[id]` | GET/PUT/DELETE | Session | Get/update/delete artifact |
+| `/api/quiz-attempts` | GET/POST | Session | List/create quiz attempts |
+| `/api/quiz-attempts/[id]` | GET | Session | Get attempt details |
+
+## Billing & Auth
+
+| Route | Method | Auth | Purpose |
+|-------|--------|------|---------|
+| `/api/webhook/polar` | POST | Polar signature | Polar subscription/payment webhooks |
+| `/api/products` | GET | Public/Session | List products for checkout |
+| `/api/auth/login` | POST | — | Email/password login |
+| `/api/auth/signup` | POST | — | Email signup |
+| `/api/auth/logout` | POST | Session | Logout |
+| `/api/openrouter/models` | GET | Session | List available AI models |
+
+## Other
+
+| Route | Method | Auth | Purpose |
+|-------|--------|------|---------|
+| `/api/ai-edit` | POST | Session | AI-assisted text editing |
+| `/api/stats/user-count` | GET | — | User count (e.g., landing page) |
+| `/api/upload` | POST | Session | File upload |
+| `/api/canvas/prefetch` | POST | Session | Prefetch Canvas data |

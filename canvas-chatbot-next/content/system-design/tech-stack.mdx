@@ -1,0 +1,36 @@
+# Tech Stack
+
+Lulu is built with a carefully chosen set of technologies. This page explains the rationale behind each choice.
+
+## Frontend
+
+| Technology | Purpose | Rationale |
+| ---------- | ------- | --------- |
+| **Next.js 16** | React framework | App Router, server components, API routes in one stack |
+| **React 18** | UI library | Mature ecosystem, excellent DX |
+| **Tailwind CSS** | Styling | Utility-first, fast iteration, small bundle |
+| **Radix UI** | Components | Accessible primitives, unstyled |
+
+## Backend
+
+| Technology | Purpose | Rationale |
+| ---------- | ------- | --------- |
+| **Supabase** | Database & Auth | PostgreSQL, RLS, Realtime, OAuth providers |
+| **Next.js API Routes** | Backend logic | Colocated with frontend, no separate deploy |
+
+## AI & Integrations
+
+| Technology | Purpose | Rationale |
+| ---------- | ------- | --------- |
+| **OpenRouter** | LLM gateway | Model flexibility, fallback providers |
+| **Vercel AI SDK** | AI orchestration | Agent loop, tool use, streaming |
+| **Canvas LMS** | Course context | OAuth 2.0, standard LMS integration |
+| **Polar.sh** | Billing | Subscription management, webhooks |
+
+## Development
+
+| Technology | Purpose | Rationale |
+| ---------- | ------- | --------- |
+| **TypeScript** | Type safety | Catch errors early, better DX |
+| **Bun** | Package manager | Fast installs and scripts |
+| **ESLint** | Linting | Code quality, consistency |

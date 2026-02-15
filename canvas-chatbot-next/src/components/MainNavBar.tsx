@@ -107,6 +107,17 @@ export default function MainNavBar() {
                       </NavigationMenuLink>
                     </NavigationMenuItem>
                     <NavigationMenuItem>
+                      <NavigationMenuLink
+                        asChild
+                        className={cn(
+                          pathname.startsWith("/docs") ? "bg-accent text-accent-foreground" : ""
+                        )}
+                        aria-current={pathname.startsWith("/docs") ? "page" : undefined}
+                      >
+                        <Link href="/docs">Docs</Link>
+                      </NavigationMenuLink>
+                    </NavigationMenuItem>
+                    <NavigationMenuItem>
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <NavigationMenuLink
@@ -151,6 +162,9 @@ export default function MainNavBar() {
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start">
                     <DropdownMenuItem asChild>
+                      <Link href="/docs">Docs</Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
                       <Link href="/protected/chat">Chat</Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem disabled title="This feature will be ready soon" className="flex items-center gap-1.5">
@@ -176,7 +190,23 @@ export default function MainNavBar() {
                 </DropdownMenu>
               </div>
             </>
-          ) : null}
+          ) : (
+            <NavigationMenu>
+              <NavigationMenuList>
+                <NavigationMenuItem>
+                  <NavigationMenuLink
+                    asChild
+                    className={cn(
+                      pathname.startsWith("/docs") ? "bg-accent text-accent-foreground" : ""
+                    )}
+                    aria-current={pathname.startsWith("/docs") ? "page" : undefined}
+                  >
+                    <Link href="/docs">Docs</Link>
+                  </NavigationMenuLink>
+                </NavigationMenuItem>
+              </NavigationMenuList>
+            </NavigationMenu>
+          )}
         </div>
         <div className="ml-auto">
           {authUser ? (

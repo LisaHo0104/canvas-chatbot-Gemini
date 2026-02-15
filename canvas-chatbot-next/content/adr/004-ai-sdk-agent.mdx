@@ -1,0 +1,26 @@
+# ADR-004: AI SDK Agent Pattern
+
+**Status:** Accepted  
+**Date:** 2025-02-15
+
+## Context
+
+Lulu's chat must support: (1) multi-step reasoning (e.g., fetch course → fetch module → generate quiz), (2) tool use (Canvas API, web search), and (3) structured outputs (quiz JSON, rubric analysis). A simple request/response chat would not suffice.
+
+## Decision
+
+Use the **Vercel AI SDK** with an **agent loop** that supports tools. The chat route runs an agent that can call tools (Canvas, Tavily), accumulate results, and continue reasoning. Streaming is enabled via `toUIMessageStreamResponse` and `smoothStream` for improved UX.
+
+## Consequences
+
+**Positive:**
+- Multi-step reasoning and tool use out of the box
+- Plan-then-execute flows (e.g., quiz approval before generation)
+- Streaming for responsive UX
+- Context truncation handles long conversations
+
+**Negative:**
+- Higher latency when tools are invoked
+- Context window management is critical; truncation can lose important context
+- Debugging agent flows is more complex than simple chat
+- Some models do not support tool use; we must validate model selection

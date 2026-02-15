@@ -6,3 +6,12 @@ alwaysApply: true
 
 Write in bullet points:
 [Insert here]
+
+## Diagram Guidelines (PRD Documentation)
+
+| Diagram Type | Use When | Example |
+|--------------|----------|---------|
+| **Flowchart** | User flows, state transitions, processes | Mode flows, artifact lifecycle |
+| **Sequence** | Request/response, API calls, integrations | Chat flow, Canvas token setup |
+| **ERD** | Database tables and relationships | Data model |
+| **Class diagram** | Domain objects, services, relationships | Domain model |

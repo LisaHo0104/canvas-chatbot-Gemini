@@ -1,0 +1,27 @@
+# PRD: Suggestions
+
+## What is it?
+
+Suggestions are context-aware quick prompts shown below the chat input. They adapt to the current mode, selected context, and conversation state to help users get started or take the next step.
+
+## Key Requirements
+
+- Static suggestions for generic use cases
+- Dynamic suggestions based on mode (rubric, quiz, study-plan, note)
+- Context-aware: e.g., "Summarize Module X" when a module is selected
+- Regenerate when context or mode changes
+- Loading state while fetching dynamic suggestions
+
+## How it is implemented
+
+- **Hooks:** useSuggestions, useTitleAndSuggestions — combine static and dynamic
+- **API:** `POST /api/suggestions` — receives context (mode, selected_context, messages), returns suggested prompts
+- **Static:** Predefined list for generic chat
+- **Dynamic:** Mode-specific (rubricSuggestions, quizSuggestions, studyPlanSuggestions) plus API call for context-based suggestions
+- **UI:** Suggestion chips below PromptInput; regenerate button
+
+## Related
+
+- [Chat PRD](/docs/prd/chat)
+- [Context Management PRD](/docs/prd/context-management)
+- [Modes (System Design)](/docs/system-design/modes)

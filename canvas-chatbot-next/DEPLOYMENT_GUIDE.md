@@ -6,7 +6,7 @@ The Canvas Chatbot has been successfully transformed from a Flask prototype into
 
 - **Authentication**: User registration and login with Supabase
 - **Canvas Integration**: Secure API key management and Canvas LMS integration
-- **AI Chat**: LangChain integration with Google Gemini for conversational AI
+- **AI Chat**: Vercel AI SDK with OpenRouter/Gemini for conversational AI
 - **File Upload**: Support for PDF and text file processing
 - **Responsive Design**: Modern UI with Tailwind CSS
 - **Security**: Rate limiting, input validation, and encrypted API keys
@@ -106,7 +106,6 @@ canvas-chatbot-next/
 │   │   ├── login/             # Authentication
 │   │   └── page.tsx           # Landing page
 │   ├── lib/                   # Utility libraries
-│   │   ├── ai-assistant.ts    # LangChain integration
 │   │   ├── canvas-api.ts      # Canvas API service
 │   │   ├── canvas-context.ts  # Context building
 │   │   ├── canvas-tools.ts    # AI SDK tool definitions for Canvas
@@ -143,7 +142,7 @@ canvas-chatbot-next/
 - ✅ Context-aware responses
 
 ### AI Chat
-- ✅ LangChain integration
+- ✅ Vercel AI SDK with agent loop
 - ✅ Google Gemini AI
 - ✅ Message history
 - ✅ File upload support

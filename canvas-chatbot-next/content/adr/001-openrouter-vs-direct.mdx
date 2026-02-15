@@ -1,0 +1,25 @@
+# ADR-001: OpenRouter vs Direct Provider
+
+**Status:** Accepted  
+**Date:** 2025-02-15
+
+## Context
+
+Lulu requires access to large language models (LLMs) for chat, study assistance, quiz generation, and rubric analysis. Multiple providers offer capable models (Google Gemini, Anthropic Claude, OpenAI GPT). We needed to choose how to integrate: directly with each provider, or via a unified gateway such as OpenRouter.
+
+## Decision
+
+Use **OpenRouter** as the LLM gateway. All chat and AI requests go through OpenRouter's API, which routes to the selected model regardless of provider.
+
+## Consequences
+
+**Positive:**
+- Single integration point; add new models without new provider SDKs
+- Model flexibility: users can switch models (e.g., Gemini vs Claude) without backend changes
+- Fallback: if one provider has issues, we can route to another
+- Unified request/response format across providers
+
+**Negative:**
+- Additional latency from gateway layer
+- Per-token cost includes OpenRouter markup
+- Dependency on OpenRouter availability and reliability
