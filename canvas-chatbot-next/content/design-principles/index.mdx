@@ -1,0 +1,43 @@
+# Design Principles
+
+Lulu is a Canvas-integrated chatbot and study assistant. This section captures the design principles, values, and constraints that guide its architecture and implementation.
+
+## Design Principles
+
+### Student-First UX
+
+The product is built for students. Every feature prioritizes:
+
+- **Clarity over complexity** — Study materials should be easy to read and act on
+- **Context awareness** — Responses are grounded in the student's actual Canvas data (courses, assignments, modules)
+- **Encouraging tone** — Especially around grades: gentle warnings when targets are ambitious, congratulations when achievable
+
+### Canvas-Native Context
+
+Lulu does not treat Canvas as an afterthought. The assistant:
+
+- **Fetches real data** — Courses, assignments, modules, and content via Canvas API
+- **Links to resources** — Every summary includes clickable URLs back to Canvas pages
+- **Respects institution boundaries** — Each user connects to their own Canvas instance; data is scoped per institution
+
+### Extensible Modes
+
+Rather than one generic chat, Lulu supports specialized modes (Rubric, Quiz, Study Plan, Note). Each mode:
+
+- Uses a **mode-specific system prompt** tuned for the task
+- May **restrict or prioritize tools** (e.g., rubric mode emphasizes `analyze_rubric`)
+- Produces **structured outputs** that can be saved as artifacts
+
+## Values
+
+- **Pareto Principle (80/20)** — Summaries focus on the 20% of content that delivers 80% of value
+- **Clear resource links** — Never "refer to Canvas"; always provide direct clickable URLs
+- **Grade calculation support** — Help students understand what they need to achieve target grades
+- **Truthfulness** — Only use information from retrieved Canvas data; state clearly when content is missing
+
+## Constraints
+
+- **Multi-tenant** — Users from different institutions use the same app; Canvas URLs and tokens are per-user
+- **Institution-specific Canvas URLs** — No single Canvas instance; each user configures their institution URL
+- **Encrypted credentials** — Canvas API tokens are stored encrypted in the database
+- **Schema isolation** — Tables live in the `dev` schema for development and isolation from Supabase defaults

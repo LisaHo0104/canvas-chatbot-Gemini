@@ -1,0 +1,39 @@
+# PRD: Quiz Mode
+
+## What is it?
+
+Quiz Mode generates quizzes from Canvas course content. The assistant fetches modules/assignments, proposes a quiz plan, and after user approval generates questions. Students can take quizzes and track attempts.
+
+## Quiz Mode Flow
+
+```mermaid
+flowchart LR
+    SelectMode[Select Quiz Mode] --> ProvideContent[Provide Content]
+    ProvideContent --> ProposePlan[AI Proposes Plan]
+    ProposePlan --> UserApproves[User Approves]
+    UserApproves --> GenerateQuiz[Generate Quiz]
+    GenerateQuiz --> SaveOrTake[Save or Take Quiz]
+```
+
+## Key Requirements
+
+- Mode-specific system prompt for quiz generation
+- Plan approval flow: AI proposes plan before generating full quiz
+- Canvas tools to fetch module/course content
+- Structured quiz output (questions, answers, explanations)
+- Save as artifact; take quiz and record attempts
+
+## How it is implemented
+
+- **Mode selection:** Chat page mode selector; `mode: 'quiz'` sent in request body
+- **System prompt:** Quiz generation template with instructions for plan-then-generate flow
+- **Tools:** Canvas tools (get_module, get_assignments, list_courses) plus quiz-specific logic
+- **Output:** Generative UI or structured JSON for quiz display
+- **Storage:** `dev.artifacts` (artifact_type: quiz), `dev.quiz_attempts` for attempts
+- **UI:** Quiz modal, quiz results (QuizResultsRadial), quiz attempt tracking
+
+## Related
+
+- [Modes (System Design)](/docs/system-design/modes)
+- [Artifacts PRD](/docs/prd/artifacts)
+- [Chat PRD](/docs/prd/chat)

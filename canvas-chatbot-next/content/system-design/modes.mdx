@@ -1,0 +1,39 @@
+# Modes
+
+Modes change the chat behavior by switching the system prompt and optionally restricting tools.
+
+## Mode Overview
+
+| Mode | Template Type | Tool Behavior |
+|------|---------------|---------------|
+| Generic | Default | All tools when Canvas connected; web search if enabled |
+| Rubric | rubric_analysis | Initially only analyze_rubric; then full set after analysis |
+| Quiz | quiz_generation | Canvas tools; plan approval flow |
+| Study Plan | study_plan | Canvas tools |
+| Note | note_generation | Canvas tools |
+
+## Mode to Template Mapping
+
+The chat page maps modes to system prompt template types:
+
+- **rubric** → `rubric_analysis`
+- **quiz** → `quiz_generation`
+- **study-plan** → `study_plan`
+- **note** → `note_generation`
+
+When a mode is selected, the corresponding template is fetched from `system_prompts` (where `template_type` matches) and used as the active system prompt.
+
+## Tool Restrictions
+
+**Rubric mode:** Before `analyze_rubric` has been called for the target assignment, the agent only receives the `analyze_rubric` tool. This guides the AI to analyze the rubric first. After analysis, full tools are available.
+
+**Other modes:** No restriction; all Canvas tools and web search (if enabled) are available.
+
+## Request Flow
+
+1. User selects mode in chat UI.
+2. Frontend sends `mode: 'rubric' | 'quiz' | 'study-plan' | 'note' | null` in the chat request body.
+3. Chat route checks `analysisMode` (or legacy `analysisMode`).
+4. For `note`, route auto-fetches `note_generation` template.
+5. For other modes, `selected_system_prompt_ids` or `current_system_prompt_id` should point to the mode template (UI syncs this).
+6. System prompt is merged with mode-specific instructions (e.g., rubric analysis requirements, quiz plan flow).

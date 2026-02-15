@@ -1,0 +1,26 @@
+# PRD: Billing
+
+## What is it?
+
+Billing manages premium subscriptions via Polar.sh. Users can subscribe to access premium features. Subscription status is synced to our database via webhooks.
+
+## Key Requirements
+
+- Product and price configuration in Polar
+- Checkout flow from app to Polar
+- Webhook handling for subscription created, updated, canceled; payment events
+- Customer portal for self-service (cancel, update payment)
+- Sync subscription status to dev.users for feature gating
+
+## How it is implemented
+
+- **Polar:** Products, prices, checkout links; Polar Customer Portal for existing customers
+- **Webhook:** `POST /api/webhook/polar` — verifies signature, processes events, upserts dev.users, dev.subscriptions, dev.payments, dev.webhook_events
+- **Tables:** dev.users (polar_customer_id, subscription_status, current_plan_id), dev.subscriptions, dev.payments, dev.products, dev.prices
+- **Checkout:** Checkout route redirects to Polar; success redirect to /checkout/success
+- **Portal:** /portal route uses Polar CustomerPortal to open billing management
+
+## Related
+
+- [ADR-003: Polar Billing](/docs/adr/003-polar-billing)
+- [Data Model](/docs/system-design/data-model)

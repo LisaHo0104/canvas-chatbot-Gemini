@@ -1,0 +1,44 @@
+# Domain Model
+
+This page describes the main domain objects and services in Lulu using a class diagram.
+
+## Class Diagram
+
+```mermaid
+classDiagram
+    class ChatSession {
+        +string id
+        +string user_id
+        +string title
+        +timestamp last_message_at
+    }
+    class ChatMessage {
+        +string id
+        +string session_id
+        +string role
+        +jsonb ui_parts
+    }
+    class Artifact {
+        +string id
+        +string user_id
+        +string artifact_type
+        +jsonb artifact_data
+    }
+    class UserContextSelections {
+        +jsonb selected_courses
+        +jsonb selected_assignments
+        +string current_profile_id
+    }
+    class CanvasAPIService {
+        +listCourses()
+        +getAssignments()
+        +getModules()
+    }
+    ChatSession "1" --> "*" ChatMessage
+    UserContextSelections --> Artifact
+```
+
+## Related
+
+- [Data Model](/docs/system-design/data-model) — Database schema (ERD)
+- [Chat Flow](/docs/system-design/chat-flow) — Request/response sequence

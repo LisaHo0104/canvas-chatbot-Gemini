@@ -1,0 +1,25 @@
+# ADR-003: Polar Billing
+
+**Status:** Accepted  
+**Date:** 2025-02-15
+
+## Context
+
+Lulu offers premium features (e.g., advanced AI models, higher usage) that require a billing system. We needed subscription management, payment processing, and webhook handling for subscription events.
+
+## Decision
+
+Use **Polar.sh** for billing and subscriptions. Polar handles checkout, customer portal, webhooks, and product/price management. We sync subscription status into our `dev.users`, `dev.subscriptions`, and `dev.payments` tables via webhooks.
+
+## Consequences
+
+**Positive:**
+- Polar is built for developer tools and SaaS; good fit for our audience
+- Webhooks keep our DB in sync with Polar state
+- Customer portal for self-service (cancel, update payment)
+- Simpler than building on Stripe directly for subscription lifecycle
+
+**Negative:**
+- Less mature than Stripe; smaller ecosystem
+- Vendor lock-in for subscription logic
+- Must handle webhook verification and idempotency ourselves

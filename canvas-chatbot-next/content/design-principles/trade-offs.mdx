@@ -1,0 +1,43 @@
+# Trade-offs
+
+This document captures explicit trade-offs made in Lulu's architecture. For full decision context, see the [ADR section](/docs/adr).
+
+## OpenRouter vs Direct Provider
+
+**Choice:** Use OpenRouter as the LLM gateway rather than integrating directly with Google Gemini, Anthropic, or OpenAI.
+
+**Trade-off:**
+- **Gained:** Model flexibility, fallback across providers, single integration point, easy model switching
+- **Cost:** Additional latency from gateway; per-token routing cost; dependency on third-party gateway availability
+
+## Supabase `dev` Schema vs `public`
+
+**Choice:** Store application tables in the `dev` schema rather than `public`.
+
+**Trade-off:**
+- **Gained:** Isolation from default Supabase schemas; clearer separation for development and migration workflows
+- **Cost:** Must explicitly reference `dev` in queries and migrations; some Supabase features assume `public` by default
+
+## Canvas API Token vs OAuth
+
+**Choice:** Store Canvas API tokens (encrypted) instead of using Canvas OAuth flow.
+
+**Trade-off:**
+- **Gained:** Simpler integration; users can use existing Canvas API tokens; no OAuth callback and token refresh complexity
+- **Cost:** Users must manually create tokens; tokens can expire and need user re-entry; less "official" than OAuth for some institutions
+
+## Client-Side Session vs Server-Side Session
+
+**Choice:** Chat sessions are created and identified via `X-Session-ID` header; session state is tied to Supabase (chat_sessions, chat_messages).
+
+**Trade-off:**
+- **Gained:** Session persistence across page loads; server can associate messages with sessions; supports multi-tab scenarios with header passing
+- **Cost:** Client must manage and pass session ID; edge cases if session creation fails mid-flow
+
+## Agent Pattern vs Simple Chat
+
+**Choice:** Use Vercel AI SDK agent loop with tools rather than a single request/response chat.
+
+**Trade-off:**
+- **Gained:** Multi-step reasoning, tool use (Canvas API, web search), structured outputs, plan-then-execute flows (e.g., quiz approval)
+- **Cost:** Higher latency for tool-heavy turns; context truncation needed for long conversations; more complex debugging

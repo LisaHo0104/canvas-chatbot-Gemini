@@ -95,7 +95,7 @@ This document summarizes the comprehensive testing implementation for the OpenRo
 ## Testing Challenges Encountered
 
 ### 1. Complex Dependencies
-- **LangChain Integration**: Required polyfills for TextEncoder, ReadableStream, TransformStream
+- **AI SDK / Node polyfills**: Some tests required polyfills for TextEncoder, ReadableStream, TransformStream
 - **Supabase Mocking**: Complex nested query structures made mocking difficult
 - **Next.js Router**: Navigation testing required extensive mocking
 
