@@ -73,17 +73,6 @@ export default function MainNavBar() {
                       <NavigationMenuLink
                         asChild
                         className={cn(
-                          pathname.startsWith("/docs") ? "bg-accent text-accent-foreground" : ""
-                        )}
-                        aria-current={pathname.startsWith("/docs") ? "page" : undefined}
-                      >
-                        <Link href="/docs">Docs</Link>
-                      </NavigationMenuLink>
-                    </NavigationMenuItem>
-                    <NavigationMenuItem>
-                      <NavigationMenuLink
-                        asChild
-                        className={cn(
                           pathname === '/protected/chat' ? 'bg-accent text-accent-foreground' : ''
                         )}
                         aria-current={pathname === '/protected/chat' ? 'page' : undefined}
@@ -115,6 +104,17 @@ export default function MainNavBar() {
                           Artifacts
                           <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-green-100 text-green-800 border-green-300 dark:bg-green-900 dark:text-green-200 dark:border-green-700">Beta</Badge>
                         </Link>
+                      </NavigationMenuLink>
+                    </NavigationMenuItem>
+                    <NavigationMenuItem>
+                      <NavigationMenuLink
+                        asChild
+                        className={cn(
+                          pathname.startsWith("/docs") ? "bg-accent text-accent-foreground" : ""
+                        )}
+                        aria-current={pathname.startsWith("/docs") ? "page" : undefined}
+                      >
+                        <Link href="/docs">Docs</Link>
                       </NavigationMenuLink>
                     </NavigationMenuItem>
                     <NavigationMenuItem>
