@@ -1,0 +1,23 @@
+# System Design
+
+Lulu is a Canvas-integrated chatbot and study assistant that helps students learn more effectively. This section provides an architecture overview and design rationale.
+
+## Architecture Overview
+
+Lulu follows a modern web architecture with:
+
+- **Frontend**: Next.js App Router with React components
+- **Backend**: Next.js API routes and Supabase
+- **AI**: Google Gemini and OpenRouter for chat and study assistance
+
+## Key Components
+
+1. **Chat Interface** — Real-time conversation with context-aware responses
+2. **Canvas Integration** — OAuth-based connection to Canvas LMS for course context
+3. **Study Tools** — Quiz generation, flashcards, and artifact creation
+4. **Subscription & Billing** — Polar.sh for managing premium features
+
+## Further Reading
+
+- [Architecture](/docs/system-design/architecture) — High-level architecture diagrams
+- [Tech Stack](/docs/system-design/tech-stack) — Technology choices and rationale

@@ -1,0 +1,25 @@
+# API Overview
+
+Lulu exposes API endpoints for chat, Canvas integration, and webhooks.
+
+## Chat API
+
+The main chat endpoint processes user messages and returns streamed AI responses.
+
+- **Route**: `POST /api/chat`
+- **Auth**: Supabase session (JWT)
+- **Features**: Streaming, tool use, context from Canvas courses
+
+## Webhooks
+
+### Polar Webhook
+
+Receives subscription and payment events from Polar.sh.
+
+- **Route**: `POST /api/webhook/polar`
+- **Auth**: Polar signature verification
+- **Handles**: Subscription created, updated, canceled; payment events
+
+## Canvas Integration
+
+Canvas OAuth and course fetching are handled server-side via API routes and Supabase Edge Functions where appropriate.
