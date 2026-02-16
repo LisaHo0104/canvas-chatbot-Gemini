@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
     }
 
     const url = new URL(request.url)
-    const artifactType = url.searchParams.get('type') // 'quiz' | 'rubric_analysis' | 'note' | null
+    const artifactType = url.searchParams.get('type') // 'quiz' | 'rubric_analysis' | 'note' | 'flashcard' | null
     const search = url.searchParams.get('search') // search in title/description
     const sortBy = url.searchParams.get('sortBy') || 'created_at' // 'created_at' | 'updated_at' | 'title'
     const sortOrder = url.searchParams.get('sortOrder') || 'desc' // 'asc' | 'desc'
@@ -29,7 +29,10 @@ export async function GET(request: NextRequest) {
       .eq('user_id', user.id)
 
     // Filter by type if provided
-    if (artifactType && (artifactType === 'quiz' || artifactType === 'rubric_analysis' || artifactType === 'note')) {
+    if (
+      artifactType &&
+      (artifactType === 'quiz' || artifactType === 'rubric_analysis' || artifactType === 'note' || artifactType === 'flashcard')
+    ) {
       query = query.eq('artifact_type', artifactType)
     }
 
@@ -83,15 +86,36 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Title is required' }, { status: 400 })
     }
 
-    if (!artifact_type || (artifact_type !== 'quiz' && artifact_type !== 'rubric_analysis' && artifact_type !== 'note')) {
+    if (
+      !artifact_type ||
+      (artifact_type !== 'quiz' &&
+        artifact_type !== 'rubric_analysis' &&
+        artifact_type !== 'note' &&
+        artifact_type !== 'flashcard')
+    ) {
       return NextResponse.json(
-        { error: 'Invalid artifact_type. Must be "quiz", "rubric_analysis", or "note"' },
+        { error: 'Invalid artifact_type. Must be "quiz", "rubric_analysis", "note", or "flashcard"' },
         { status: 400 },
       )
     }
 
     if (!artifact_data || typeof artifact_data !== 'object') {
       return NextResponse.json({ error: 'artifact_data is required and must be an object' }, { status: 400 })
+    }
+
+    if (artifact_type === 'flashcard') {
+      if (!Array.isArray(artifact_data.cards)) {
+        return NextResponse.json(
+          { error: 'Flashcard artifact_data must include a "cards" array' },
+          { status: 400 },
+        )
+      }
+      if (!artifact_data.title || typeof artifact_data.title !== 'string') {
+        return NextResponse.json(
+          { error: 'Flashcard artifact_data must include a "title" string' },
+          { status: 400 },
+        )
+      }
     }
 
     // Normalize tags
@@ -115,7 +139,11 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error('Error creating artifact:', error)
-      return NextResponse.json({ error: 'Failed to create artifact' }, { status: 500 })
+      const message =
+        error.code === '23514'
+          ? 'Invalid artifact type or data. Ensure your database migration for flashcard support has been applied.'
+          : error.message || 'Failed to create artifact'
+      return NextResponse.json({ error: message }, { status: 500 })
     }
 
     return NextResponse.json({ artifact: data })

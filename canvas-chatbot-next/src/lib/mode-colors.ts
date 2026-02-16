@@ -85,19 +85,23 @@ export function getModeButtonColors(mode: ModeType): string {
 /**
  * Get artifact type from mode string
  */
-export function getArtifactTypeFromMode(mode: string | null): 'quiz' | 'rubric_analysis' | 'note' | null {
+export function getArtifactTypeFromMode(mode: string | null): 'quiz' | 'rubric_analysis' | 'note' | 'flashcard' | null {
   if (mode === 'quiz') return 'quiz'
   if (mode === 'rubric') return 'rubric_analysis'
   if (mode === 'note') return 'note'
+  if (mode === 'flashcard') return 'flashcard'
   return null
 }
 
 /**
  * Get mode from artifact type
  */
-export function getModeFromArtifactType(artifactType: 'quiz' | 'rubric_analysis' | 'note'): ModeType {
+export function getModeFromArtifactType(
+  artifactType: 'quiz' | 'rubric_analysis' | 'note' | 'flashcard',
+): ModeType {
   if (artifactType === 'quiz') return 'quiz'
   if (artifactType === 'rubric_analysis') return 'rubric'
   if (artifactType === 'note') return 'note'
+  if (artifactType === 'flashcard') return 'flashcard'
   return null
 }

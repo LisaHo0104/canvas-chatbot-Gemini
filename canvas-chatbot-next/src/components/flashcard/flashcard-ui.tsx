@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useCallback, useRef } from 'react'
-import { CheckCircle2, XCircle, Maximize2, Library, ChevronDown, ChevronUp } from 'lucide-react'
+import { useState, useCallback, useRef, useEffect } from 'react'
+import { CheckCircle2, XCircle, Maximize2, Library, ChevronDown, ChevronUp, Shuffle, Save } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
@@ -27,9 +27,19 @@ interface FlashcardUIProps {
   messageId?: string
   compact?: boolean
   onViewFull?: () => void
+  onSaveClick?: () => void
 }
 
 const SWIPE_THRESHOLD = 80
+
+function shuffleArray<T>(arr: T[]): T[] {
+  const out = [...arr]
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[out[i], out[j]] = [out[j], out[i]]
+  }
+  return out
+}
 
 function RememberedList({
   cards,
@@ -88,6 +98,7 @@ export function FlashcardUI({
   messageId,
   compact = false,
   onViewFull,
+  onSaveClick,
 }: FlashcardUIProps) {
   const cards = (data?.cards && Array.isArray(data.cards)) ? data.cards : []
   const totalCards = cards.length
@@ -100,7 +111,9 @@ export function FlashcardUI({
   const [isFlipped, setIsFlipped] = useState(false)
   const [dragOffset, setDragOffset] = useState(0)
   const [isExiting, setIsExiting] = useState<'left' | 'right' | null>(null)
+  const [isReviewRound, setIsReviewRound] = useState(false)
   const pointerStart = useRef<{ x: number; y: number } | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
 
   const currentIndex = remainingIndices[0]
   const currentCard = currentIndex !== undefined ? cards[currentIndex] : null
@@ -109,6 +122,7 @@ export function FlashcardUI({
   const progress = totalCards > 0
     ? ((rememberedCount + notRememberedCount) / totalCards) * 100
     : 0
+  const completed = remainingIndices.length === 0
 
   const handleFlip = useCallback(() => {
     if (isExiting) return
@@ -180,6 +194,40 @@ export function FlashcardUI({
     }
   }, [isExiting])
 
+  const handleStudyAgain = useCallback(() => {
+    setRemainingIndices([...notRememberedIndices])
+    setRememberedIndices([])
+    setNotRememberedIndices([])
+    setIsReviewRound(true)
+  }, [notRememberedIndices])
+
+  const handleShuffle = useCallback(() => {
+    setRemainingIndices(shuffleArray([...remainingIndices]))
+  }, [remainingIndices])
+
+  useEffect(() => {
+    if (completed || !currentCard || isExiting) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!containerRef.current?.contains(document.activeElement)) return
+      if (e.key === ' ' || e.key === 'Enter') {
+        e.preventDefault()
+        handleFlip()
+        return
+      }
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault()
+        swipe('left')
+        return
+      }
+      if (e.key === 'ArrowRight') {
+        e.preventDefault()
+        swipe('right')
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [completed, currentCard, isExiting, handleFlip, swipe])
+
   if (totalCards === 0) {
     return (
       <div className="p-4 text-center rounded-lg border bg-muted/30">
@@ -188,10 +236,14 @@ export function FlashcardUI({
     )
   }
 
-  const completed = remainingIndices.length === 0
-
   return (
-    <div className="space-y-4">
+    <div
+      ref={containerRef}
+      className="space-y-4"
+      tabIndex={0}
+      role="region"
+      aria-label={`Flashcards: ${data.title || 'Flashcards'}. Card ${rememberedCount + notRememberedCount + 1} of ${totalCards}. Use Space or Enter to flip, Arrow keys to rate.`}
+    >
       {/* Header: title, progress, hints */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
@@ -199,24 +251,55 @@ export function FlashcardUI({
           {data.description && (
             <p className="text-xs text-muted-foreground line-clamp-1">{data.description}</p>
           )}
+          {!completed && isReviewRound && (
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Reviewing {remainingIndices.length} cards
+            </p>
+          )}
         </div>
-        {onViewFull && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="shrink-0 h-8 w-8"
-            onClick={onViewFull}
-            aria-label="Open full screen"
-          >
-            <Maximize2 className="h-4 w-4" />
-          </Button>
-        )}
+        <div className="flex items-center gap-1 shrink-0">
+          {onSaveClick && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1.5"
+              onClick={onSaveClick}
+              aria-label="Save to Artifactory"
+            >
+              <Save className="h-4 w-4" />
+              Save
+            </Button>
+          )}
+          {!completed && remainingIndices.length > 1 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 gap-1.5"
+              onClick={handleShuffle}
+              aria-label="Shuffle remaining cards"
+            >
+              <Shuffle className="h-4 w-4" />
+              Shuffle
+            </Button>
+          )}
+          {onViewFull && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={onViewFull}
+              aria-label="Open full screen"
+            >
+              <Maximize2 className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
       </div>
 
       {!completed && (
-        <div className="space-y-1.5">
+        <div className="space-y-1.5" aria-live="polite" aria-atomic="true">
           <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>
+            <span aria-label={`Card ${rememberedCount + notRememberedCount + 1} of ${totalCards}`}>
               Card {rememberedCount + notRememberedCount + 1} of {totalCards}
             </span>
             <span className="flex items-center gap-3">
@@ -254,7 +337,9 @@ export function FlashcardUI({
           <Card className="border-2 border-dashed bg-muted/20">
             <CardContent className="flex flex-col items-center justify-center py-6 px-6 text-center">
               <Library className="h-10 w-10 text-muted-foreground mb-2" />
-              <p className="font-medium">You&apos;ve gone through all cards</p>
+              <p className="font-medium">
+                {isReviewRound ? "You've completed the review round" : "You've gone through all cards"}
+              </p>
               <p className="text-sm text-muted-foreground mt-0.5">
                 <span className="text-green-600 dark:text-green-400 font-medium">{rememberedCount}</span> remembered
                 {notRememberedCount > 0 && (
@@ -264,6 +349,17 @@ export function FlashcardUI({
                   </>
                 )}
               </p>
+              {notRememberedCount > 0 && (
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="mt-4"
+                  onClick={handleStudyAgain}
+                  aria-label="Study again with cards to review"
+                >
+                  Study again
+                </Button>
+              )}
             </CardContent>
           </Card>
           <Tabs defaultValue={notRememberedCount > 0 ? 'review' : 'remembered'} className="w-full">
@@ -286,30 +382,34 @@ export function FlashcardUI({
           </Tabs>
         </div>
       ) : (
-        <div
-          className="relative touch-none select-none"
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          onPointerLeave={onPointerLeave}
-          onPointerCancel={onPointerLeave}
-        >
+        <div className="space-y-3">
           <div
-            className="relative w-full transition-transform duration-200 ease-out"
-            style={{
-              transform: `translateX(${isExiting ? (isExiting === 'right' ? 200 : -200) : dragOffset}px)`,
-              opacity: isExiting ? 0 : 1,
-            }}
+            className="relative touch-none select-none"
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
+            onPointerLeave={onPointerLeave}
+            onPointerCancel={onPointerLeave}
           >
-            <Card
-              className="overflow-hidden cursor-pointer border-2 min-h-[180px] flex flex-col"
-              onClick={(e) => {
-                if (e.target === e.currentTarget || (e.target as HTMLElement).closest('[data-flip-area]')) {
-                  handleFlip()
-                }
+            <div
+              className="relative w-full transition-transform duration-200 ease-out"
+              style={{
+                transform: `translateX(${isExiting ? (isExiting === 'right' ? 200 : -200) : dragOffset}px)`,
+                opacity: isExiting ? 0 : 1,
               }}
-              data-flip-area
             >
+              <Card
+                className="overflow-hidden cursor-pointer border-2 min-h-[180px] flex flex-col"
+                onClick={(e) => {
+                  if (e.target === e.currentTarget || (e.target as HTMLElement).closest('[data-flip-area]')) {
+                    handleFlip()
+                  }
+                }}
+                data-flip-area
+                role="button"
+                tabIndex={0}
+                aria-label={isFlipped ? 'Flip card to see term' : 'Flip card to see definition'}
+              >
               <CardContent className="flex-1 flex flex-col items-center justify-center p-6 relative">
                 <div
                   className="w-full flex-1 flex flex-col items-center justify-center"
@@ -360,6 +460,29 @@ export function FlashcardUI({
             </Card>
           </div>
         </div>
+        <div className="flex justify-center gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => swipe('left')}
+            aria-label="Don't remember"
+          >
+            <XCircle className="h-4 w-4" />
+            Don&apos;t remember
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5 text-green-700 dark:text-green-400 border-green-300 dark:border-green-700"
+            onClick={() => swipe('right')}
+            aria-label="Remember"
+          >
+            <CheckCircle2 className="h-4 w-4" />
+            Remember
+          </Button>
+        </div>
+      </div>
       )}
     </div>
   )

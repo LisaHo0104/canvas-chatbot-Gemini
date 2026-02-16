@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Loader2, FileQuestion, FileText, StickyNote } from 'lucide-react'
+import { Loader2, FileQuestion, FileText, StickyNote, Library } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -20,7 +20,7 @@ import { getModeFromArtifactType, getModeBadgeColors } from '@/lib/mode-colors'
 interface SaveArtifactDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  artifactType: 'quiz' | 'rubric_analysis' | 'note'
+  artifactType: 'quiz' | 'rubric_analysis' | 'note' | 'flashcard'
   artifactData: any
   onSave: () => void
 }
@@ -47,6 +47,9 @@ export function SaveArtifactDialog({
         setTitle(`Rubric Analysis: ${artifactData.assignmentName}`)
       } else if (artifactType === 'note' && artifactData?.title) {
         setTitle(artifactData.title)
+      } else if (artifactType === 'flashcard') {
+        setTitle(artifactData?.title?.trim() || 'Flashcards')
+        if (artifactData?.description) setDescription(artifactData.description)
       }
     }
   }, [open, artifactType, artifactData, title])
@@ -77,21 +80,43 @@ export function SaveArtifactDialog({
         .map((tag) => tag.trim())
         .filter((tag) => tag.length > 0)
 
+      const payload =
+        artifactType === 'flashcard'
+          ? {
+              title: title.trim(),
+              description: description.trim() || null,
+              tags: tagsArray,
+              artifact_type: artifactType,
+              artifact_data: {
+                title: title.trim(),
+                description: description.trim() || undefined,
+                cards: Array.isArray(artifactData?.cards) ? artifactData.cards : [],
+                ...(artifactData?.metadata && { metadata: artifactData.metadata }),
+              },
+            }
+          : {
+              title: title.trim(),
+              description: description.trim() || null,
+              tags: tagsArray,
+              artifact_type: artifactType,
+              artifact_data: artifactData,
+            }
+
       const response = await fetch('/api/artifacts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: title.trim(),
-          description: description.trim() || null,
-          tags: tagsArray,
-          artifact_type: artifactType,
-          artifact_data: artifactData,
-        }),
+        body: JSON.stringify(payload),
       })
 
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to save artifact')
+        let message = 'Failed to save artifact'
+        try {
+          const data = await response.json()
+          if (data?.error && typeof data.error === 'string') message = data.error
+        } catch {
+          message = response.statusText || message
+        }
+        throw new Error(message)
       }
 
       onSave()
@@ -107,6 +132,7 @@ export function SaveArtifactDialog({
     if (artifactType === 'quiz') return 'Quiz'
     if (artifactType === 'rubric_analysis') return 'Rubric Analysis'
     if (artifactType === 'note') return 'Note'
+    if (artifactType === 'flashcard') return 'Flashcard'
     return 'Artifact'
   }
 
@@ -114,6 +140,7 @@ export function SaveArtifactDialog({
     if (artifactType === 'quiz') return <FileQuestion className="size-4" />
     if (artifactType === 'rubric_analysis') return <FileText className="size-4" />
     if (artifactType === 'note') return <StickyNote className="size-4" />
+    if (artifactType === 'flashcard') return <Library className="size-4" />
     return <FileText className="size-4" />
   }
 

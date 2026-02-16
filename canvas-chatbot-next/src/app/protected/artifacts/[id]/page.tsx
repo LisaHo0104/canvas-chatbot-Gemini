@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { QuizUI } from '@/components/quiz/quiz-ui'
 import { RubricAnalysisUI } from '@/components/rubric-interpreter/rubric-analysis-ui'
 import { NoteUI } from '@/components/note/note-ui'
+import { FlashcardUI } from '@/components/flashcard/flashcard-ui'
 import { Spinner } from '@/components/ui/spinner'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Breadcrumb, BreadcrumbList, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator } from '@/components/ui/breadcrumb'
@@ -17,7 +18,7 @@ interface Artifact {
   title: string
   description: string | null
   tags: string[]
-  artifact_type: 'quiz' | 'rubric_analysis' | 'note'
+  artifact_type: 'quiz' | 'rubric_analysis' | 'note' | 'flashcard'
   artifact_data: any
   created_at: string
   updated_at: string
@@ -131,7 +132,13 @@ export default function ArtifactPage() {
             {artifact.artifact_type === 'note' && artifact.artifact_data && (
               <NoteUI data={artifact.artifact_data} compact={false} />
             )}
-            {(!artifact.artifact_data) && (
+            {artifact.artifact_type === 'flashcard' &&
+              artifact.artifact_data &&
+              Array.isArray(artifact.artifact_data.cards) && (
+                <FlashcardUI data={artifact.artifact_data} compact={false} />
+              )}
+            {(!artifact.artifact_data ||
+              (artifact.artifact_type === 'flashcard' && !Array.isArray(artifact.artifact_data?.cards))) && (
               <Alert variant="destructive" className="max-w-2xl mx-auto">
                 <AlertTitle>Error</AlertTitle>
                 <AlertDescription>Artifact data is missing or invalid.</AlertDescription>

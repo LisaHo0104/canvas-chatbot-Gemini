@@ -518,7 +518,7 @@ function NoteOutputRenderer({ noteData, messageId, onViewFull }: { noteData: any
   )
 }
 
-// Separate component for flashcard output
+// Separate component for flashcard output (Save to artifact disabled for now)
 function FlashcardOutputRenderer({
   flashcardData,
   messageId,

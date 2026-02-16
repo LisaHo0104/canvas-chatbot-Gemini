@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { X } from 'lucide-react'
+import { X, Save } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
@@ -75,15 +75,29 @@ export function ArtifactPanel({
               </p>
             )}
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onClose}
-            className="shrink-0"
-            aria-label="Close artifact panel"
-          >
-            <X className="h-4 w-4" />
-          </Button>
+          <div className="flex items-center gap-1 shrink-0">
+            {(artifactType === 'quiz' || artifactType === 'note') && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSaveDialogOpen(true)}
+                className="gap-1.5"
+                aria-label="Save to Artifactory"
+              >
+                <Save className="h-4 w-4" />
+                Save
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onClose}
+              className="shrink-0"
+              aria-label="Close artifact panel"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
 
         {/* Content */}
@@ -128,7 +142,7 @@ export function ArtifactPanel({
         <SaveArtifactDialog
           open={saveDialogOpen}
           onOpenChange={setSaveDialogOpen}
-          artifactType={artifactType}
+          artifactType={artifactType as 'quiz' | 'rubric_analysis' | 'note' | 'flashcard'}
           artifactData={artifactData}
           onSave={() => {
             // Optionally show a success message or refresh
